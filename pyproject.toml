@@ -1,0 +1,145 @@
+# ============================================================================
+# OpenBuds Manager — Configuración del proyecto (PEP 517/518, PEP 621)
+# ============================================================================
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openbuds-manager"
+version = "0.1.0.dev0"
+description = "Administrador profesional de auriculares Bluetooth para Linux (Ubuntu 24.04)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+    { name = "Alexis Hernandez", email = "adhcamus@gmail.com" },
+]
+keywords = ["bluetooth", "bluez", "pipewire", "wireplumber", "redmi-buds", "linux", "audio"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: System :: Hardware",
+]
+dependencies = [
+    # PySide6 para la interfaz gráfica (Qt).
+    "PySide6>=6.6,<7",
+    # Acceso a D-Bus vía GLib/Gio (ver ADR-0001). PyGObject requiere paquetes
+    # de sistema: ver README -> "Instalación". Si la instalación por pip falla,
+    # usar el paquete de la distribución (python3-gi).
+    "PyGObject>=3.46",
+    # Manipulación de archivos YAML para device profiles.
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+# Entry point de la CLI.
+openbuds = "openbuds.cli.main:main"
+
+[project.urls]
+Homepage = "https://github.com/AlexisHCD/RB6_lite_Manager"
+Repository = "https://github.com/AlexisHCD/RB6_lite_Manager"
+
+# --- setuptools: layout src/ ---
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"openbuds.device_profiles" = ["*.yaml", "*.yml"]
+
+# ============================================================================
+# Ruff — linter y formateador (PEP 8, import sorting)
+# ============================================================================
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["backups", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "C4",   # flake8-comprehensions
+    "N",    # pep8-naming
+    "D",    # pydocstyle
+]
+ignore = [
+    "D100", # missing docstring in public module  (la docstring de paquete basta)
+    "D104", # missing docstring in public package
+    "D107", # missing docstring in __init__
+    "D203", # conflict with D211
+    "D213", # conflict with D212
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D", "S101"]  # tests: docstrings y asserts permitidos
+# Los repositorios de infraestructura implementan interfaces ya documentadas
+# en domain.interfaces; sus métodos son stubs que delegan, por lo que omitir
+# la docstring aquí evita duplicación (DRY).
+"src/openbuds/infrastructure/**/*_repository.py" = ["D102"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ============================================================================
+# Mypy — type checker (strict gradual)
+# ============================================================================
+[tool.mypy]
+python_version = "3.12"
+strict = false  # se subirá a strict por módulo a medida que maduren
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+no_implicit_optional = true
+disallow_untyped_defs = false  # se activará módulo a módulo
+ignore_missing_imports = true  # PySide6/PyGObject no siempre tienen stubs
+
+[[tool.mypy.overrides]]
+module = [
+    "gi.*",
+    "PySide6.*",
+    "yaml",
+]
+ignore_missing_imports = true
+
+# ============================================================================
+# Pytest
+# ============================================================================
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+markers = [
+    "unit: pruebas unitarias aisladas (sin sistema).",
+    "integration: pruebas que requieren el stack de sistema (BlueZ/PipeWire).",
+    "e2e: pruebas extremo a extremo con hardware real.",
+    "slow: pruebas lentas.",
+]

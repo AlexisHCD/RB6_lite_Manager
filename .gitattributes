@@ -1,0 +1,24 @@
+# Normalizar finales de línea: LF en el repo, checkout nativo del SO.
+* text=auto eol=lf
+
+# Scripts y código fuente siempre LF.
+*.py text eol=lf
+*.lua text eol=lf
+*.sh text eol=lf
+
+# Documentación siempre LF.
+*.md text eol=lf
+*.txt text eol=lf
+
+# Configuración siempre LF.
+*.toml text eol=lf
+*.cfg text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+.editorconfig text eol=lf
+.gitignore text eol=lf
+
+# Backups generados por la app: binarios, no tocar finales de línea.
+backups/** binary
+*.bak binary
