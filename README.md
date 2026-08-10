@@ -22,16 +22,18 @@ La Fase 3 implementa el acceso a BlueZ vía D-Bus (PyGObject/Gio) por
 incrementos. El **Incremento 1 — snapshot `GetManagedObjects`** ya está
 implementado y verificado (`bluez/dbus_protocol.py` → `GioDBusProtocol` +
 `BlueZDBusClient.snapshot`), y también el **mapeo de objetos D-Bus → modelos**
-(`bluez/object_mapper.py`, puro y sin GI) y las **consultas snapshot del
+(`bluez/object_mapper.py`, puro y sin GI), las **consultas snapshot del
 repositorio** (`bluez/bluez_repository.py`:
 `list_adapters`/`list_devices`/`get_device`/`get_battery`/`get_rssi`, con
-cliente D-Bus inyectable y snapshot fresco por llamada); la integración real
-solo lectura se verificó en **Python 3.12 / Gio**. La suscripción a cambios
-(`subscribe_device_changes`, Incremento 2 de señales) sigue pendiente, por lo
-que el repositorio todavía no cumple su contrato completo. La CLI `devices`
-puede construirse ya sobre las consultas snapshot y es el siguiente incremento
-(ver [`docs/bluez/gio-dbus-client-design.md`](docs/bluez/gio-dbus-client-design.md)
-y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md)).
+cliente D-Bus inyectable y snapshot fresco por llamada) y la **CLI `devices`**
+(ver abajo); la integración real solo lectura se verificó en **Python 3.12 /
+Gio**. La suscripción a cambios (`subscribe_device_changes`, Incremento 2 de
+señales) y, con ella, el **contrato completo de `IBluetoothRepository`** siguen
+pendientes, por lo que el checkbox global del roadmap permanece vacío. La
+detección de adaptadores/dispositivos se completa en fases posteriores (ver
+[`docs/bluez/gio-dbus-client-design.md`](docs/bluez/gio-dbus-client-design.md),
+[`docs/bluez/repository-design.md`](docs/bluez/repository-design.md) y
+[`docs/cli/devices-command.md`](docs/cli/devices-command.md)).
 La aplicación completa aún no está terminada: diagnóstico y la GUI se
 implementan en las fases siguientes.
 
@@ -121,14 +123,33 @@ Muestra las versiones detectadas del stack y si el entorno está soportado.
 ### CLI
 
 ```bash
-.venv/bin/openbuds doctor      # detecta y muestra el entorno del sistema
-.venv/bin/openbuds config      # muestra la configuración efectiva
-.venv/bin/openbuds version     # muestra la versión sin cargar config
-.venv/bin/openbuds devices     # Fase 3: siguiente incremento sobre las consultas snapshot
-.venv/bin/openbuds health      # futuro: Health Check (Fase 5)
-.venv/bin/openbuds codec       # futuro: muestra el códec activo (Fase 3/4)
-.venv/bin/openbuds bench       # futuro: benchmark de enlace (Fase 5)
+.venv/bin/openbuds doctor        # detecta y muestra el entorno del sistema
+.venv/bin/openbuds config        # muestra la configuración efectiva
+.venv/bin/openbuds version       # muestra la versión sin cargar config
+.venv/bin/openbuds devices       # lista dispositivos Bluetooth (Fase 3): snapshot TSV
+.venv/bin/openbuds devices --paired-only            # solo emparejados
+.venv/bin/openbuds devices --adapter hci0           # solo el adaptador hci0 (o /org/bluez/hci0)
+.venv/bin/openbuds health        # futuro: Health Check (Fase 5)
+.venv/bin/openbuds codec         # futuro: muestra el códec activo (Fase 3/4)
+.venv/bin/openbuds bench         # futuro: benchmark de enlace (Fase 5)
 ```
+
+`openbuds devices` lista el snapshot de los dispositivos **conocidos** por
+BlueZ (solo lectura: sin discovery, sin conexión y sin señales) en TSV en
+español:
+
+```text
+NOMBRE	CONEXIÓN	EMPAREJAMIENTO	ADAPTADOR
+Redmi Buds 6 Lite	conectado	emparejado	hci0
+```
+
+La salida es **privada por diseño**: nunca incluye MAC ni rutas de objeto D-Bus
+(`/org/bluez/.../dev_`), los nombres sin `alias`/`name` se muestran como
+`Dispositivo sin nombre`, y los campos de texto se sanitizan (caracteres de
+control → `?`, máx. 80 caracteres). Un valor de adaptador inválido sale con
+código 2 antes de tocar el bus; un error de lectura de BlueZ sale con 1 y el
+mensaje en stderr. Detalles en
+[`docs/cli/devices-command.md`](docs/cli/devices-command.md).
 
 ### GUI (PySide6)
 
@@ -146,11 +167,12 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual:** **177 tests** en verde + **3 skipped** (integración
+**Baseline actual:** **192 tests** en verde + **4 skipped** (integración
 BlueZ opt-in desactivada por defecto; 2026-08-09). El cliente D-Bus
-(Incremento 1), el mapper de objetos y las consultas snapshot del repositorio
-ya están cubiertos por la suite; las pruebas de señales (Incremento 2) se
-añadirán en el incremento correspondiente y actualizarán este número.
+(Incremento 1), el mapper de objetos, las consultas snapshot del repositorio y
+la CLI `devices` ya están cubiertos por la suite; las pruebas de señales
+(Incremento 2) se añadirán en el incremento correspondiente y actualizarán
+este número.
 
 ## Arquitectura
 

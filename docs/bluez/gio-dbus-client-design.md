@@ -38,7 +38,7 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   Ubuntu, Python 3.12.3, PyGObject 3.48.2, con BlueZ disponible: lectura real
 >   de `GetManagedObjects` coherente y mapeo de todos los objetos reales del
 >   bus, **sin métodos mutadores** y sin exponer la MAC del dispositivo.
-> - Suite actual: **177 passed, 3 skipped** (las 3 omisiones son las
+> - Suite actual: **192 passed, 4 skipped** (las 4 omisiones son las
 >   integraciones opt-in, desactivadas por defecto). Las **consultas snapshot
 >   del repositorio** (`bluez_repository.py`: `list_adapters`/`list_devices`/
 >   `get_device`/`get_battery`/`get_rssi`, cliente inyectable + snapshot
@@ -48,8 +48,11 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   sigue pendiente: `subscribe_device_changes` lanza `NotImplementedError`
 >   hasta el **Incremento 2 de señales** (por eso el checkbox global del
 >   roadmap permanece `[ ]`). También siguen pendientes las **señales/
->   lifecycle (Incremento 2)**, la **detección completa de
->   adaptadores/dispositivos** y la **CLI `devices`**.
+>   lifecycle (Incremento 2)** y la **detección completa de
+>   adaptadores/dispositivos**. La **CLI `devices`** ya está **implementada y
+>   verificada** sobre las consultas snapshot (solo snapshot, sin señales;
+>   [devices-command.md](../cli/devices-command.md)); el checkbox del roadmap
+>   para la CLI está marcado `[x]`.
 
 ---
 
@@ -507,11 +510,11 @@ Incremento 2 y cerrará el contrato `IBluetoothRepository`.
 - Los tests de integración se marcan (p.ej. `@pytest.mark.integration` /
   `@pytest.mark.slow`) y no forman parte del baseline por defecto, siguiendo
   el patrón del Makefile (`make test-quick` = solo unit).
-- El baseline actual del proyecto es de **177 tests** en verde + **3 skipped**
+- El baseline actual del proyecto es de **192 tests** en verde + **4 skipped**
   (las integraciones BlueZ opt-in desactivadas por defecto; 2026-08-09); las
-  pruebas del mapper, del cliente y de las consultas del repositorio de este
-  diseño ya forman parte del suite y el resto de incrementos se añaden sin
-  romperlo.
+  pruebas del mapper, del cliente, de las consultas del repositorio y de la
+  CLI `devices` de este diseño ya forman parte del suite y el resto de
+  incrementos se añaden sin romperlo.
 - Verificación manual complementaria (solo lectura):
   `busctl tree org.bluez`, `busctl introspect org.bluez /`, `dbus-send
   --system --dest=org.bluez --print-reply / org.freedesktop.DBus.ObjectManager.GetManagedObjects`.

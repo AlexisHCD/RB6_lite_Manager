@@ -1,6 +1,6 @@
 """Caso de uso: escanear y listar dispositivos Bluetooth.
 
-Estado: Fase 1 — contrato definido, sin implementación (Fase 3).
+Estado: Fase 3 — implementado para consultas snapshot de solo lectura.
 """
 
 from __future__ import annotations

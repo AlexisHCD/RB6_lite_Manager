@@ -23,7 +23,7 @@ de comenzar la siguiente. El progreso se marca con checkbox.
 
 ## Fase 3 — Bluetooth
 
-- [ ] CLI `devices` (siguiente incremento sobre las consultas snapshot ya implementadas)
+- [x] CLI `devices` (`openbuds devices` sobre las consultas snapshot: `-p|--paired-only` y `-a|--adapter`; TSV en español con privacidad y sanitización; solo snapshot, sin señales; TDD + smoke real Python 3.12/Gio verificados)
 - [x] Cliente D-Bus BlueZ — Incremento 1: snapshot `GetManagedObjects` (`bluez/dbus_protocol.py` + `bluez/dbus_client.py`, PyGObject/Gio; verificado con test de integración opt-in)
 - [ ] Cliente D-Bus BlueZ — Incremento 2: señales y lifecycle (`InterfacesAdded/Removed`, `PropertiesChanged`; suscripción, unsubscribe, cierre) — desbloquea `subscribe_device_changes` del repositorio
 - [x] Mapeo de objetos D-Bus → modelos (`bluez/object_mapper.py`)

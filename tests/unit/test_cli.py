@@ -123,7 +123,7 @@ def test_unexpected_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.parametrize(
     ("command", "phase"),
-    [("devices", "Fase 3"), ("codec", "Fase 3/4"), ("health", "Fase 5"), ("bench", "Fase 5")],
+    [("codec", "Fase 3/4"), ("health", "Fase 5"), ("bench", "Fase 5")],
 )
 def test_future_command_returns_two_with_real_phase(
     capsys: pytest.CaptureFixture[str], command: str, phase: str

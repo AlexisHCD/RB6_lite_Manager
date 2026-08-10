@@ -14,7 +14,7 @@
 > - Test de integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) verificado en
 >   **Python 3.12 / Gio** sobre un snapshot real de BlueZ (`GetManagedObjects`),
 >   sin métodos mutadores ni exposición de la MAC.
-> - Suite actual del proyecto: **177 passed, 3 skipped** (las 3 omisiones son
+> - Suite actual del proyecto: **192 passed, 4 skipped** (las 4 omisiones son
 >   integraciones opt-in, desactivadas por defecto).
 
 - **Fase:** 3 (Bluetooth) — ítem **separado** del roadmap (ver §5 de
