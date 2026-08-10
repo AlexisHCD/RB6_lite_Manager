@@ -51,7 +51,6 @@ Ubuntu; no necesita compilarse si el venv reutiliza los paquetes de sistema:
 sudo apt update
 sudo apt install -y \
     python3-gi python3-gi-cairo gir1.2-glib-2.0 gobject-introspection \
-    libgirepository-2.0-dev pkg-config \
     bluez pipewire wireplumber
 ```
 
@@ -61,23 +60,24 @@ sudo apt install -y \
 > `python3-gi` ni el resto de paquetes del sistema. Por eso los comandos de
 > abajo usan explícitamente `/usr/bin/python3`.
 
-### 2. Entorno Python
+### 2. Entorno Python y dependencias
 
-**Recomendado (Ubuntu):** crear el venv con `--system-site-packages` para que
-reutilice `python3-gi` ya instalado (pip detecta PyGObject como satisfecho y
-no intenta compilarlo):
+**Camino recomendado:** ejecutar `make install-dev`. El Makefile crea `.venv`
+con `--system-site-packages` solo si no existe, reutilizando `python3-gi` ya
+instalado; después instala las dependencias y el paquete en modo editable.
 
 ```bash
-# Crea .venv reutilizando los paquetes del sistema (python3-gi, PyGObject)
-/usr/bin/python3 -m venv --system-site-packages .venv
-
-# Instala las dependencias y el paquete en modo editable
-.venv/bin/pip install -r requirements-dev.txt
-.venv/bin/pip install -e .
+# Crea .venv correctamente si no existe e instala runtime + desarrollo
+make install-dev
 ```
 
-`make install-dev` también funciona sobre un `.venv` ya creado con
-`--system-site-packages` (reutiliza el directorio existente sin tocarlo).
+Si `.venv` fue creado previamente con el `python3` de Linuxbrew/Homebrew,
+elimínalo manualmente antes de recrearlo; no se borra automáticamente:
+
+```bash
+rm -rf .venv
+make install-dev
+```
 
 **Alternativa PyPI (opcional):** si prefieres que `pip` compile PyGObject
 desde PyPI, instala primero sus dependencias oficiales de compilación:
@@ -87,12 +87,20 @@ sudo apt install -y \
     libgirepository-2.0-dev gcc libcairo2-dev pkg-config python3-dev
 ```
 
-Después crea el venv (con o sin `--system-site-packages`) e instala como en
-el bloque anterior; `pip` compilará `PyGObject` en lugar de usar `python3-gi`.
+Después crea el venv sin paquetes de sistema e instala con:
+
+```bash
+make USE_SYSTEM_PYGOBJECT=0 install-dev
+```
+
+Así `pip` compilará `PyGObject` en lugar de usar `python3-gi`. Esta alternativa
+requiere que `.venv` todavía no exista, o que haya sido creado previamente con
+`USE_SYSTEM_PYGOBJECT=0`; el Makefile nunca borra ni recrea un venv existente.
 
 ### 3. Verificar el entorno
 
 ```bash
+make check-runtime
 .venv/bin/openbuds doctor
 ```
 
