@@ -7,18 +7,23 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 **Redmi Buds 6 Lite**.
 
 > **Filosofía:** este proyecto **no** desarrolla drivers, **no** modifica firmware,
-> **no** escribe en el hardware ni **no** envía comandos propietarios al dispositivo.
+> **no** escribe en el hardware ni envía comandos propietarios al dispositivo.
 > Únicamente **administra y optimiza el stack Bluetooth del sistema Linux**
 > (BlueZ, PipeWire, WirePlumber) de forma segura y reversible.
 
 ## Estado del proyecto
 
-🚧 **Fase 2 — Backend base (completada).**
+✅ **Fase 2 — Backend base (completada).** 🚧 **Fase 3 — Bluetooth (en curso).**
 
 El repositorio contiene la arquitectura por capas, los cimientos del dominio,
 la configuración TOML, logging, detección del entorno y una CLI base funcional.
-La aplicación completa aún no está terminada: Bluetooth, diagnóstico y la GUI
-se implementan en las fases siguientes.
+
+La Fase 3 implementa el acceso a BlueZ vía D-Bus (PyGObject/Gio): el cliente
+GDBus se desarrolla por incrementos — primero el snapshot con
+`GetManagedObjects`, después las señales y el lifecycle de suscripción
+(ver [`docs/bluez/gio-dbus-client-design.md`](docs/bluez/gio-dbus-client-design.md)).
+La aplicación completa aún no está terminada: diagnóstico y la GUI se
+implementan en las fases siguientes.
 
 Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -39,33 +44,51 @@ Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ### 1. Paquetes de sistema
 
-PyGObject (D-Bus vía GLib) requiere cabeceras del sistema en Ubuntu:
+PyGObject (D-Bus vía GLib) se usa a través del paquete de la distribución en
+Ubuntu; no necesita compilarse si el venv reutiliza los paquetes de sistema:
 
 ```bash
 sudo apt update
 sudo apt install -y \
     python3-gi python3-gi-cairo gir1.2-glib-2.0 gobject-introspection \
-    libgirepository1.0-dev pkg-config \
+    libgirepository-2.0-dev pkg-config \
     bluez pipewire wireplumber
 ```
 
-> Si `pip install PyGObject` falla durante la instalación de dependencias,
-> instala el paquete `python3-gi` desde `apt` (más fiable en Ubuntu) y omite
-> `PyGObject` en `requirements.txt`.
+> ⚠️ **Usa el Python del sistema, no el de Homebrew/Linuxbrew.** Si tu `python3`
+> proviene de Homebrew/Linuxbrew, su `sys.path` **no incluye** los paquetes de
+> `apt` (`/usr/lib/python3/dist-packages`) y, por tanto, **no verá**
+> `python3-gi` ni el resto de paquetes del sistema. Por eso los comandos de
+> abajo usan explícitamente `/usr/bin/python3`.
 
 ### 2. Entorno Python
 
-```bash
-make install-dev   # crea .venv, instala requirements-dev.txt y el paquete en modo editable
-```
-
-O manualmente:
+**Recomendado (Ubuntu):** crear el venv con `--system-site-packages` para que
+reutilice `python3-gi` ya instalado (pip detecta PyGObject como satisfecho y
+no intenta compilarlo):
 
 ```bash
-python3 -m venv .venv
+# Crea .venv reutilizando los paquetes del sistema (python3-gi, PyGObject)
+/usr/bin/python3 -m venv --system-site-packages .venv
+
+# Instala las dependencias y el paquete en modo editable
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/pip install -e .
 ```
+
+`make install-dev` también funciona sobre un `.venv` ya creado con
+`--system-site-packages` (reutiliza el directorio existente sin tocarlo).
+
+**Alternativa PyPI (opcional):** si prefieres que `pip` compile PyGObject
+desde PyPI, instala primero sus dependencias oficiales de compilación:
+
+```bash
+sudo apt install -y \
+    libgirepository-2.0-dev gcc libcairo2-dev pkg-config python3-dev
+```
+
+Después crea el venv (con o sin `--system-site-packages`) e instala como en
+el bloque anterior; `pip` compilará `PyGObject` en lugar de usar `python3-gi`.
 
 ### 3. Verificar el entorno
 
@@ -104,6 +127,10 @@ make typecheck  # mypy
 make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
+
+**Baseline actual:** **105 tests** en verde (2026-08-09). La Fase 3 está en
+curso; sus nuevas pruebas (cliente D-Bus, señales) se añadirán al suite en el
+incremento correspondiente y actualizarán este número.
 
 ## Arquitectura
 

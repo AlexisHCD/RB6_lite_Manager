@@ -24,11 +24,11 @@ de comenzar la siguiente. El progreso se marca con checkbox.
 ## Fase 3 — Bluetooth
 
 - [ ] CLI `devices`
-- [ ] Cliente D-Bus BlueZ (`bluez/dbus_client.py`) con PyGObject/Gio
+- [ ] Cliente D-Bus BlueZ — Incremento 1: snapshot `GetManagedObjects` (`bluez/dbus_client.py`, PyGObject/Gio)
+- [ ] Cliente D-Bus BlueZ — Incremento 2: señales y lifecycle (`InterfacesAdded/Removed`, `PropertiesChanged`; suscripción, unsubscribe, cierre)
 - [ ] Mapeo de objetos D-Bus → modelos (`bluez/object_mapper.py`)
 - [ ] Implementación de `IBluetoothRepository` (`bluez/bluez_repository.py`)
 - [ ] Detección de adaptadores y dispositivos
-- [ ] Suscripción a señales (InterfacesAdded/Removed, PropertiesChanged)
 - [ ] Validación empírica de propiedades runtime inciertas
 
 ## Fase 4 — Optimización
