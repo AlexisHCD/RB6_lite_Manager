@@ -23,11 +23,11 @@ de comenzar la siguiente. El progreso se marca con checkbox.
 
 ## Fase 3 — Bluetooth
 
-- [ ] CLI `devices`
+- [ ] CLI `devices` (siguiente incremento sobre las consultas snapshot ya implementadas)
 - [x] Cliente D-Bus BlueZ — Incremento 1: snapshot `GetManagedObjects` (`bluez/dbus_protocol.py` + `bluez/dbus_client.py`, PyGObject/Gio; verificado con test de integración opt-in)
-- [ ] Cliente D-Bus BlueZ — Incremento 2: señales y lifecycle (`InterfacesAdded/Removed`, `PropertiesChanged`; suscripción, unsubscribe, cierre)
+- [ ] Cliente D-Bus BlueZ — Incremento 2: señales y lifecycle (`InterfacesAdded/Removed`, `PropertiesChanged`; suscripción, unsubscribe, cierre) — desbloquea `subscribe_device_changes` del repositorio
 - [x] Mapeo de objetos D-Bus → modelos (`bluez/object_mapper.py`)
-- [ ] Implementación de `IBluetoothRepository` (`bluez/bluez_repository.py`)
+- [ ] Implementación de `IBluetoothRepository` (`bluez/bluez_repository.py`) — **consultas snapshot implementadas y verificadas** (`list_adapters`/`list_devices`/`get_device`/`get_battery`/`get_rssi`, cliente inyectable + snapshot fresco; TDD e integración real solo lectura completados). El checkbox **sigue vacío**: `subscribe_device_changes` lanza `NotImplementedError` hasta el Incremento 2 de señales
 - [ ] Detección de adaptadores y dispositivos
 - [ ] Validación empírica de propiedades runtime inciertas
 

@@ -22,13 +22,18 @@ La Fase 3 implementa el acceso a BlueZ vía D-Bus (PyGObject/Gio) por
 incrementos. El **Incremento 1 — snapshot `GetManagedObjects`** ya está
 implementado y verificado (`bluez/dbus_protocol.py` → `GioDBusProtocol` +
 `BlueZDBusClient.snapshot`), y también el **mapeo de objetos D-Bus → modelos**
-(`bluez/object_mapper.py`, puro y sin GI), ambos con su test de integración
-opt-in en verde. Las señales y el lifecycle de suscripción (Incremento 2), el
-repositorio y la detección completa de adaptadores/dispositivos se completan en
-los siguientes incrementos
-(ver [`docs/bluez/gio-dbus-client-design.md`](docs/bluez/gio-dbus-client-design.md)).
-La aplicación completa aún no está terminada y la CLI `devices` no está
-funcional: diagnóstico y la GUI se implementan en las fases siguientes.
+(`bluez/object_mapper.py`, puro y sin GI) y las **consultas snapshot del
+repositorio** (`bluez/bluez_repository.py`:
+`list_adapters`/`list_devices`/`get_device`/`get_battery`/`get_rssi`, con
+cliente D-Bus inyectable y snapshot fresco por llamada); la integración real
+solo lectura se verificó en **Python 3.12 / Gio**. La suscripción a cambios
+(`subscribe_device_changes`, Incremento 2 de señales) sigue pendiente, por lo
+que el repositorio todavía no cumple su contrato completo. La CLI `devices`
+puede construirse ya sobre las consultas snapshot y es el siguiente incremento
+(ver [`docs/bluez/gio-dbus-client-design.md`](docs/bluez/gio-dbus-client-design.md)
+y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md)).
+La aplicación completa aún no está terminada: diagnóstico y la GUI se
+implementan en las fases siguientes.
 
 Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -119,7 +124,7 @@ Muestra las versiones detectadas del stack y si el entorno está soportado.
 .venv/bin/openbuds doctor      # detecta y muestra el entorno del sistema
 .venv/bin/openbuds config      # muestra la configuración efectiva
 .venv/bin/openbuds version     # muestra la versión sin cargar config
-.venv/bin/openbuds devices     # Fase 3: pendiente, tras el repositorio (`bluez/bluez_repository.py`)
+.venv/bin/openbuds devices     # Fase 3: siguiente incremento sobre las consultas snapshot
 .venv/bin/openbuds health      # futuro: Health Check (Fase 5)
 .venv/bin/openbuds codec       # futuro: muestra el códec activo (Fase 3/4)
 .venv/bin/openbuds bench       # futuro: benchmark de enlace (Fase 5)
@@ -141,11 +146,11 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual:** **157 tests** en verde + **2 skipped** (integración
+**Baseline actual:** **177 tests** en verde + **3 skipped** (integración
 BlueZ opt-in desactivada por defecto; 2026-08-09). El cliente D-Bus
-(Incremento 1) y el mapper de objetos ya están cubiertos por la suite; las
-pruebas de señales (Incremento 2) se añadirán en el incremento correspondiente
-y actualizarán este número.
+(Incremento 1), el mapper de objetos y las consultas snapshot del repositorio
+ya están cubiertos por la suite; las pruebas de señales (Incremento 2) se
+añadirán en el incremento correspondiente y actualizarán este número.
 
 ## Arquitectura
 

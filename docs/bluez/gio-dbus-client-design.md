@@ -38,11 +38,18 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   Ubuntu, Python 3.12.3, PyGObject 3.48.2, con BlueZ disponible: lectura real
 >   de `GetManagedObjects` coherente y mapeo de todos los objetos reales del
 >   bus, **sin métodos mutadores** y sin exponer la MAC del dispositivo.
-> - Suite actual: **157 passed, 2 skipped** (las 2 omisiones son las
->   integraciones opt-in, desactivadas por defecto). Las **señales/lifecycle**
->   (Incremento 2), el **repositorio** (`bluez_repository.py`), la **detección
->   completa de adaptadores/dispositivos** y la **CLI `devices`** siguen
->   pendientes.
+> - Suite actual: **177 passed, 3 skipped** (las 3 omisiones son las
+>   integraciones opt-in, desactivadas por defecto). Las **consultas snapshot
+>   del repositorio** (`bluez_repository.py`: `list_adapters`/`list_devices`/
+>   `get_device`/`get_battery`/`get_rssi`, cliente inyectable + snapshot
+>   fresco) están **implementadas y verificadas**
+>   ([repository-design.md](repository-design.md)), incluida la integración
+>   real solo lectura en **Python 3.12 / Gio**. El **repositorio completo**
+>   sigue pendiente: `subscribe_device_changes` lanza `NotImplementedError`
+>   hasta el **Incremento 2 de señales** (por eso el checkbox global del
+>   roadmap permanece `[ ]`). También siguen pendientes las **señales/
+>   lifecycle (Incremento 2)**, la **detección completa de
+>   adaptadores/dispositivos** y la **CLI `devices`**.
 
 ---
 
@@ -457,7 +464,7 @@ src/openbuds/infrastructure/bluez/
 ├── dbus_protocol.py      # [INC 1] GioDBusProtocol (única importación de gi)
 ├── object_mapper.py      # [implementado] dicts nativos → modelos (puro)
 ├── dbus_client.py        # [INC 1+2] BlueZDBusClient (protocolo + errores + observador; usa object_mapper)
-└── bluez_repository.py   # [Fase 3] IBluetoothRepository sobre BlueZDBusClient
+└── bluez_repository.py   # [consultas implementadas] IBluetoothRepository sobre BlueZDBusClient (señales → Inc 2)
 ```
 
 > El contrato técnico (Documentation First) del mapper está en
@@ -466,8 +473,11 @@ src/openbuds/infrastructure/bluez/
 > **implementado y verificado** y el contrato se conserva como documentación
 > viva.
 
-`bluez_repository.py` ya existe como esqueleto en Fase 1; se completa en la
-Fase 3 usando el cliente de este diseño.
+`bluez_repository.py` empezó como esqueleto en Fase 1; sus **consultas
+snapshot** ya están **implementadas y verificadas** (cliente inyectable,
+snapshot fresco por llamada; ver [repository-design.md](repository-design.md)).
+La suscripción a cambios (`subscribe_device_changes`) se completará en el
+Incremento 2 y cerrará el contrato `IBluetoothRepository`.
 
 ---
 
@@ -497,10 +507,11 @@ Fase 3 usando el cliente de este diseño.
 - Los tests de integración se marcan (p.ej. `@pytest.mark.integration` /
   `@pytest.mark.slow`) y no forman parte del baseline por defecto, siguiendo
   el patrón del Makefile (`make test-quick` = solo unit).
-- El baseline actual del proyecto es de **157 tests** en verde + **2 skipped**
+- El baseline actual del proyecto es de **177 tests** en verde + **3 skipped**
   (las integraciones BlueZ opt-in desactivadas por defecto; 2026-08-09); las
-  pruebas del mapper y del cliente de este diseño ya forman parte del suite y
-  el resto de incrementos se añaden sin romperlo.
+  pruebas del mapper, del cliente y de las consultas del repositorio de este
+  diseño ya forman parte del suite y el resto de incrementos se añaden sin
+  romperlo.
 - Verificación manual complementaria (solo lectura):
   `busctl tree org.bluez`, `busctl introspect org.bluez /`, `dbus-send
   --system --dest=org.bluez --print-reply / org.freedesktop.DBus.ObjectManager.GetManagedObjects`.
