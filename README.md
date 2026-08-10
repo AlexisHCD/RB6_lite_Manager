@@ -18,9 +18,12 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 El repositorio contiene la arquitectura por capas, los cimientos del dominio,
 la configuración TOML, logging, detección del entorno y una CLI base funcional.
 
-La Fase 3 implementa el acceso a BlueZ vía D-Bus (PyGObject/Gio): el cliente
-GDBus se desarrolla por incrementos — primero el snapshot con
-`GetManagedObjects`, después las señales y el lifecycle de suscripción
+La Fase 3 implementa el acceso a BlueZ vía D-Bus (PyGObject/Gio) por
+incrementos. El **Incremento 1 — snapshot `GetManagedObjects`** ya está
+implementado y verificado (`bluez/dbus_protocol.py` → `GioDBusProtocol` +
+`BlueZDBusClient.snapshot`), con su test de integración opt-in en verde. Las
+señales y el lifecycle de suscripción (Incremento 2), el mapeo de objetos y el
+repositorio se completan en los siguientes incrementos
 (ver [`docs/bluez/gio-dbus-client-design.md`](docs/bluez/gio-dbus-client-design.md)).
 La aplicación completa aún no está terminada: diagnóstico y la GUI se
 implementan en las fases siguientes.
@@ -114,7 +117,7 @@ Muestra las versiones detectadas del stack y si el entorno está soportado.
 .venv/bin/openbuds doctor      # detecta y muestra el entorno del sistema
 .venv/bin/openbuds config      # muestra la configuración efectiva
 .venv/bin/openbuds version     # muestra la versión sin cargar config
-.venv/bin/openbuds devices     # futuro: lista dispositivos (Fase 3)
+.venv/bin/openbuds devices     # Fase 3: pendiente, tras el mapper de objetos y el repositorio
 .venv/bin/openbuds health      # futuro: Health Check (Fase 5)
 .venv/bin/openbuds codec       # futuro: muestra el códec activo (Fase 3/4)
 .venv/bin/openbuds bench       # futuro: benchmark de enlace (Fase 5)
@@ -136,9 +139,10 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual:** **105 tests** en verde (2026-08-09). La Fase 3 está en
-curso; sus nuevas pruebas (cliente D-Bus, señales) se añadirán al suite en el
-incremento correspondiente y actualizarán este número.
+**Baseline actual:** **120 tests** en verde + **1 skipped** (integración
+BlueZ desactivada por defecto; 2026-08-09). El cliente D-Bus (Incremento 1) ya
+está cubierto por la suite; las pruebas de señales (Incremento 2) se añadirán
+en el incremento correspondiente y actualizarán este número.
 
 ## Arquitectura
 

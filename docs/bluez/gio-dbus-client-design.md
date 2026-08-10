@@ -17,6 +17,27 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 > 2026-08-09. Ante cualquier discrepancia con el comportamiento real, se
 > detiene la implementación y se documenta.
 
+> **Estado de implementación (2026-08-09):** el **Incremento 1 — snapshot** de
+> este diseño está **implementado y verificado**:
+>
+> - `GioDBusProtocol` (`dbus_protocol.py`) construye el proxy con
+>   `DO_NOT_AUTO_START` y llama a `GetManagedObjects` con `NO_AUTO_START`,
+>   timeout finito `DBUS_CALL_TIMEOUT_MS = 5000`, valida la firma exacta
+>   `(a{oa{sa{sv}}})` y envuelve `GLib.Error` → `BluetoothError` (§2.1, §2.2,
+>   §2.6).
+> - `BlueZDBusClient.snapshot()` (`dbus_client.py`) delega en un proveedor
+>   inyectable; la carga de GI es **diferida** (solo se importa `gi` al
+>   construir `GioDBusProtocol`), de modo que los unit tests corren **sin GI**
+>   y sin bus del sistema (§2.7).
+> - Test de integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) verificado en
+>   Ubuntu, Python 3.12.3, PyGObject 3.48.2, con BlueZ disponible: lectura real
+>   de `GetManagedObjects` coherente, **sin métodos mutadores** y sin exponer
+>   la MAC del dispositivo.
+> - Suite actual: **120 passed, 1 skipped** (integración desactivada por
+>   defecto). El **mapper** (`object_mapper.py`), las **señales/lifecycle**
+>   (Incremento 2), el **repositorio** (`bluez_repository.py`) y la **CLI
+>   `devices`** siguen pendientes.
+
 ---
 
 ## 1. Contexto y alcance
@@ -464,8 +485,10 @@ Fase 3 usando el cliente de este diseño.
 - Los tests de integración se marcan (p.ej. `@pytest.mark.integration` /
   `@pytest.mark.slow`) y no forman parte del baseline por defecto, siguiendo
   el patrón del Makefile (`make test-quick` = solo unit).
-- El baseline actual del proyecto es de **105 tests** (2026-08-09); las
-  pruebas de este diseño se añaden al suite sin romperlo.
+- El baseline actual del proyecto es de **120 tests** en verde + **1 skipped**
+  (integración BlueZ desactivada por defecto; 2026-08-09); las pruebas de este
+  diseño ya forman parte del suite y el resto de incrementos se añaden sin
+  romperlo.
 - Verificación manual complementaria (solo lectura):
   `busctl tree org.bluez`, `busctl introspect org.bluez /`, `dbus-send
   --system --dest=org.bluez --print-reply / org.freedesktop.DBus.ObjectManager.GetManagedObjects`.

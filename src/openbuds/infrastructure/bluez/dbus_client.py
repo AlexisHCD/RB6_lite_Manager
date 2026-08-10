@@ -1,18 +1,12 @@
-"""Adaptador de BlueZ vía D-Bus usando PyGObject/Gio (GDBus).
-
-Estado: Fase 1 — esqueleto. La implementación completa (suscripción a señales,
-mapeo de object paths, lectura de propiedades) se desarrolla en Fase 3.
-
-Referencias verificadas:
-  - Servicio D-Bus: ``org.bluez``
-  - ObjectManager en la raíz ``/``: GetManagedObjects, InterfacesAdded/Removed.
-  - Interfaces: Adapter1, Device1, Battery1, MediaTransport1, MediaPlayer1.
-  - MediaControl1 está DEPRECATED: no usar.
-
-Ver ADR-0001 y docs/bluez/dbus-interfaces.md.
-"""
+"""Cliente de snapshot de BlueZ con proveedor de protocolo inyectable."""
 
 from __future__ import annotations
+
+from openbuds.infrastructure.bluez.dbus_protocol import (
+    GioDBusProtocol,
+    ManagedObjects,
+    ManagedObjectsProvider,
+)
 
 # Constantes estables del servicio BlueZ D-Bus (verificadas en docs).
 BLUEZ_SERVICE = "org.bluez"
@@ -30,12 +24,11 @@ IFACE_MEDIA_PLAYER1 = "org.bluez.MediaPlayer1"
 
 
 class BlueZDBusClient:
-    """Cliente D-Bus para BlueZ sobre el bus del sistema.
+    """Orquesta la obtención de snapshots sin mapearlos al dominio."""
 
-    Estado: Fase 1 — sin implementación.
-    Encapsula la conexión GDBus, el snapshot inicial (GetManagedObjects) y las
-    suscripciones a PropertiesChanged/InterfacesAdded/InterfacesRemoved.
-    """
+    def __init__(self, provider: ManagedObjectsProvider | None = None) -> None:
+        self._provider = provider if provider is not None else GioDBusProtocol()
 
-    def __init__(self) -> None:
-        raise NotImplementedError("Implementación diferada a Fase 3 (Bluetooth).")
+    def snapshot(self) -> ManagedObjects:
+        """Devuelve el snapshot obtenido por el proveedor configurado."""
+        return self._provider.get_managed_objects()
