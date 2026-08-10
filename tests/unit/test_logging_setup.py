@@ -7,9 +7,13 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from openbuds.core.config import default_config
+from openbuds.core.events import Event, EventBus
 from openbuds.core.logging_setup import (
     DATEFMT,
     FMT,
+    LOG_EVENT_NAME,
+    EventBusLogHandler,
+    LogEntry,
     get_logger,
     setup_logging,
     setup_logging_from_config,
@@ -67,6 +71,69 @@ class TestSetupLogging:
     def test_lowercase_level_accepted(self) -> None:
         setup_logging(level="warning")
         assert logging.getLogger().level == logging.WARNING
+
+    def test_log_record_is_published_as_log_entry(self) -> None:
+        bus = EventBus()
+        received: list[Event] = []
+        bus.subscribe(LOG_EVENT_NAME, received.append)
+        setup_logging(level="INFO", event_bus=bus)
+
+        get_logger("openbuds.test.events").info("mensaje")
+
+        assert len(received) == 1
+        assert received[0].name == LOG_EVENT_NAME
+        assert isinstance(received[0].payload, LogEntry)
+        entry = received[0].payload
+        assert entry.level_name == "INFO"
+        assert entry.logger_name == "openbuds.test.events"
+        assert entry.message == "mensaje"
+        assert entry.timestamp.tzinfo is not None
+        assert entry.timestamp.utcoffset() is not None
+        assert entry.exception_text is None
+
+    def test_log_arguments_are_interpolated(self) -> None:
+        bus = EventBus()
+        received: list[Event] = []
+        bus.subscribe(LOG_EVENT_NAME, received.append)
+        setup_logging(event_bus=bus)
+
+        get_logger("openbuds.test.events").info("valor=%s", 7)
+
+        assert received[0].payload.message == "valor=7"
+
+    def test_exception_is_included_in_log_entry(self) -> None:
+        bus = EventBus()
+        received: list[Event] = []
+        bus.subscribe(LOG_EVENT_NAME, received.append)
+        setup_logging(event_bus=bus)
+
+        try:
+            raise ValueError("fallo de prueba")
+        except ValueError:
+            get_logger("openbuds.test.events").exception("operación fallida")
+
+        entry = received[0].payload
+        assert entry.exception_text is not None
+        assert "ValueError: fallo de prueba" in entry.exception_text
+
+    def test_subscriber_exception_does_not_escape_logging(self) -> None:
+        bus = EventBus()
+        bus.subscribe(LOG_EVENT_NAME, lambda _event: (_ for _ in ()).throw(RuntimeError("fallo")))
+        setup_logging(event_bus=bus)
+        previous_raise_exceptions = logging.raiseExceptions
+        logging.raiseExceptions = False
+        try:
+            get_logger("openbuds.test.events").error("no debe escapar")
+        finally:
+            logging.raiseExceptions = previous_raise_exceptions
+
+    def test_repeated_setup_does_not_accumulate_event_handlers(self) -> None:
+        bus = EventBus()
+        setup_logging(event_bus=bus)
+        setup_logging(event_bus=bus)
+
+        handlers = logging.getLogger().handlers
+        assert sum(isinstance(handler, EventBusLogHandler) for handler in handlers) == 1
 
 
 class TestSetupLoggingFromConfig:
