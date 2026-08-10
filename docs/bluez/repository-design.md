@@ -38,7 +38,7 @@ cache, sin lifecycle y sin escritura.
 > `bluez_repository.py` corren **sin GI ni bus del sistema**, y el test de
 > integración opt-in (`tests/integration/test_bluez_repository.py`,
 > `OPENBUDS_RUN_INTEGRATION=1`) pasó en **Python 3.12 / Gio** sobre BlueZ real
-> (solo lectura). Suite total: **192 passed, 4 skipped** (las 4 omisiones son
+> (solo lectura). Suite total: **205 passed, 4 skipped** (las 4 omisiones son
 > las integraciones opt-in, desactivadas por defecto).
 > `subscribe_device_changes` **sigue lanzando `NotImplementedError`** hasta el
 > Incremento 2, por lo que el checkbox global del roadmap **permanece `[ ]`**

@@ -37,7 +37,7 @@ Diseño del comando `openbuds devices`: lista los dispositivos Bluetooth
 > `-p|--paired-only` y `-a|--adapter ADAPTER` con `type=` que normaliza `hciN`
 > → `/org/bluez/hciN` y valida `^hci\d+$` (§2). Imprime TSV en español con
 > cabecera, sanitización y privacidad (§3–§4). El TDD (§7) está **completado**
-> y la suite suma **192 passed, 4 skipped** (las 4 omisiones son integraciones
+> y la suite suma **205 passed, 4 skipped** (las 4 omisiones son integraciones
 > opt-in desactivadas por defecto). El smoke opt-in (§8) pasó en **Python 3.12
 > / Gio** sobre BlueZ real: exit 0, sin patrones MAC ni `dev_` en stdout/stderr
 > y sin auto-arrancar `bluetoothd` (solo lectura). El comando es **solo
@@ -299,5 +299,5 @@ tests/integration/test_cli_devices_smoke.py  # smoke opt-in  [implementado, veri
 7. **`BluetoothError`/`OpenBudsError` → exit 1** vía el `except` central de
    `main`; errores de uso (incl. `ADAPTER` inválido) → 2.
 8. **Sin señales ni main loop** en este incremento.
-9. Roadmap (checkbox CLI `devices` `[x]`), README y baseline (**192 passed, 4
+9. Roadmap (checkbox CLI `devices` `[x]`), README y baseline (**205 passed, 4
    skipped**) se actualizaron **al cerrar el incremento de implementación**.

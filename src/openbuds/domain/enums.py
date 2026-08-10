@@ -62,6 +62,15 @@ class ConnectionState(StrEnum):
 
 
 @unique
+class DeviceChangeKind(StrEnum):
+    """Tipo de cambio observado en un dispositivo Bluetooth."""
+
+    ADDED = "added"
+    UPDATED = "updated"
+    REMOVED = "removed"
+
+
+@unique
 class ProfileState(StrEnum):
     """Estado de un perfil Bluetooth activo (p. ej. A2DP Sink)."""
 

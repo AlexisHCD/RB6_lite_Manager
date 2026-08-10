@@ -15,6 +15,7 @@ from openbuds.domain.models.battery import BatteryLevel
 from openbuds.domain.models.benchmark import BenchmarkResult, BenchmarkSample
 from openbuds.domain.models.codec import CodecInfo
 from openbuds.domain.models.device import DeviceInfo
+from openbuds.domain.models.device_change import DeviceChangeEvent
 from openbuds.domain.models.diagnostic import CheckResult, HealthReport
 from openbuds.domain.models.rssi import RSSIReading
 from openbuds.domain.models.system import SystemInfo
@@ -27,6 +28,7 @@ __all__ = [
     "CheckResult",
     "CodecInfo",
     "DeviceInfo",
+    "DeviceChangeEvent",
     "HealthReport",
     "RSSIReading",
     "SystemInfo",

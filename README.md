@@ -29,7 +29,13 @@ cliente D-Bus inyectable y snapshot fresco por llamada) y la **CLI `devices`**
 (ver abajo); la integración real solo lectura se verificó en **Python 3.12 /
 Gio**. La suscripción a cambios (`subscribe_device_changes`, Incremento 2 de
 señales) y, con ella, el **contrato completo de `IBluetoothRepository`** siguen
-pendientes, por lo que el checkbox global del roadmap permanece vacío. La
+pendientes, por lo que el checkbox global del roadmap permanece vacío. El
+**contrato de eventos** de esa suscripción
+([ADR-0007](docs/ADR/0007-device-change-event-contract.md):
+`DeviceChangeKind`, `DeviceChangeEvent` y `Unsubscribe`) está **preparado e
+implementado** en la capa de dominio, con invariantes validadas y cobertura de
+tests; el **dispatch real** (señales de BlueZ y `unsubscribe` efectivo) se
+completa en el Incremento 2. La
 detección de adaptadores/dispositivos se completa en fases posteriores (ver
 [`docs/bluez/gio-dbus-client-design.md`](docs/bluez/gio-dbus-client-design.md),
 [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md) y
@@ -167,12 +173,13 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual:** **192 tests** en verde + **4 skipped** (integración
+**Baseline actual:** **205 tests** en verde + **4 skipped** (integración
 BlueZ opt-in desactivada por defecto; 2026-08-09). El cliente D-Bus
-(Incremento 1), el mapper de objetos, las consultas snapshot del repositorio y
-la CLI `devices` ya están cubiertos por la suite; las pruebas de señales
-(Incremento 2) se añadirán en el incremento correspondiente y actualizarán
-este número.
+(Incremento 1), el mapper de objetos, el contrato de eventos de cambio de
+dispositivo ([ADR-0007](docs/ADR/0007-device-change-event-contract.md)), las
+consultas snapshot del repositorio y la CLI `devices` ya están cubiertos por
+la suite; las pruebas de señales (Incremento 2) se añadirán en el incremento
+correspondiente y actualizarán este número.
 
 ## Arquitectura
 

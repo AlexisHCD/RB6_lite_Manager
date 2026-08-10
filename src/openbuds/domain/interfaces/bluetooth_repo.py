@@ -5,7 +5,7 @@ Implementación de referencia: ``openbuds.infrastructure.bluez.bluez_repository`
 
 from __future__ import annotations
 
-from openbuds.domain.interfaces.observer import DeviceChangeCallback
+from openbuds.domain.interfaces.observer import DeviceChangeCallback, Unsubscribe
 from openbuds.domain.models import AdapterInfo, BatteryLevel, DeviceInfo, RSSIReading
 
 
@@ -48,7 +48,7 @@ class IBluetoothRepository:
         """Devuelve una lectura puntual de RSSI/TxPower del dispositivo."""
         raise NotImplementedError
 
-    def subscribe_device_changes(self, callback: DeviceChangeCallback) -> None:
+    def subscribe_device_changes(self, callback: DeviceChangeCallback) -> Unsubscribe:
         """Registra un callback para notificar cambios en dispositivos.
 
         La implementación se basa en las señales D-Bus estándar de BlueZ:

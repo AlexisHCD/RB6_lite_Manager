@@ -38,8 +38,13 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   Ubuntu, Python 3.12.3, PyGObject 3.48.2, con BlueZ disponible: lectura real
 >   de `GetManagedObjects` coherente y mapeo de todos los objetos reales del
 >   bus, **sin métodos mutadores** y sin exponer la MAC del dispositivo.
-> - Suite actual: **192 passed, 4 skipped** (las 4 omisiones son las
->   integraciones opt-in, desactivadas por defecto). Las **consultas snapshot
+> - Suite actual: **205 passed, 4 skipped** (las 4 omisiones son las
+>   integraciones opt-in, desactivadas por defecto). El **contrato de eventos
+>   del dominio** ([ADR-0007](../ADR/0007-device-change-event-contract.md))
+>   está **implementado y probado**: `DeviceChangeKind` (`@unique`),
+>   `DeviceChangeEvent` (invariantes validadas en construcción) y los alias
+>   `DeviceChangeCallback`/`Unsubscribe`; `subscribe_device_changes` ya
+>   **declara** el retorno `Unsubscribe`. Las **consultas snapshot
 >   del repositorio** (`bluez_repository.py`: `list_adapters`/`list_devices`/
 >   `get_device`/`get_battery`/`get_rssi`, cliente inyectable + snapshot
 >   fresco) están **implementadas y verificadas**
@@ -48,7 +53,8 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   sigue pendiente: `subscribe_device_changes` lanza `NotImplementedError`
 >   hasta el **Incremento 2 de señales** (por eso el checkbox global del
 >   roadmap permanece `[ ]`). También siguen pendientes las **señales/
->   lifecycle (Incremento 2)** y la **detección completa de
+>   lifecycle (Incremento 2)** —es decir, el dispatch de los eventos del
+>   contrato y el `unsubscribe` real— y la **detección completa de
 >   adaptadores/dispositivos**. La **CLI `devices`** ya está **implementada y
 >   verificada** sobre las consultas snapshot (solo snapshot, sin señales;
 >   [devices-command.md](../cli/devices-command.md)); el checkbox del roadmap
@@ -401,7 +407,14 @@ class BlueZDBusClient:
 ```
 
 `subscribe_device_changes` mapea las señales a `DeviceChangeCallback`
-(`DeviceInfo, ConnectionState`), manteniendo el contrato del dominio intacto.
+(`DeviceChangeEvent` con `DeviceChangeKind` `ADDED`/`UPDATED`/`REMOVED` y
+`current`/`previous`, [ADR-0007](../ADR/0007-device-change-event-contract.md)),
+manteniendo el contrato del dominio intacto.
+
+En el límite del repositorio (`IBluetoothRepository`), `subscribe_device_changes`
+devuelve un `Unsubscribe` (callable idempotente) que libera la suscripción
+interna del cliente; el cliente conserva el mecanismo `subscribe → sub_id` +
+`unsubscribe(sub_id)` de §2.5.
 
 ---
 
@@ -510,11 +523,12 @@ Incremento 2 y cerrará el contrato `IBluetoothRepository`.
 - Los tests de integración se marcan (p.ej. `@pytest.mark.integration` /
   `@pytest.mark.slow`) y no forman parte del baseline por defecto, siguiendo
   el patrón del Makefile (`make test-quick` = solo unit).
-- El baseline actual del proyecto es de **192 tests** en verde + **4 skipped**
+- El baseline actual del proyecto es de **205 tests** en verde + **4 skipped**
   (las integraciones BlueZ opt-in desactivadas por defecto; 2026-08-09); las
-  pruebas del mapper, del cliente, de las consultas del repositorio y de la
-  CLI `devices` de este diseño ya forman parte del suite y el resto de
-  incrementos se añaden sin romperlo.
+  pruebas del mapper, del cliente, del contrato de eventos
+  ([ADR-0007](../ADR/0007-device-change-event-contract.md)), de las consultas
+  del repositorio y de la CLI `devices` de este diseño ya forman parte del
+  suite y el resto de incrementos se añaden sin romperlo.
 - Verificación manual complementaria (solo lectura):
   `busctl tree org.bluez`, `busctl introspect org.bluez /`, `dbus-send
   --system --dest=org.bluez --print-reply / org.freedesktop.DBus.ObjectManager.GetManagedObjects`.

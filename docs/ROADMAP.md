@@ -25,9 +25,9 @@ de comenzar la siguiente. El progreso se marca con checkbox.
 
 - [x] CLI `devices` (`openbuds devices` sobre las consultas snapshot: `-p|--paired-only` y `-a|--adapter`; TSV en español con privacidad y sanitización; solo snapshot, sin señales; TDD + smoke real Python 3.12/Gio verificados)
 - [x] Cliente D-Bus BlueZ — Incremento 1: snapshot `GetManagedObjects` (`bluez/dbus_protocol.py` + `bluez/dbus_client.py`, PyGObject/Gio; verificado con test de integración opt-in)
-- [ ] Cliente D-Bus BlueZ — Incremento 2: señales y lifecycle (`InterfacesAdded/Removed`, `PropertiesChanged`; suscripción, unsubscribe, cierre) — desbloquea `subscribe_device_changes` del repositorio
+- [ ] Cliente D-Bus BlueZ — Incremento 2: señales y lifecycle (`InterfacesAdded/Removed`, `PropertiesChanged`; suscripción, unsubscribe, cierre) — desbloquea `subscribe_device_changes` del repositorio. El contrato de eventos del dominio ([ADR-0007](ADR/0007-device-change-event-contract.md): `DeviceChangeKind`/`DeviceChangeEvent`/`Unsubscribe`) está **preparado e implementado**; el dispatch y el lifecycle reales quedan para este incremento
 - [x] Mapeo de objetos D-Bus → modelos (`bluez/object_mapper.py`)
-- [ ] Implementación de `IBluetoothRepository` (`bluez/bluez_repository.py`) — **consultas snapshot implementadas y verificadas** (`list_adapters`/`list_devices`/`get_device`/`get_battery`/`get_rssi`, cliente inyectable + snapshot fresco; TDD e integración real solo lectura completados). El checkbox **sigue vacío**: `subscribe_device_changes` lanza `NotImplementedError` hasta el Incremento 2 de señales
+- [ ] Implementación de `IBluetoothRepository` (`bluez/bluez_repository.py`) — **consultas snapshot implementadas y verificadas** (`list_adapters`/`list_devices`/`get_device`/`get_battery`/`get_rssi`, cliente inyectable + snapshot fresco; TDD e integración real solo lectura completados). El checkbox **sigue vacío**: `subscribe_device_changes` lanza `NotImplementedError` hasta el Incremento 2 de señales (su contrato `DeviceChangeEvent`/`Unsubscribe`, [ADR-0007](ADR/0007-device-change-event-contract.md), ya está listo y probado)
 - [ ] Detección de adaptadores y dispositivos
 - [ ] Validación empírica de propiedades runtime inciertas
 

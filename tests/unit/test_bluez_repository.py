@@ -293,4 +293,4 @@ def test_battery_mapper_bluetooth_error_preserves_value_error_cause() -> None:
 
 def test_subscribe_device_changes_remains_unimplemented() -> None:
     with pytest.raises(NotImplementedError, match="Incremento 2"):
-        BlueZRepository(FakeSnapshotClient([])).subscribe_device_changes(lambda _, __: None)
+        BlueZRepository(FakeSnapshotClient([])).subscribe_device_changes(lambda _: None)

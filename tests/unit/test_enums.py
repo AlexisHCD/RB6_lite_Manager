@@ -8,6 +8,7 @@ from openbuds.domain.enums import (
     CheckSeverity,
     CodecType,
     ConnectionState,
+    DeviceChangeKind,
     DeviceIcon,
     HealthStatus,
     ProfileState,
@@ -40,3 +41,7 @@ def test_codec_values_match_wireplumber_names() -> None:
 def test_connection_states() -> None:
     assert ConnectionState.CONNECTED.value == "connected"
     assert ConnectionState.DISCONNECTED.value == "disconnected"
+
+
+def test_device_change_kind_values() -> None:
+    assert [kind.value for kind in DeviceChangeKind] == ["added", "updated", "removed"]

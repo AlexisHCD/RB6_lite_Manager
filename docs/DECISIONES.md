@@ -13,6 +13,8 @@ Record) en [`ADR/`](ADR/).
 | [0003](ADR/0003-no-pipewire-python-binding.md) | Sin binding Python de PipeWire; usar pw-dump/wpctl | Aceptada | 2026-07-02 |
 | [0004](ADR/0004-clean-architecture-dependency-rule.md) | Clean Architecture, regla de dependencias | Aceptada | 2026-07-02 |
 | [0005](ADR/0005-device-profile-contract.md) | Contrato de perfiles de dispositivo | Aceptada | 2026-07-02 |
+| [0006](ADR/0006-app-config-toml-xdg-atomic-write.md) | Configuración TOML con rutas XDG y escritura atómica | Aceptada | 2026-08-09 |
+| [0007](ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo (`DeviceChangeEvent`) | Aceptada | 2026-08-09 |
 
 ## Cómo añadir un nuevo ADR
 

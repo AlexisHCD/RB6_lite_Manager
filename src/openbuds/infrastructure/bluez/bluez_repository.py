@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from openbuds.domain.interfaces import IBluetoothRepository
-from openbuds.domain.interfaces.observer import DeviceChangeCallback
+from openbuds.domain.interfaces.observer import DeviceChangeCallback, Unsubscribe
 from openbuds.domain.models import AdapterInfo, BatteryLevel, DeviceInfo, RSSIReading
 from openbuds.infrastructure.bluez.dbus_client import (
     IFACE_ADAPTER1,
@@ -84,5 +84,5 @@ class BlueZRepository(IBluetoothRepository):
             return None
         return map_rssi(props)
 
-    def subscribe_device_changes(self, callback: DeviceChangeCallback) -> None:
+    def subscribe_device_changes(self, callback: DeviceChangeCallback) -> Unsubscribe:
         raise NotImplementedError("subscribe_device_changes se implementará en el Incremento 2.")
