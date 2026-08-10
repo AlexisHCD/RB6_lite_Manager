@@ -1,0 +1,134 @@
+"""Tests del contrato base de la CLI."""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+import openbuds.cli.main as cli
+from openbuds import __version__
+from openbuds.core.config import CONFIG_FILE, default_config
+from openbuds.core.errors import ConfigError, OpenBudsError
+from openbuds.domain.models import SystemInfo
+
+
+def _system_info(supported: bool = True) -> SystemInfo:
+    return SystemInfo(
+        os_id="ubuntu",
+        os_version="24.04",
+        kernel_version="6.8.0",
+        bluez_version="5.72",
+        pipewire_version="1.0.0",
+        wireplumber_version="0.4.17",
+        wireplumber_config_style="lua-0.4",
+        dbus_version="systemd 255",
+        has_bluetooth_adapter=True,
+        system_bus_available=True,
+        user_config_writable=True,
+        is_supported=supported,
+    )
+
+
+def test_version_does_not_bootstrap(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "load_config", pytest.fail)
+    monkeypatch.setattr(cli, "setup_logging_from_config", pytest.fail)
+
+    assert cli.main(["version"]) == 0
+    assert capsys.readouterr().out == f"OpenBuds Manager {__version__}\n"
+
+
+def test_config_prints_effective_values_without_writing(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config = replace(
+        default_config(),
+        log_level="DEBUG",
+        log_file="",
+        backup_dir=str(tmp_path / "backups"),
+        auto_rollback_on_error=False,
+        experimental_features=True,
+    )
+    monkeypatch.setattr(cli, "load_config", lambda: config)
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+
+    assert cli.main(["config"]) == 0
+    output = capsys.readouterr().out
+    assert "Nivel de log: DEBUG" in output
+    assert "Archivo de log: stderr" in output
+    assert f"CONFIG_FILE: {CONFIG_FILE}" in output
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("supported, expected", [(True, 0), (False, 1)])
+def test_doctor_bootstraps_once_and_returns_detector_status(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    supported: bool,
+    expected: int,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "load_config", lambda: calls.append("load") or default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: calls.append("logging"))
+    monkeypatch.setattr(cli.environment_detector, "detect", lambda: _system_info(supported))
+
+    assert cli.main(["doctor"]) == expected
+    assert calls == ["load", "logging"]
+    assert "Entorno soportado:" in capsys.readouterr().out
+
+
+def test_config_error_from_load_is_reported(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "load_config",
+        lambda: (_ for _ in ()).throw(ConfigError("config inválida")),
+    )
+
+    assert cli.main(["config"]) == 1
+    assert capsys.readouterr().err == "Error: config inválida\n"
+
+
+def test_handler_openbuds_error_is_reported(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    monkeypatch.setattr(
+        cli,
+        "_cmd_config",
+        lambda _context: (_ for _ in ()).throw(OpenBudsError("fallo")),
+    )
+
+    assert cli.main(["config"]) == 1
+    assert "Error: fallo\n" in capsys.readouterr().err
+
+
+def test_unexpected_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    monkeypatch.setattr(
+        cli,
+        "_cmd_config",
+        lambda _context: (_ for _ in ()).throw(RuntimeError("bug")),
+    )
+
+    with pytest.raises(RuntimeError, match="bug"):
+        cli.main(["config"])
+
+
+@pytest.mark.parametrize(
+    ("command", "phase"),
+    [("devices", "Fase 3"), ("codec", "Fase 3/4"), ("health", "Fase 5"), ("bench", "Fase 5")],
+)
+def test_future_command_returns_two_with_real_phase(
+    capsys: pytest.CaptureFixture[str], command: str, phase: str
+) -> None:
+    assert cli.main([command]) == 2
+    error = capsys.readouterr().err
+    assert phase in error
+    assert "no está implementado" in error

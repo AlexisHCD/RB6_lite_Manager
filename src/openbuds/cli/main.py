@@ -1,31 +1,38 @@
-"""Entry point de la CLI: ``openbuds``.
+"""Entry point de la CLI ``openbuds``.
 
-Subcomandos (planificados):
-  - doctor     Detecta y muestra el entorno del sistema (stack, versiones).
-  - devices    Lista dispositivos Bluetooth detectados (Fase 3).
-  - codec      Muestra el códec activo de un dispositivo (Fase 3/4).
-  - health     Ejecuta un Health Check (Fase 5).
-  - bench      Ejecuta un benchmark de enlace (Fase 5).
-
-Estado: Fase 2 — ``doctor`` funcional (usa el detector de entorno real);
-el resto se implementa en sus fases correspondientes.
+Los comandos ``doctor`` y ``config`` son la base funcional de la Fase 2 y
+comparten un bootstrap de configuración y logging. Los demás comandos están
+registrados para ofrecer una interfaz estable, pero se implementan en sus
+fases correspondientes.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Final
+
+from openbuds import __version__
+from openbuds.core.config import CONFIG_FILE, AppConfig, load_config
+from openbuds.core.errors import OpenBudsError
+from openbuds.core.logging_setup import get_logger, setup_logging_from_config
+from openbuds.infrastructure.system import environment_detector
+
+_LOGGER = get_logger(__name__)
+_BOOTSTRAP_COMMANDS: Final = frozenset({"doctor", "config"})
 
 
-def _cmd_doctor(args: argparse.Namespace) -> int:
-    """Detecta el entorno y lo muestra. Devuelve 0 si está soportado."""
-    # Import diferido para no arrastrar dependencias innecesarias en --help.
-    from openbuds.core.logging_setup import setup_logging
-    from openbuds.infrastructure.system.environment_detector import detect
+@dataclass(frozen=True, slots=True)
+class CliContext:
+    """Dependencias efectivas disponibles para un handler de la CLI."""
 
-    setup_logging("WARNING")
-    info = detect()
+    config: AppConfig | None = None
+
+
+def _cmd_doctor(_context: CliContext) -> int:
+    """Detecta el entorno y devuelve 0 si está soportado."""
+    info = environment_detector.detect()
     print(f"SO:              {info.os_id} {info.os_version}")
     print(f"Kernel:          {info.kernel_version}")
     print(f"BlueZ:           {info.bluez_version}")
@@ -39,43 +46,83 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if info.is_supported else 1
 
 
+def _cmd_config(context: CliContext) -> int:
+    """Muestra la configuración efectiva sin persistirla."""
+    if context.config is None:
+        raise RuntimeError("configuración no disponible para el comando config")
+    config = context.config
+    log_file = config.log_file or "stderr"
+    print(f"Nivel de log: {config.log_level}")
+    print(f"Archivo de log: {log_file}")
+    print(f"Directorio de backups: {config.backup_dir}")
+    print(f"Auto rollback: {'sí' if config.auto_rollback_on_error else 'no'}")
+    print(f"Funciones experimentales: {'sí' if config.experimental_features else 'no'}")
+    print(f"CONFIG_FILE: {CONFIG_FILE}")
+    return 0
+
+
+def _cmd_version(_context: CliContext) -> int:
+    """Muestra la versión sin cargar configuración ni inicializar logging."""
+    print(f"OpenBuds Manager {__version__}")
+    return 0
+
+
+def _cmd_future(command: str) -> int:
+    """Informa de la fase responsable de un comando aún no implementado."""
+    phases = {
+        "devices": "Fase 3",
+        "codec": "Fase 3/4",
+        "health": "Fase 5",
+        "bench": "Fase 5",
+    }
+    print(
+        f"El subcomando '{command}' aún no está implementado; "
+        f"se implementará en {phases[command]}.",
+        file=sys.stderr,
+    )
+    return 2
+
+
 def build_parser() -> argparse.ArgumentParser:
-    """Construye el parser de la CLI."""
+    """Construye el parser de la CLI sin ejecutar efectos secundarios."""
     parser = argparse.ArgumentParser(
         prog="openbuds",
         description="OpenBuds Manager — administrador de auriculares Bluetooth para Linux.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
-
-    p_doctor = sub.add_parser("doctor", help="Detecta y muestra el entorno del sistema.")
-    p_doctor.set_defaults(func=_cmd_doctor)
-
-    # Subcomandos pendientes de implementación (esqueleto informativo).
+    sub.add_parser("doctor", help="Detecta y muestra el entorno del sistema (Fase 2).")
+    sub.add_parser("config", help="Muestra la configuración efectiva (Fase 2).")
+    sub.add_parser("version", help="Muestra la versión de OpenBuds Manager.")
     sub.add_parser("devices", help="Lista dispositivos Bluetooth (Fase 3).")
     sub.add_parser("codec", help="Muestra el códec activo (Fase 3/4).")
     sub.add_parser("health", help="Ejecuta un Health Check (Fase 5).")
     sub.add_parser("bench", help="Ejecuta un benchmark de enlace (Fase 5).")
-
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     """Punto de entrada principal de la CLI."""
-    parser = build_parser()
-    args = parser.parse_args(argv)
+    args = build_parser().parse_args(argv)
+    command = args.command
 
-    if not getattr(args, "func", None):
-        # Subcomando no implementado todavía.
-        print(
-            f"El subcomando '{args.command}' aún no está implementado "
-            "(ver roadmap en docs/ROADMAP.md).",
-            file=sys.stderr,
-        )
-        return 2
+    if command == "version":
+        return _cmd_version(CliContext())
+    if command not in _BOOTSTRAP_COMMANDS:
+        return _cmd_future(command)
 
-    # argparse no tipa los callables de set_defaults; lo acotamos a int.
-    func: Callable[[argparse.Namespace], int] = args.func
-    return func(args)
+    logging_configured = False
+    try:
+        config = load_config()
+        setup_logging_from_config(config)
+        logging_configured = True
+        context = CliContext(config=config)
+        handler = _cmd_doctor if command == "doctor" else _cmd_config
+        return handler(context)
+    except OpenBudsError as exc:
+        if logging_configured:
+            _LOGGER.error("CLI error: %s", exc)
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

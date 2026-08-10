@@ -6,7 +6,10 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import pytest
+
 from openbuds.core.config import default_config
+from openbuds.core.errors import ConfigError
 from openbuds.core.events import Event, EventBus
 from openbuds.core.logging_setup import (
     DATEFMT,
@@ -27,6 +30,20 @@ class TestGetLogger:
 
 
 class TestSetupLogging:
+    def test_file_handler_oserror_is_wrapped_as_config_error(
+        self, monkeypatch, tmp_path: Path
+    ) -> None:
+        log_file = tmp_path / "openbuds.log"
+
+        def fail_handler(*args: object, **kwargs: object) -> RotatingFileHandler:
+            raise OSError("permiso denegado")
+
+        monkeypatch.setattr("openbuds.core.logging_setup.RotatingFileHandler", fail_handler)
+
+        with pytest.raises(ConfigError, match=str(log_file)) as raised:
+            setup_logging(log_file=str(log_file))
+        assert isinstance(raised.value.__cause__, OSError)
+
     def test_root_level_is_set(self) -> None:
         setup_logging(level="DEBUG")
         assert logging.getLogger().level == logging.DEBUG

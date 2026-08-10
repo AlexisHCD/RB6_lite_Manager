@@ -13,16 +13,17 @@ de comenzar la siguiente. El progreso se marca con checkbox.
 - [x] Crear cimientos: modelos del dominio, contratos, core, esqueletos
 - [x] Configurar tooling (ruff, mypy, pytest) y validar base (31 tests)
 
-## Fase 2 — Backend base
+## Fase 2 — Backend base ✅
 
 - [x] Gestión de configuración (`core/config.py` + `persistence/app_config.py`)
 - [x] Logging estructurado (rotación, handler puente hacia la vista de Logs)
-- [ ] CLI ampliada (subcomandos `devices`, `health`)
-- [ ] Gestión de errores (jerarquía ya definida en Fase 1; integrar aquí)
+- [x] CLI base (`doctor`, `config`, `version`, bootstrap)
+- [x] Gestión de errores (manejo uniforme de `OpenBudsError`)
 - [x] Detección de entorno completa (`system/environment_detector.py`)
 
 ## Fase 3 — Bluetooth
 
+- [ ] CLI `devices`
 - [ ] Cliente D-Bus BlueZ (`bluez/dbus_client.py`) con PyGObject/Gio
 - [ ] Mapeo de objetos D-Bus → modelos (`bluez/object_mapper.py`)
 - [ ] Implementación de `IBluetoothRepository` (`bluez/bluez_repository.py`)
@@ -43,6 +44,7 @@ de comenzar la siguiente. El progreso se marca con checkbox.
 
 ## Fase 5 — Diagnóstico
 
+- [ ] CLI `health`
 - [ ] Implementación de `IDiagnosticsRepository`
 - [ ] Health Check completo (BlueZ, PipeWire, WirePlumber, servicios, codecs, permisos)
 - [ ] Generación de recomendaciones y auto-fix seguro

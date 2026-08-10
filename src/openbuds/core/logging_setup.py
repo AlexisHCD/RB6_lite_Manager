@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 
 from openbuds.core.config import AppConfig
+from openbuds.core.errors import ConfigError
 from openbuds.core.events import Event, EventBus, default_bus
 
 FMT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
@@ -105,14 +106,19 @@ def setup_logging(
         EventBusLogHandler(event_bus or default_bus),
     ]
     if log_file:
-        handlers.append(
-            RotatingFileHandler(
-                log_file,
-                maxBytes=_MAX_BYTES,
-                backupCount=_BACKUP_COUNT,
-                encoding="utf-8",
+        try:
+            handlers.append(
+                RotatingFileHandler(
+                    log_file,
+                    maxBytes=_MAX_BYTES,
+                    backupCount=_BACKUP_COUNT,
+                    encoding="utf-8",
+                )
             )
-        )
+        except OSError as exc:
+            raise ConfigError(
+                f"No se pudo configurar el archivo de log en {log_file}: {exc}"
+            ) from exc
 
     logging.basicConfig(
         level=_normalize_level(level),
@@ -137,7 +143,10 @@ def setup_logging_from_config(
             ``default_bus``.
 
     """
-    setup_logging(level=config.log_level, log_file=config.log_file, event_bus=event_bus)
+    if not config.log_file and event_bus is None:
+        setup_logging(level=config.log_level)
+    else:
+        setup_logging(level=config.log_level, log_file=config.log_file, event_bus=event_bus)
 
 
 def _normalize_level(level: str) -> int | str:

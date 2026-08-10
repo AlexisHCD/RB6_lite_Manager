@@ -13,12 +13,12 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 
 ## Estado del proyecto
 
-🚧 **Fase 1 — Planificación y Arquitectura (completada).**
+🚧 **Fase 2 — Backend base (completada).**
 
-Actualmente el repositorio contiene los **cimientos** del proyecto: arquitectura
-por capas (Clean Architecture), contratos del dominio, modelos, jerarquía de
-errores, utilidades core y esqueletos de todos los módulos previstos en el
-roadmap. **No hay lógica de negocio implementada todavía.**
+El repositorio contiene la arquitectura por capas, los cimientos del dominio,
+la configuración TOML, logging, detección del entorno y una CLI base funcional.
+La aplicación completa aún no está terminada: Bluetooth, diagnóstico y la GUI
+se implementan en las fases siguientes.
 
 Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -81,8 +81,12 @@ Muestra las versiones detectadas del stack y si el entorno está soportado.
 
 ```bash
 .venv/bin/openbuds doctor      # detecta y muestra el entorno del sistema
-.venv/bin/openbuds devices     # lista dispositivos (Fase 3)
-.venv/bin/openbuds health      # Health Check (Fase 5)
+.venv/bin/openbuds config      # muestra la configuración efectiva
+.venv/bin/openbuds version     # muestra la versión sin cargar config
+.venv/bin/openbuds devices     # futuro: lista dispositivos (Fase 3)
+.venv/bin/openbuds health      # futuro: Health Check (Fase 5)
+.venv/bin/openbuds codec       # futuro: muestra el códec activo (Fase 3/4)
+.venv/bin/openbuds bench       # futuro: benchmark de enlace (Fase 5)
 ```
 
 ### GUI (PySide6)
