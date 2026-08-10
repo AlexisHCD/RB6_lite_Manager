@@ -15,7 +15,7 @@ de comenzar la siguiente. El progreso se marca con checkbox.
 
 ## Fase 2 — Backend base
 
-- [ ] Gestión de configuración (`core/config.py` + `persistence/app_config.py`)
+- [x] Gestión de configuración (`core/config.py` + `persistence/app_config.py`)
 - [x] Logging estructurado (rotación, handler puente hacia la vista de Logs)
 - [ ] CLI ampliada (subcomandos `devices`, `health`)
 - [ ] Gestión de errores (jerarquía ya definida en Fase 1; integrar aquí)

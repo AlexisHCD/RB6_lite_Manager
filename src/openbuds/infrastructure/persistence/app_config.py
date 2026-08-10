@@ -1,4 +1,4 @@
-"""Persistencia de la configuración propia de la app (TOML en ~/.config/openbuds).
+"""Persistencia de la configuración propia de la app (TOML en una ruta XDG).
 
 Implementa el almacenamiento en disco de ``AppConfig``. La lógica de
 serialización (lectura/escritura TOML) vive en ``openbuds.core.config``; esta
@@ -16,6 +16,7 @@ class AppConfigStore:
     """Carga y guarda la configuración de la app en disco.
 
     La ruta del archivo se fija en la construcción; típicamente
+    ``$XDG_CONFIG_HOME/openbuds/config.toml`` o su fallback
     ``~/.config/openbuds/config.toml`` (ver ``core.config.CONFIG_FILE``).
     """
 

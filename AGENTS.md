@@ -187,6 +187,7 @@ Ver `docs/ARCHITECTURE.md` para el detalle y el diagrama.
 | [0003](docs/ADR/0003-no-pipewire-python-binding.md) | Sin binding Python de PipeWire → `pw-dump`/`wpctl` vía subprocess | No existe binding oficial. |
 | [0004](docs/ADR/0004-clean-architecture-dependency-rule.md) | Clean Architecture, regla de dependencias | `presentation → application → domain ← infrastructure`. |
 | [0005](docs/ADR/0005-device-profile-contract.md) | Perfiles de dispositivo en YAML | Añadir dispositivo = añadir YAML, sin tocar el núcleo. |
+| [0006](docs/ADR/0006-app-config-toml-xdg-atomic-write.md) | Configuración TOML con rutas XDG y escritura atómica | Configuración propia separada, rutas XDG válidas y guardado sin truncado. |
 
 ### Hallazgos críticos que condicionan el código
 

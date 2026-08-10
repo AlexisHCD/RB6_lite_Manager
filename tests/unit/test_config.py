@@ -8,9 +8,11 @@ import pytest
 
 from openbuds.core.config import (
     BACKUP_DIR,
+    CONFIG_DIR,
     CONFIG_FILE,
     default_config,
     load_config,
+    resolve_xdg_home,
     save_config,
 )
 from openbuds.core.errors import ConfigError
@@ -29,6 +31,32 @@ class TestDefaultConfig:
         c = default_config()
         assert BACKUP_DIR.as_posix().endswith("openbuds/backups")
         assert c.backup_dir == str(BACKUP_DIR)
+
+
+class TestXdgPaths:
+    @pytest.mark.parametrize("variable", ["XDG_CONFIG_HOME", "XDG_DATA_HOME"])
+    @pytest.mark.parametrize("value", [None, "", "relative/path"])
+    def test_invalid_xdg_value_uses_fallback(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        variable: str,
+        value: str | None,
+    ) -> None:
+        if value is None:
+            monkeypatch.delenv(variable, raising=False)
+        else:
+            monkeypatch.setenv(variable, value)
+
+        fallback = Path("/home/test/.config")
+        assert resolve_xdg_home(variable, fallback) == fallback
+
+    @pytest.mark.parametrize("variable", ["XDG_CONFIG_HOME", "XDG_DATA_HOME"])
+    def test_absolute_xdg_value_is_used(
+        self, monkeypatch: pytest.MonkeyPatch, variable: str
+    ) -> None:
+        monkeypatch.setenv(variable, "/tmp/test-xdg")
+
+        assert resolve_xdg_home(variable, Path("/home/test/fallback")) == Path("/tmp/test-xdg")
 
 
 class TestLoadConfig:
@@ -85,6 +113,21 @@ class TestLoadConfig:
         with pytest.raises(ConfigError):
             load_config(path)
 
+    def test_read_oserror_raises_config_error_with_cause(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "unreadable.toml"
+        path.write_text("[openbuds]\n", encoding="utf-8")
+
+        def fail_open(*args: object, **kwargs: object) -> object:
+            raise OSError("lectura denegada")
+
+        monkeypatch.setattr(Path, "open", fail_open)
+
+        with pytest.raises(ConfigError, match=str(path)) as raised:
+            load_config(path)
+        assert isinstance(raised.value.__cause__, OSError)
+
     def test_wrong_type_raises_config_error(self, tmp_path: Path) -> None:
         path = tmp_path / "config.toml"
         path.write_text(
@@ -129,6 +172,76 @@ class TestSaveConfig:
         # Los comentarios explicativos deben estar presentes.
         assert content.startswith("#")
 
+    def test_save_roundtrips_special_and_unicode_strings(self, tmp_path: Path) -> None:
+        from dataclasses import replace
+
+        path = tmp_path / "config.toml"
+        original = replace(
+            default_config(),
+            log_level='D"EBUG\\special\nline',
+            log_file="/tmp/á\t.log",
+            backup_dir='C:\\backups\\"quoted"',
+        )
+
+        save_config(original, path)
+
+        assert load_config(path) == original
+
+    def test_mkdir_failure_raises_config_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "missing" / "config.toml"
+
+        def fail_mkdir(*args: object, **kwargs: object) -> None:
+            raise OSError("mkdir denegado")
+
+        monkeypatch.setattr(Path, "mkdir", fail_mkdir)
+
+        with pytest.raises(ConfigError, match=str(path)) as raised:
+            save_config(default_config(), path)
+        assert isinstance(raised.value.__cause__, OSError)
+
+    def test_replace_failure_preserves_previous_file_and_cleans_temp(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "config.toml"
+        path.write_text("previous", encoding="utf-8")
+
+        def fail_replace(*args: object, **kwargs: object) -> None:
+            raise OSError("replace denegado")
+
+        monkeypatch.setattr("openbuds.core.config.os.replace", fail_replace)
+
+        with pytest.raises(ConfigError, match=str(path)):
+            save_config(default_config(), path)
+
+        assert path.read_text(encoding="utf-8") == "previous"
+        assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+    def test_write_failure_preserves_previous_file_and_cleans_temp(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "config.toml"
+        path.write_text("previous", encoding="utf-8")
+
+        def fail_fsync(*args: object) -> None:
+            raise OSError("fsync denegado")
+
+        monkeypatch.setattr("openbuds.core.config.os.fsync", fail_fsync)
+
+        with pytest.raises(ConfigError, match=str(path)):
+            save_config(default_config(), path)
+
+        assert path.read_text(encoding="utf-8") == "previous"
+        assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+    def test_success_leaves_no_temporary_files(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.toml"
+
+        save_config(default_config(), path)
+
+        assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
 
 class TestAppConfigStore:
     def test_store_load_returns_defaults_when_missing(self, tmp_path: Path) -> None:
@@ -145,5 +258,5 @@ class TestAppConfigStore:
         assert store.load() == config
 
     def test_default_config_file_path_points_to_xdg(self) -> None:
-        # Smoke test: la constante global apunta bajo ~/.config/openbuds/.
-        assert CONFIG_FILE.as_posix().endswith(".config/openbuds/config.toml")
+        assert CONFIG_FILE == CONFIG_DIR / "config.toml"
+        assert CONFIG_FILE.is_absolute()

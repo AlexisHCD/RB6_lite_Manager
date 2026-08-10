@@ -2,9 +2,11 @@
 
 Distinguir de ``infrastructure.persistence`` (que persiste el estado de
 runtime). Este módulo carga y guarda los ajustes estáticos del usuario desde
-un archivo de configuración TOML en ``~/.config/openbuds/``.
+un archivo de configuración TOML en ``$XDG_CONFIG_HOME/openbuds/`` (o su
+fallback ``~/.config/openbuds/``).
 
-Formato del archivo (escritura manual para preservar comentarios — ver ADR-0006):
+Formato del archivo (escritura manual para preservar comentarios; ver
+``docs/ADR/0006-app-config-toml-xdg-atomic-write.md``):
 
     [openbuds]
     log_level = "INFO"
@@ -16,18 +18,41 @@ Formato del archivo (escritura manual para preservar comentarios — ver ADR-000
 
 from __future__ import annotations
 
+import json
+import os
+import tempfile
 import tomllib
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
 from openbuds.core.errors import ConfigError
 
-# Directorio base de configuración del usuario (respeta XDG_CONFIG_HOME).
-CONFIG_DIR = Path.home() / ".config" / "openbuds"
+
+def resolve_xdg_home(variable: str, fallback: Path) -> Path:
+    """Resuelve una base XDG válida sin leer configuración adicional.
+
+    Solo se aceptan valores no vacíos y absolutos. Los valores inválidos se
+    sustituyen por el fallback recibido, lo que permite probar la resolución
+    sin modificar ``HOME`` ni depender del entorno real.
+    """
+    value = os.environ.get(variable)
+    if value:
+        candidate = Path(value)
+        if candidate.is_absolute():
+            return candidate
+    return fallback
+
+
+# Directorios base del usuario según la especificación XDG.
+_CONFIG_HOME = resolve_xdg_home("XDG_CONFIG_HOME", Path.home() / ".config")
+_DATA_HOME = resolve_xdg_home("XDG_DATA_HOME", Path.home() / ".local" / "share")
+
+CONFIG_DIR = _CONFIG_HOME / "openbuds"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
 
 # Directorio para datos de runtime (historial, estado, caches).
-DATA_DIR = Path.home() / ".local" / "share" / "openbuds"
+DATA_DIR = _DATA_HOME / "openbuds"
 
 # Directorio para backups generados por la app (config WirePlumber, etc.).
 BACKUP_DIR = DATA_DIR / "backups"
@@ -86,14 +111,15 @@ def load_config(path: Path = CONFIG_FILE) -> AppConfig:
             un valor tiene un tipo inesperado.
 
     """
-    if not path.exists():
-        return default_config()
-
     try:
         with path.open("rb") as f:
             data = tomllib.load(f)
+    except FileNotFoundError:
+        return default_config()
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"Config TOML malformado en {path}: {exc}") from exc
+    except OSError as exc:
+        raise ConfigError(f"No se pudo leer la config en {path}: {exc}") from exc
 
     section = data.get(_SECTION, {})
     if not isinstance(section, dict):
@@ -119,7 +145,8 @@ def save_config(config: AppConfig, path: Path = CONFIG_FILE) -> None:
     """Guarda la configuración en ``path`` en formato TOML con comentarios.
 
     La escritura es manual (sin ``tomli_w``) para poder incluir comentarios que
-    documenten cada campo al usuario. Ver ADR-0006.
+    documenten cada campo al usuario. Ver
+    ``docs/ADR/0006-app-config-toml-xdg-atomic-write.md``.
 
     Args:
         config: Configuración a guardar.
@@ -129,12 +156,29 @@ def save_config(config: AppConfig, path: Path = CONFIG_FILE) -> None:
         ConfigError: Si no se puede escribir el archivo (permisos, etc.).
 
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    content = _render_toml(config)
+    temporary_path: Path | None = None
     try:
-        path.write_text(content, encoding="utf-8")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = _render_toml(config)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(content)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
     except OSError as exc:
         raise ConfigError(f"No se pudo escribir la config en {path}: {exc}") from exc
+    finally:
+        if temporary_path is not None:
+            with suppress(OSError):
+                temporary_path.unlink()
 
 
 def _render_toml(config: AppConfig) -> str:
@@ -145,13 +189,13 @@ def _render_toml(config: AppConfig) -> str:
 
 [openbuds]
 # Nivel de logging: DEBUG, INFO, WARNING, ERROR, CRITICAL.
-log_level = "{config.log_level}"
+log_level = {_toml_string(config.log_level)}
 
 # Archivo de log (vacío = solo salida stderr). Se aplica rotación automática.
-log_file = "{config.log_file}"
+log_file = {_toml_string(config.log_file)}
 
 # Directorio donde se guardan los backups de configuración del sistema.
-backup_dir = "{config.backup_dir}"
+backup_dir = {_toml_string(config.backup_dir)}
 
 # Revierte automáticamente cualquier cambio si la verificación falla.
 auto_rollback_on_error = {"true" if config.auto_rollback_on_error else "false"}
@@ -159,3 +203,8 @@ auto_rollback_on_error = {"true" if config.auto_rollback_on_error else "false"}
 # Habilita funciones experimentales inestables (laboratorio).
 experimental_features = {"true" if config.experimental_features else "false"}
 """
+
+
+def _toml_string(value: str) -> str:
+    """Devuelve un TOML basic string usando escapes compatibles con JSON."""
+    return json.dumps(value, ensure_ascii=False)
