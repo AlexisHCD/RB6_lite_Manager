@@ -21,12 +21,14 @@ la configuración TOML, logging, detección del entorno y una CLI base funcional
 La Fase 3 implementa el acceso a BlueZ vía D-Bus (PyGObject/Gio) por
 incrementos. El **Incremento 1 — snapshot `GetManagedObjects`** ya está
 implementado y verificado (`bluez/dbus_protocol.py` → `GioDBusProtocol` +
-`BlueZDBusClient.snapshot`), con su test de integración opt-in en verde. Las
-señales y el lifecycle de suscripción (Incremento 2), el mapeo de objetos y el
-repositorio se completan en los siguientes incrementos
+`BlueZDBusClient.snapshot`), y también el **mapeo de objetos D-Bus → modelos**
+(`bluez/object_mapper.py`, puro y sin GI), ambos con su test de integración
+opt-in en verde. Las señales y el lifecycle de suscripción (Incremento 2), el
+repositorio y la detección completa de adaptadores/dispositivos se completan en
+los siguientes incrementos
 (ver [`docs/bluez/gio-dbus-client-design.md`](docs/bluez/gio-dbus-client-design.md)).
-La aplicación completa aún no está terminada: diagnóstico y la GUI se
-implementan en las fases siguientes.
+La aplicación completa aún no está terminada y la CLI `devices` no está
+funcional: diagnóstico y la GUI se implementan en las fases siguientes.
 
 Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -117,7 +119,7 @@ Muestra las versiones detectadas del stack y si el entorno está soportado.
 .venv/bin/openbuds doctor      # detecta y muestra el entorno del sistema
 .venv/bin/openbuds config      # muestra la configuración efectiva
 .venv/bin/openbuds version     # muestra la versión sin cargar config
-.venv/bin/openbuds devices     # Fase 3: pendiente, tras el mapper de objetos y el repositorio
+.venv/bin/openbuds devices     # Fase 3: pendiente, tras el repositorio (`bluez/bluez_repository.py`)
 .venv/bin/openbuds health      # futuro: Health Check (Fase 5)
 .venv/bin/openbuds codec       # futuro: muestra el códec activo (Fase 3/4)
 .venv/bin/openbuds bench       # futuro: benchmark de enlace (Fase 5)
@@ -139,10 +141,11 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual:** **120 tests** en verde + **1 skipped** (integración
-BlueZ desactivada por defecto; 2026-08-09). El cliente D-Bus (Incremento 1) ya
-está cubierto por la suite; las pruebas de señales (Incremento 2) se añadirán
-en el incremento correspondiente y actualizarán este número.
+**Baseline actual:** **157 tests** en verde + **2 skipped** (integración
+BlueZ opt-in desactivada por defecto; 2026-08-09). El cliente D-Bus
+(Incremento 1) y el mapper de objetos ya están cubiertos por la suite; las
+pruebas de señales (Incremento 2) se añadirán en el incremento correspondiente
+y actualizarán este número.
 
 ## Arquitectura
 
