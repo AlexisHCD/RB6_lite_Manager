@@ -1,0 +1,81 @@
+# ============================================================================
+# Perfil de dispositivo: Redmi Buds 6 Lite
+# ============================================================================
+# Primer perfil soportado de OpenBuds Manager.
+#
+# AVISO DE VERIFICACIÓN: los campos marcados como `verified: false` están
+# tomados de fuentes públicas NO oficiales y DEBEN validarse empíricamente
+# contra un dispositivo real antes de usarse para decisiones de optimización.
+# El proyecto NUNCA envía comandos propietarios al dispositivo (ver
+# docs/RESTRICTIONES.md y Fase 9). Este perfil es puramente descriptivo.
+# ============================================================================
+
+profile_id: redmi_buds_6_lite
+manufacturer: Xiaomi (Redmi)
+model: Redmi Buds 6 Lite
+
+# --- Bluetooth ---------------------------------------------------------------
+bluetooth_version: "5.3"          # verified: false — fuente pública
+address_type_hint: public         # typical for Classic audio devices
+
+# --- Códecs ------------------------------------------------------------------
+# SBC es obligatorio en A2DP (estándar). AAC requiere validación empírica.
+# El byte A2DP: SBC=0x00, AAC=0x02 (A2DP v1.3). aptX/LDAC son vendor endpoints
+# no canonizados: no se asumen.
+supported_codecs:
+  - name: sbc
+    a2dp_byte: 0x00
+    verified: true
+    notes: "Obligatorio en A2DP (estándar Bluetooth)."
+  - name: aac
+    a2dp_byte: 0x02
+    verified: false
+    notes: "Reportado por fuentes públicas; validar empiricamente."
+
+# --- Perfiles Bluetooth ------------------------------------------------------
+bluetooth_profiles:
+  - a2dp        # Advanced Audio Distribution Profile (audio alta calidad)
+  - hfp         # Hands-Free Profile (voz)
+  - hsp         # Headset Profile (voz, fallback)
+  - avrcp       # Audio/Video Remote Control (controles)
+
+# --- Capacidades conocidas ---------------------------------------------------
+# Solo lo verificable de forma estándar vía BlueZ/PipeWire (prioridad media).
+capabilities:
+  - battery_level_gatt       # Servicio GATT Battery (0x180F) — a confirmar
+  - battery_level_hfp         # Informe AT de HFP — a confirmar
+  - rssi_monitoring           # vía Device1.RSSI
+  - codec_switching           # vía wpctl set-profile (a2dp-sink <-> hsp-hs)
+  - hardware_volume           # vía MediaTransport1.Volume
+
+# --- Funciones experimentales (NO estables) ----------------------------------
+# Solo se desarrollarán cuando la app sea completamente estable (Fase 9).
+# Son objetivos de ingeniería inversa pasiva; NUNCA se envían comandos
+# propietarios sin comprensión total.
+experimental_features:
+  - anc                       # Active Noise Cancellation
+  - transparency_mode         # Modo transparencia
+  - individual_battery        # Batería L/R individual
+  - case_battery              # Batería del estuche
+  - custom_eq                 # Ecualizador propietario
+  - touch_controls            # Controles táctiles
+  - firmware_ota              # Actualización OTA (FUERA de alcance del proyecto)
+
+# --- Limitaciones conocidas --------------------------------------------------
+known_limitations:
+  - "Los comandos propietarios de Xiaomi no están documentados públicamente."
+  - "ANC, EQ y controles táctiles requieren protocolo propietario no revertido."
+  - "La batería individual L/R y del estuche puede no exponerse vía estándares GATT."
+  - "OTA está fuera del alcance: el proyecto no escribe en el dispositivo."
+
+# --- Heurística de resolución (usada por match_device) -----------------------
+match_hints:
+  # OUI (primeros 3 octetos de MAC) asociados a Xiaomi. Lista parcial,
+  # ampliable. Fuente: asignaciones IEEE OUI públicas.
+  oui_prefixes:
+    - "54:ED:8A"
+    - "FC:64:BA"
+    - "8C:F2:1A"
+  name_patterns:
+    - "Redmi Buds 6 Lite"
+    - "Redmi Buds 6 Lite*"

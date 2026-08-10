@@ -1,0 +1,11 @@
+# Dependencias de runtime de OpenBuds Manager.
+# Versiones pinneadas para reproducibilidad. Ver pyproject.toml [project].
+#
+# IMPORTANTE: PyGObject requiere paquetes de sistema en Ubuntu 24.04:
+#   sudo apt install python3-gi python3-gi-cair gir1.2-glib-2.0 gobject-introspection \
+#                    libgirepository1.0-dev pkg-config
+# Si pip no logra compilar PyGObject, instálalo desde la distribución y omítelo aquí.
+
+PySide6>=6.6,<7
+PyGObject>=3.46
+PyYAML>=6.0

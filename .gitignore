@@ -1,36 +1,67 @@
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-*.egg-info/
-dist/
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
 *.egg
+MANIFEST
 
-# Virtual environments
+# --- Entornos virtuales ---
 .venv/
 venv/
 env/
+ENV/
+.python-version
 
-# IDEs
-.vscode/
+# --- Type checkers / linters / tests ---
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.tox/
+.nox/
+coverage/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+
+# --- IDEs / editores ---
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
-
-# Type checking
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-
-# Logs (local)
-*.log
-
-# Config (local, no committedar)
-config.json
-
-# OS
 .DS_Store
-Thumbs.db
+
+# --- Backups generados por la app (política de seguridad: siempre timestamped) ---
+backups/
+*.bak
+*.backup
+openbuds-backup-*
+
+# --- Configuración local de la app (puede contener rutas/estado de usuario) ---
+# Mantenemos los perfiles de dispositivo dentro del repo, pero los datos de
+# runtime del usuario se excluyen:
+.runtime/
+local_state.json
+
+# --- Distribución / empaquetado ---
+pip-wheel-metadata/
