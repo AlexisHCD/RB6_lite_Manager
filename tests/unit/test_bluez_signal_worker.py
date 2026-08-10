@@ -265,6 +265,77 @@ def test_first_subscribe_registers_three_filters_on_worker_thread(
     ]
 
 
+def test_subscribe_on_ready_is_a_worker_thread_barrier_after_all_filters_are_active(
+    signal_setup: tuple[_SignalWorker, FakeConnection],
+) -> None:
+    worker, connection = signal_setup
+    caller_thread = threading.get_ident()
+    hook_entered = threading.Event()
+    release_hook = threading.Event()
+    hook_calls: list[tuple[int, int]] = []
+    subscribe_errors: list[BaseException] = []
+
+    def on_ready() -> None:
+        hook_calls.append((threading.get_ident(), len(connection.active_subscriptions)))
+        hook_entered.set()
+        assert release_hook.wait(0.5)
+
+    result: list[int] = []
+
+    def subscribe() -> None:
+        try:
+            result.append(worker.subscribe(lambda _event: None, on_ready=on_ready))
+        except BaseException as exc:
+            subscribe_errors.append(exc)
+
+    subscribe_thread = threading.Thread(target=subscribe)
+    subscribe_thread.start()
+    assert hook_entered.wait(0.5)
+    assert subscribe_thread.is_alive()
+    release_hook.set()
+    subscribe_thread.join(0.5)
+
+    assert not subscribe_thread.is_alive()
+    assert subscribe_errors == []
+    assert result == [1]
+    assert hook_calls == [(connection.subscriptions[0].thread_id, 3)]
+    assert hook_calls[0][0] != caller_thread
+
+
+def test_subscribe_on_ready_failure_rolls_back_filters_and_stops_worker(
+    signal_setup: tuple[_SignalWorker, FakeConnection],
+) -> None:
+    worker, connection = signal_setup
+    callback_calls: list[SignalEvent] = []
+
+    def on_ready() -> None:
+        raise RuntimeError("ready hook failed")
+
+    with pytest.raises(RuntimeError, match="ready hook failed") as raised:
+        worker.subscribe(callback_calls.append, on_ready=on_ready)
+
+    assert raised.value.__cause__ is None
+    assert worker.is_closed
+    assert len(connection.unsubscribe_calls) == 3
+    assert {thread_id for _subscription_id, thread_id in connection.unsubscribe_calls} == {
+        connection.subscriptions[0].thread_id
+    }
+    assert len(connection.active_subscriptions) == 0
+
+    connection.emit(
+        "org.bluez", "/org/bluez/hci0", "org.freedesktop.DBus.ObjectManager", "InterfacesAdded"
+    )
+    assert callback_calls == []
+
+
+def test_subscribe_without_on_ready_keeps_backward_path(
+    signal_setup: tuple[_SignalWorker, FakeConnection],
+) -> None:
+    worker, _connection = signal_setup
+
+    assert worker.subscribe(lambda _event: None) == 1
+
+
 def test_two_callbacks_have_distinct_logical_ids_and_share_bus_subscriptions(
     signal_setup: tuple[_SignalWorker, FakeConnection],
 ) -> None:

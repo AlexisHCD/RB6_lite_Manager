@@ -27,29 +27,38 @@ repositorio** (`bluez/bluez_repository.py`:
 `list_adapters`/`list_devices`/`get_device`/`get_battery`/`get_rssi`, con
 cliente D-Bus inyectable y snapshot fresco por llamada) y la **CLI `devices`**
 (ver abajo); la integración real solo lectura se verificó en **Python 3.12 /
-Gio**. El **nivel bajo de señales y lifecycle del Incremento 2** también está
-**implementado y verificado** (`GioDBusProtocol` + `_SignalWorker`: worker
-dedicado GLib `MainContext`/`MainLoop` daemon, tres filtros exactos
-`InterfacesAdded`/`InterfacesRemoved`/`PropertiesChanged`, `SignalEvent` sin
-payload, suscripción/unsubscribe/close idempotentes, arranque perezoso, timeout
-y rollback atómico, sin cerrar la conexión compartida); su validez proviene de
-fakes deterministas (sin GI), del spike genérico de D-Bus y de la **integración
-real de lifecycle** en Python 3.12 / Gio (25 ciclos subscribe/unsubscribe/close
-+ snapshot fresco; sin inducir señales ni escrituras). Ver
-[`docs/bluez/signal-lifecycle-design.md`](docs/bluez/signal-lifecycle-design.md).
-La **suscripción a cambios del repositorio** (`subscribe_device_changes`, el
-**dispatch** de `DeviceChangeEvent` con cache de diff) sigue **pendiente** y,
-con ella, el **contrato completo de `IBluetoothRepository`**, por lo que el
-checkbox global del roadmap permanece vacío. El **contrato de eventos** de esa
-suscripción
+Gio**. El **Incremento 2 — señales y lifecycle** está **completo**:
+- El **nivel bajo** (`GioDBusProtocol` + `_SignalWorker`: worker dedicado GLib
+  `MainContext`/`MainLoop` daemon, tres filtros exactos
+  `InterfacesAdded`/`InterfacesRemoved`/`PropertiesChanged`, `SignalEvent` sin
+  payload, suscripción/unsubscribe/close idempotentes, arranque perezoso, hook
+  **`on_ready`** opcional que corre en el hilo del worker antes de que
+  `subscribe` retorne, timeout y rollback atómico, sin cerrar la conexión
+  compartida) y
+- el **dispatch del repositorio** (`BlueZRepository.subscribe_device_changes`:
+  init A→B con snapshot B en el worker vía `on_ready`, cache de diff,
+  refresh completo por señal, orden determinista `REMOVED→ADDED→UPDATED`,
+  igualdad mapeada de `DeviceInfo` sin eventos Battery/RSSI-only, aislamiento
+  de callbacks, suscriptores múltiples/tardíos/reentrantes, `Unsubscribe`
+  idempotente con espera de in-flight, concurrencia de init y rollback de
+  errores), sobre el **diff puro de snapshots**
+  (`bluez/device_change_diff.py`).
+
+La validez proviene de fakes deterministas (sin GI), del spike genérico de
+D-Bus y de la **integración real** en Python 3.12 / Gio: solo **lifecycle
+A/B** (subscribe/unsubscribe/close + snapshot A/B + bus usable); **no** se
+inducen señales, **no** se afirma recepción real de eventos y **no** hay
+escrituras de hardware. Ver
+[`docs/bluez/signal-lifecycle-design.md`](docs/bluez/signal-lifecycle-design.md)
+y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md). El
+**contrato completo de `IBluetoothRepository`** queda así **cerrado** (checkbox
+del roadmap marcado), incluido el contrato de eventos
 ([ADR-0007](docs/ADR/0007-device-change-event-contract.md):
-`DeviceChangeKind`, `DeviceChangeEvent` y `Unsubscribe`) está **preparado e
-implementado** en la capa de dominio, con invariantes validadas y cobertura de
-tests. La detección de adaptadores/dispositivos se completa en fases
-posteriores (ver
-[`docs/bluez/gio-dbus-client-design.md`](docs/bluez/gio-dbus-client-design.md),
-[`docs/bluez/repository-design.md`](docs/bluez/repository-design.md) y
-[`docs/cli/devices-command.md`](docs/cli/devices-command.md)).
+`DeviceChangeKind`, `DeviceChangeEvent` y `Unsubscribe`), probado con fakes y
+integración. **Pendientes de la Fase 3:** la detección completa de
+adaptadores/dispositivos y la validación empírica de propiedades runtime
+inciertas (ver
+[`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/cli/devices-command.md`](docs/cli/devices-command.md)).
 La aplicación completa aún no está terminada: diagnóstico y la GUI se
 implementan en las fases siguientes.
 
@@ -183,15 +192,18 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual por defecto (Python 3.14):** **234 tests** en verde +
-**5 skipped** (integración BlueZ opt-in desactivada por defecto; 2026-08-09);
-con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**: **239 passed**. El
-cliente D-Bus (Incremento 1), el mapper de objetos, el **worker y lifecycle de
-señales de bajo nivel** (Incremento 2), el contrato de eventos de cambio de
+**Baseline actual por defecto (Python 3.14):** **276 tests** en verde +
+**6 skipped** (las 6 integraciones BlueZ opt-in desactivadas por defecto;
+2026-08-10); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**:
+**282 passed**. Ruff y mypy en verde. El cliente D-Bus (Incremento 1), el
+mapper de objetos, el **worker y lifecycle de señales de bajo nivel** y el
+**dispatch del repositorio** (Incremento 2 completo), el **diff puro de
+snapshots** (`device_change_diff.py`), el contrato de eventos de cambio de
 dispositivo ([ADR-0007](docs/ADR/0007-device-change-event-contract.md)), las
 consultas snapshot del repositorio y la CLI `devices` ya están cubiertos por la
-suite; las pruebas del **dispatch del repositorio** (resto del Incremento 2) se
-añadirán en el incremento correspondiente y actualizarán este número.
+suite (`tests/unit/test_device_change_diff.py`,
+`tests/unit/test_bluez_repository_signals.py`,
+`tests/integration/test_bluez_repository_signals.py`).
 
 ## Arquitectura
 

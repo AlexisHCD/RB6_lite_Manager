@@ -85,10 +85,17 @@ class FakeGio:
 
 
 class FakeWorker:
-    def __init__(self, *, start_error: BaseException | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        start_error: BaseException | None = None,
+        subscribe_error: BaseException | None = None,
+    ) -> None:
         self.start_error = start_error
+        self.subscribe_error = subscribe_error
         self.start_calls = 0
         self.subscribe_calls: list[Callable[[SignalEvent], None]] = []
+        self.on_ready_calls: list[Callable[[], None] | None] = []
         self.unsubscribe_calls: list[int] = []
         self.close_calls = 0
         self._closed = False
@@ -104,11 +111,20 @@ class FakeWorker:
         if self.start_error is not None:
             raise self.start_error
 
-    def subscribe(self, callback: Callable[[SignalEvent], None]) -> int:
+    def subscribe(
+        self,
+        callback: Callable[[SignalEvent], None],
+        on_ready: Callable[[], None] | None = None,
+    ) -> int:
         self.subscribe_calls.append(callback)
+        self.on_ready_calls.append(on_ready)
+        if self.subscribe_error is not None:
+            raise self.subscribe_error
         subscription_id = self._next_id
         self._next_id += 1
         self._active_ids.add(subscription_id)
+        if on_ready is not None:
+            on_ready()
         return subscription_id
 
     def unsubscribe(self, subscription_id: int) -> None:
@@ -206,6 +222,56 @@ def test_first_subscribe_creates_and_starts_once_then_delegates_callbacks_and_id
     assert worker.start_calls == 1
     assert worker.subscribe_calls == [first_callback, second_callback]
     assert (first_id, second_id) == (1, 2)
+
+
+def test_subscribe_forwards_on_ready_to_worker_and_fake_executes_it(
+    gio_and_proxy: tuple[FakeGio, FakeProxy],
+) -> None:
+    gio, _proxy = gio_and_proxy
+    worker = FakeWorker()
+    protocol = make_protocol(gio, WorkerFactory([worker]))
+    calls: list[str] = []
+
+    assert protocol.subscribe(lambda _event: None, on_ready=lambda: calls.append("ready")) == 1
+
+    assert calls == ["ready"]
+    assert worker.on_ready_calls[0] is not None
+
+
+def test_on_ready_failure_cleans_worker_reference_and_next_subscribe_creates_new_worker(
+    gio_and_proxy: tuple[FakeGio, FakeProxy],
+) -> None:
+    gio, _proxy = gio_and_proxy
+    failed_worker = FakeWorker()
+    working_worker = FakeWorker()
+    protocol = make_protocol(gio, WorkerFactory([failed_worker, working_worker]))
+
+    def on_ready() -> None:
+        raise RuntimeError("ready hook failed")
+
+    with pytest.raises(BluetoothError, match="registrar") as raised:
+        protocol.subscribe(lambda _event: None, on_ready=on_ready)
+
+    assert isinstance(raised.value.__cause__, RuntimeError)
+    assert failed_worker.is_closed
+    assert protocol.subscribe(lambda _event: None) == 1
+    assert working_worker.start_calls == 1
+
+
+def test_worker_subscribe_failure_cleans_worker_reference_and_next_subscribe_recreates_it(
+    gio_and_proxy: tuple[FakeGio, FakeProxy],
+) -> None:
+    gio, _proxy = gio_and_proxy
+    failed_worker = FakeWorker(subscribe_error=RuntimeError("subscribe failed"))
+    working_worker = FakeWorker()
+    protocol = make_protocol(gio, WorkerFactory([failed_worker, working_worker]))
+
+    with pytest.raises(BluetoothError, match="registrar"):
+        protocol.subscribe(lambda _event: None)
+
+    assert failed_worker.is_closed
+    assert protocol.subscribe(lambda _event: None) == 1
+    assert working_worker.start_calls == 1
 
 
 def test_unsubscribe_non_last_keeps_worker_and_last_closes_it_then_next_subscribe_recreates(

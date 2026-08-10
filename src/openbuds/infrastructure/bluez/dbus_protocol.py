@@ -13,6 +13,7 @@ from openbuds.core.errors import BluetoothError
 type ManagedObjects = dict[str, dict[str, dict[str, object]]]
 type GILoader = Callable[[], tuple[Any, Any]]
 type SignalCallback = Callable[[SignalEvent], None]
+type ReadyCallback = Callable[[], None]
 DBUS_CALL_TIMEOUT_MS = 5000
 SIGNAL_OPERATION_TIMEOUT = 5.0
 _EXPECTED_SIGNATURE = "(a{oa{sa{sv}}})"
@@ -35,7 +36,7 @@ class SignalWorker(Protocol):
         """Inicia el worker."""
         ...
 
-    def subscribe(self, callback: SignalCallback) -> int:
+    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
         """Registra una callback."""
         ...
 
@@ -104,11 +105,11 @@ class _SignalWorker:
                 "No se pudo iniciar el worker de señales de BlueZ"
             ) from self._startup_error
 
-    def subscribe(self, callback: SignalCallback) -> int:
+    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
         """Register a logical callback and return its monotonic identifier."""
         if self.is_closed:
             raise BluetoothError("El worker de señales de BlueZ está cerrado")
-        return cast(int, self._call_worker(lambda: self._subscribe(callback)))
+        return cast(int, self._call_worker(lambda: self._subscribe(callback, on_ready)))
 
     def unsubscribe(self, subscription_id: int) -> None:
         """Remove a logical callback, stopping the worker when it is the last one."""
@@ -121,8 +122,7 @@ class _SignalWorker:
     def close(self) -> None:
         """Remove all subscriptions and stop the worker without closing Gio objects."""
         with self._closed_lock:
-            if self._closed:
-                return
+            already_closed = self._closed
             self._closed = True
         if self._thread is None:
             return
@@ -132,10 +132,13 @@ class _SignalWorker:
         if not self._thread.is_alive():
             self._join()
             return
+        if already_closed and self._thread is threading.current_thread():
+            return
         if self._thread is threading.current_thread():
             self._stop_on_worker()
         else:
-            self._call_worker(self._stop_on_worker)
+            if not already_closed:
+                self._call_worker(self._stop_on_worker)
             self._join()
 
     def _run(self) -> None:
@@ -191,12 +194,20 @@ class _SignalWorker:
             raise failure[0]
         return result[0] if result else None
 
-    def _subscribe(self, callback: SignalCallback) -> int:
+    def _subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
         if not self._subscriptions:
             self._register_bus_signals()
         subscription_id = self._next_subscription_id
         self._next_subscription_id += 1
         self._subscriptions[subscription_id] = callback
+        if on_ready is not None:
+            try:
+                on_ready()
+            except BaseException:
+                self._subscriptions.pop(subscription_id, None)
+                if not self._subscriptions:
+                    self._stop_on_worker()
+                raise
         return subscription_id
 
     def _register_bus_signals(self) -> None:
@@ -281,7 +292,7 @@ class SnapshotProvider(Protocol):
 class SignalProvider(Protocol):
     """Fuente interna capaz de gestionar suscripciones a señales."""
 
-    def subscribe(self, callback: SignalCallback) -> int:
+    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
         """Registra una callback y devuelve su identificador."""
         ...
 
@@ -366,7 +377,7 @@ class GioDBusProtocol:
         except self._glib.Error as exc:
             raise BluetoothError(f"No se pudo construir el proxy de BlueZ: {exc}") from exc
 
-    def subscribe(self, callback: SignalCallback) -> int:
+    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
         """Registra una callback, creando el worker de señales si es necesario."""
         while True:
             starting: threading.Event | None
@@ -436,7 +447,7 @@ class GioDBusProtocol:
             raise BluetoothError("El protocolo D-Bus de BlueZ está cerrado")
 
         try:
-            subscription_id = worker.subscribe(callback)
+            subscription_id = worker.subscribe(callback, on_ready=on_ready)
         except BluetoothError:
             self._discard_failed_worker(worker)
             raise

@@ -14,10 +14,10 @@
 > - Test de integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) verificado en
 >   **Python 3.12 / Gio** sobre un snapshot real de BlueZ (`GetManagedObjects`),
 >   sin métodos mutadores ni exposición de la MAC.
-> - Suite actual del proyecto por defecto (Python 3.14): **234 passed, 5
->   skipped** (las 5 omisiones son integraciones opt-in, desactivadas por
->   defecto); con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio: **239
->   passed**.
+> - Suite actual del proyecto por defecto (Python 3.14): **276 passed, 6
+>   skipped** (las 6 omisiones son integraciones opt-in, desactivadas por
+>   defecto); con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio: **282
+>   passed** (2026-08-10).
 
 - **Fase:** 3 (Bluetooth) — ítem **separado** del roadmap (ver §5 de
   [gio-dbus-client-design.md](gio-dbus-client-design.md))
@@ -65,10 +65,11 @@ se conserva como documentación viva del módulo.
 - El mapper **nunca** se aplica directamente a payloads parciales de
   `PropertiesChanged`. Siempre recibe **propiedades completas de una interfaz**,
   ya sea de un snapshot completo (`GetManagedObjects`) o de un **cache
-  actualizado** por el cliente. En Incremento 2 el cliente fusiona las
-  propiedades `changed` del evento sobre el cache, descarta las `invalidated`
-  y **después** re-mapea/refresca desde el resultado completo
-  ([gio-dbus-client-design §2.4](gio-dbus-client-design.md#24-señales-con-giodbusconnectionsignal_subscribe)).
+  actualizado** por el repositorio. En el Incremento 2 el repositorio no
+  fusiona payloads parciales: ante cada `SignalEvent` refresca un **snapshot
+  completo** y diffs el cache contra él con el **diff puro de snapshots**
+  (`device_change_diff.py`), de modo que el mapper solo recibe propiedades
+  completas de interfaz ([signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch)).
 - Consecuencia: la política de opcionales con default explícito (ver §4) es
   obligatoria y no una concesión, **no** porque el mapper tolere payloads
   parciales, sino porque BlueZ omite propiedades **opcionales** incluso en
@@ -395,8 +396,8 @@ Procedimiento:
 
 El mapper se ejercita **exclusivamente** con las propiedades completas de cada
 interfaz del snapshot; no se le alimentan payloads parciales de
-`PropertiesChanged` (ver §2) — fusionar `changed`/`invalidated` es
-responsabilidad del cliente en el Incremento 2.
+`PropertiesChanged` (ver §2) — el repositorio refresca un snapshot completo por
+señal y diffs (Incremento 2, [signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch)).
 
 El mapper es puro: la integración solo valida que los dicts reales de BlueZ
 cumplen el contrato. La lectura nunca auto-arranca `bluetoothd` ni escribe nada.
@@ -443,9 +444,9 @@ Referencias internas: [Interfaces D-Bus de BlueZ](dbus-interfaces.md),
 7. Invariantes de modelos encadenados en `BluetoothError` con `from`.
 8. Sin códec vendor, sin GI, sin métodos mutadores.
 9. El mapper **nunca** recibe payloads parciales de `PropertiesChanged`: solo
-   propiedades completas de interfaz, de snapshot completo o cache actualizado
-   por el cliente (Incremento 2 fusiona `changed`/`invalidated` antes de
-   re-mapear).
+   propiedades completas de interfaz, de snapshot completo o del cache
+   actualizado por el repositorio (Incremento 2 refresca un snapshot completo
+   por señal y diffs; no fusiona `changed`/`invalidated`).
 10. `timestamp`: `None` → `datetime.now(UTC)`; inyectado debe ser `datetime`
     tz-aware con offset UTC (0) y se conserva exactamente; tipo erróneo,
     `naive` o zona no UTC → `BluetoothError`.

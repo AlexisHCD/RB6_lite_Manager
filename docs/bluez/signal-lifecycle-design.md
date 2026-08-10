@@ -1,24 +1,42 @@
 # Contrato técnico — Lifecycle de señales de BlueZ (Incremento 2)
 
-> **Estado:** **parcialmente implementado y verificado (2026-08-09).**
+> **Estado:** **implementado y verificado (2026-08-10).**
 >
 > - ✅ **Worker y lifecycle de bajo nivel** (§2–§3: `_SignalWorker` +
 >   `GioDBusProtocol.subscribe`/`unsubscribe`/`close` y la delegación en
->   `BlueZDBusClient`) **implementado y verificado**. Validez: fakes
+>   `BlueZDBusClient`) **implementado y verificado**, incluido el **hook
+>   `on_ready` opcional** (§2.2.1: corre en el hilo del worker, después de
+>   instalar los filtros GIO y registrar el callback lógico y **antes** de que
+>   `subscribe` retorne; rollback atómico si lanza). Validez: fakes
 >   deterministas (unit, sin GI/bus), el spike genérico de D-Bus con Gio del
 >   2026-08-09 y la **integración real de lifecycle** (Python 3.12 / Gio, 25
 >   ciclos subscribe/unsubscribe/close + snapshot fresco). **No se afirma
 >   recepción de señales reales de BlueZ** (ver nota al pie).
-> - ⏳ **Repositorio** (§4: registro, cache de diff y dispatch de
->   `DeviceChangeEvent`; invariantes 4–8 de §7) **pendiente de
->   implementación** — próximo incremento, que cerrará
->   `IBluetoothRepository`; `subscribe_device_changes` sigue lanzando
->   `NotImplementedError`.
+> - ✅ **Repositorio** (§4: registro, cache de diff y dispatch de
+>   `DeviceChangeEvent`) **implementado y verificado** con el **diff puro de
+>   snapshots** (`device_change_diff.py`): init A→B en el worker vía `on_ready`
+>   (snapshot B cierra la carrera), refresh completo por señal, orden
+>   determinista `REMOVED→ADDED→UPDATED`, igualdad mapeada de `DeviceInfo`,
+>   aislamiento de callbacks, suscriptores múltiples/tardíos/reentrantes,
+>   `Unsubscribe` idempotente con espera de in-flight, concurrencia de init y
+>   rollback de errores. Cubre por completo `IBluetoothRepository`
+>   (`subscribe_device_changes` ya no lanza `NotImplementedError`). Validez:
+>   fakes deterministas (`tests/unit/test_bluez_repository_signals.py`,
+>   `tests/unit/test_device_change_diff.py`) + integración real opt-in de
+>   **lifecycle A/B** (`tests/integration/test_bluez_repository_signals.py`).
+>
+> **Corrección sobre el diseño previo (2026-08-10):** el *self-unsubscribe
+> durante A→B* mediante el callable retornado es **imposible**: el
+> `Unsubscribe` no existe hasta que `subscribe_device_changes` retorna, y
+> `on_ready` corre dentro de esa llamada. Se eliminó esa promesa. Lo válido y
+> probado: **`subscribe` reentrante durante A→B sin replay** (§4.6), self-
+> unsubscribe **solo tras poseer el `Unsubscribe`** (en señales futuras) y
+> unsubscribe externo con espera de in-flight.
 >
 > Este documento se redactó con metodología **Documentation First** antes de
-> escribir código. La implementación de bajo nivel cumple el contrato (§2–§3);
-> ante cualquier discrepancia con las fuentes oficiales o con el spike se
-> detiene y se documenta (AGENTS.md §5).
+> escribir código y ahora describe el **código real implementado**. Ante
+> cualquier discrepancia con las fuentes oficiales o con el spike se detiene y
+> se documenta (AGENTS.md §5).
 
 - **Fase:** 3 (Bluetooth) — Incremento 2 de señales y lifecycle
 - **Tipo:** contrato de implementación (no es un ADR)
@@ -58,9 +76,9 @@
 (`subscribe`/`unsubscribe`/`close`), delegación en `BlueZDBusClient`, y el
 dispatch de `DeviceChangeEvent` en `BlueZRepository` con cache de diff.
 
-> **Estado (2026-08-09):** las dos primeras partes (worker + lifecycle y
-> delegación del cliente, §2–§3) están **implementadas y verificadas**; el
-> dispatch del repositorio (§4) sigue **pendiente** (próximo incremento).
+> **Estado (2026-08-10):** las tres partes (worker + lifecycle, delegación del
+> cliente y dispatch del repositorio, §2–§4) están **implementadas y
+> verificadas**.
 
 **Fuera de alcance:** métodos mutadores (prohibidos por construcción), cierre de
 la conexión compartida, polling de respaldo (RESEARCH_LIMITS §4 — ítem
@@ -70,11 +88,12 @@ separado), integración GLib/Qt (Fase 6), mapeo de payload parcial.
 
 ## 2. Capa baja: señales en `GioDBusProtocol`
 
-> **Estado (2026-08-09):** **implementado y verificado** en
+> **Estado (2026-08-10):** **implementado y verificado** en
 > `dbus_protocol.py` (`GioDBusProtocol` + `_SignalWorker`) y `dbus_client.py`
 > (`BlueZDBusClient`), cubierto por `tests/unit/test_bluez_signal_protocol.py`
 > (fakes, sin GI/bus) y el integration de lifecycle
-> (`tests/integration/test_bluez_signal_lifecycle.py`).
+> (`tests/integration/test_bluez_signal_lifecycle.py`). Incluye el hook
+> **`on_ready`** (§2.2.1).
 
 ### 2.1 `SignalEvent` — metadata inmutable, sin payload
 
@@ -116,6 +135,46 @@ class GioDBusProtocol(BlueZProtocol):
   concurrente con el arranque **rechaza** la suscripción en curso con
   `BluetoothError` y descarta el worker sin dejar suscripciones huérfanas.
 
+### 2.2.1 `on_ready`: hook de init en el worker
+
+> **Estado (2026-08-10):** **implementado y verificado.** El contrato de §2.2
+> (`subscribe(callback) -> int`) no cambia: `on_ready` es una **extensión
+> opcional compatible hacia atrás** (default `None`).
+
+```python
+class GioDBusProtocol(BlueZProtocol):
+    def subscribe(
+        self,
+        callback: SignalCallback,
+        on_ready: Callable[[], None] | None = None,
+    ) -> int: ...  # id lógico
+```
+
+- `on_ready` es un **callable sin argumentos o `None`** (`ReadyCallback =
+  Callable[[], None]`); también está en el worker (`SignalWorker.subscribe`),
+  en el protocolo interno (`SignalProvider.subscribe`), en
+  `BlueZDBusClient.subscribe` y en el `SnapshotClient` del repositorio.
+- **Dónde y cuándo (implementación real en `_SignalWorker._subscribe`):** se
+  ejecuta **en el hilo del worker**, **después** de registrar los tres filtros
+  GIO (`_register_bus_signals`) y **después** de registrar el callback lógico,
+  y **antes** de que `subscribe` retorne al llamador.
+- **Serialización con las señales:** `on_ready` corre dentro de la operación de
+  `subscribe` encolada en el `MainContext` del worker; las señales que lleguen
+  durante el init quedan **encoladas en el mismo contexto** y se procesan
+  **después** de que `on_ready` termine. Por tanto `on_ready` ve el estado
+  post-filtros sin que ningún `SignalEvent` se haya entregado todavía: el init
+  del repositorio y el dispatch de señales quedan **totalmente ordenados**.
+- **Fallos (implementación real):** si `on_ready` lanza, el worker **revierte**
+  el registro lógico recién añadido (`self._subscriptions.pop(subscription_id)`),
+  detiene el worker si era la última suscripción (`_stop_on_worker`) y **re-lanza
+  la excepción** al llamador (el protocolo la envuelve como `BluetoothError`
+  con su `__cause__`).
+- **Reentrancia:** `on_ready` corre en el worker; **no debe esperar
+  operaciones del hilo llamador** ni esperarse a sí mismo (sería deadlock). El
+  repositorio la usa solo para snapshot + diff + cache + dispatch, todo
+  autocontenido.
+- **`None` (default)** ⇒ comportamiento de §2.2, sin hook.
+
 ### 2.3 `BlueZDBusClient` delega
 
 `BlueZDBusClient.subscribe(cb)` / `unsubscribe(sub_id)` / `close()` delegan en el
@@ -132,12 +191,13 @@ cache.
 
 ## 3. Worker dedicado de señales
 
-> **Estado (2026-08-09):** **implementado y verificado** como `_SignalWorker`
+> **Estado (2026-08-10):** **implementado y verificado** como `_SignalWorker`
 > (`dbus_protocol.py`), cubierto por `tests/unit/test_bluez_signal_worker.py`
-> (fakes deterministas, sin GI/bus). La validez del patrón sobre D-Bus real se
-> confirmó con el spike genérico (2026-08-09) y la integración real de
-> **lifecycle** en Python 3.12 / Gio. **No se afirma recepción de señales
-> reales de BlueZ** (ver §8).
+> (fakes deterministas, sin GI/bus). Incluye la ejecución serializada del hook
+> **`on_ready`** (§2.2.1) dentro de la operación de `subscribe`. La validez del
+> patrón sobre D-Bus real se confirmó con el spike genérico (2026-08-09) y la
+> integración real de **lifecycle** en Python 3.12 / Gio. **No se afirma
+> recepción de señales reales de BlueZ** (ver §8).
 
 - Hilo **daemon** que arranca en la **primera** `subscribe` y se detiene en la
   última `unsubscribe` o en `close`. Dentro del worker:
@@ -191,11 +251,17 @@ cache.
 
 ## 4. Repositorio: registro, cache y dispatch
 
-> **Estado (2026-08-09):** **pendiente de implementación** (próximo incremento
-> del roadmap, que cerrará `IBluetoothRepository`). §4.1–§4.5 y las invariantes
-> 4–8 de §7 siguen siendo el **contrato** que la implementación debe cumplir:
-> `subscribe_device_changes` sigue lanzando `NotImplementedError` en
-> `bluez_repository.py` ([repository-design §6](repository-design.md#6-subscribe_device_changes--notimplemented-incremento-2)).
+> **Estado (2026-08-10):** **implementado y verificado** en `bluez_repository.py`
+> (`BlueZRepository.subscribe_device_changes`) sobre el **diff puro de
+> snapshots** (`device_change_diff.py`). §4.1–§4.5 y las invariantes 4–15 de §7
+> describen el **comportamiento real**, cubierto por
+> `tests/unit/test_bluez_repository_signals.py` y
+> `tests/unit/test_device_change_diff.py` (fakes deterministas, sin GI/bus) más
+> la **integración real de lifecycle A/B**
+> (`tests/integration/test_bluez_repository_signals.py`, Python 3.12/Gio;
+> solo subscribe/unsubscribe + snapshot A/B + bus usable, sin señales inducidas
+> ni escrituras). `IBluetoothRepository` queda **completo** (el checkbox del
+> roadmap se marca `[x]`).
 
 ### 4.1 Registro
 
@@ -209,11 +275,33 @@ cache.
 
 ### 4.2 Cierre de carrera en el primer registro
 
-1. **snapshot A** — estado antes de suscribir (bajo lock).
-2. `subscribe` bajo nivel (el worker arranca).
-3. **snapshot B** — bajo el mismo lock.
-4. **diff A→B:** no se emiten eventos por el estado preexistente en A; sí por
-   los cambios ocurridos **entre A y B** (carrera de suscripción).
+> **Estado (2026-08-10): implementado.** El flujo usa el hook `on_ready` de
+> bajo nivel (§2.2.1) para que el init corra **en el worker** antes de que
+> `subscribe` retorne. Detalle, pseudocódigo ya implementado y casos de prueba
+> en §4.6/§4.7.
+
+1. **snapshot A** — estado antes de suscribir, bajo el lock del repositorio
+   (hilo del llamador de `subscribe_device_changes`).
+2. `subscribe(callback_lógico, on_ready=init)` de bajo nivel (el worker arranca,
+   instala los tres filtros GIO y registra el callback lógico).
+3. **En el worker, dentro de `subscribe`, antes de que retorne:** `on_ready`
+   ejecuta el init del repositorio:
+   a. **snapshot B** — estado post-filtros (**cierra la carrera**).
+   b. **diff A→B** — no se emiten eventos por el estado preexistente en A; sí
+      por los cambios ocurridos **entre A y B** (carrera de suscripción).
+   c. **actualizar cache** a B.
+   d. **primer dispatch** al primer suscriptor (fuera del lock).
+4. `subscribe` retorna; en adelante cada `SignalEvent` → refresh → dispatch a
+   todos los suscriptores.
+
+- Las señales llegadas entre la instalación de filtros y el fin de `on_ready`
+  se **serializan en el mismo `MainContext`** y se procesan **después** de que
+  `on_ready` termine (la cache ya está en B): **B cierra la carrera**.
+- **Fallo de `on_ready` (snapshot B / mapper / diff):** rollback completo —
+  callback lógico + IDs GIO liberados (worker limpio si era la última
+  suscripción lógica), **estado parcial revocado** (cache y subscriber init) y
+  `BluetoothError` propagado a `subscribe_device_changes`. **Cero eventos** en
+  ese registro.
 
 ### 4.3 Cache y refresh
 
@@ -247,6 +335,131 @@ cache.
 
 ---
 
+### 4.6 API `on_ready` del primer registro
+
+> **Estado (2026-08-10):** **implementado y verificado** en
+> `bluez_repository.py`. La API `on_ready` es **infraestructura interna**: no
+> altera `IBluetoothRepository` ni el contrato `DeviceChangeCallback` del
+> dominio ([ADR-0007](../ADR/0007-device-change-event-contract.md)).
+
+**Contradicción que resuelve.** El diseño original hacía `subscribe` → retorno →
+snapshot B + diff + primer dispatch **en el hilo del llamador**, pero los
+callbacks de usuario corren **en el hilo del worker** (§5) y comienzan a
+entregarse en cuanto el worker instala filtros y registra el callback lógico:
+quedaba una ventana en la que señales en curso podían disparar dispatch contra
+un cache aún sin init (sin B, sin diff A→B). `on_ready` elimina la ventana: el
+init del repositorio corre **en el worker**, dentro de la operación de
+`subscribe` serializada por el `MainContext`, y **antes del retorno**.
+
+**Implementación real en `bluez_repository.py`** (estructura de sincronización:
+una `threading.Condition` sobre `RLock`; `_subscribers` es un `dict[int,
+_Subscriber]`):
+
+1. `subscribe_device_changes` toma el `_condition`; si otro hilo está
+   inicializando (**`_initializing`**) y no es este hilo, **espera** en la
+   condición hasta que el init termine. Luego **registra el suscriptor**
+   (`_add_subscriber`) y, si ya existe suscripción de bajo nivel
+   (`_low_subscription_id`) o el init está en curso, retorna ya el
+   `Unsubscribe` (solo futuros, sin replay).
+2. **Primer suscriptor:** marca `_initializing`, toma **snapshot A** (bajo
+   lock, antes de instalar filtros) y llama
+   `self._client.subscribe(self._handle_signal, on_ready=...)`.
+3. **`on_ready` (`_finish_initialization`) corre en el hilo del worker, dentro
+   de `subscribe`, antes del retorno:** toma **snapshot B** (post-filtros →
+   **cierra la carrera**), hace `diff_device_snapshots(A, B)` (solo cambios
+   entre A y B; el estado preexistente en A **no emite**), actualiza `_cache` a
+   B y hace el **primer dispatch** con una copia de los suscriptores (fuera del
+   lock).
+4. Al retornar `subscribe` con el `sub_id`, el repositorio guarda
+   `_low_subscription_id`, limpia `_initializing`, notifica a los segundos
+   concurrentes y devuelve `self._make_unsubscribe(subscriber_id)`. **No existe
+   `_flush_pending_releases`**: el self-unsubscribe durante A→B es imposible
+   porque el `Unsubscribe` aún no se ha devuelto (ver reentrancia abajo).
+
+**Fallos de init.** Si `on_ready` lanza (snapshot B / mapper / diff), el bajo
+nivel revierte (callback lógico + IDs GIO + worker limpio si era la última
+suscripción lógica) y propaga `BluetoothError`; el repositorio ejecuta
+`_abort_initialization` (**revoca el estado parcial**: `_cache`, suscriptores
+del init en curso) y notifica a los segundos concurrentes (reciben el mismo
+error, no quedan colgados; un registro posterior puede reiniciar como primer
+suscriptor). **Cero eventos** entregados por el registro fallido.
+
+**Semántica de suscriptores.**
+
+- **Primer suscriptor:** dispara el init (A → on_ready/B → diff → cache → primer
+  dispatch) y recibe los eventos del diff A→B.
+- **Segundo concurrente:** espera a que el init termine (condición), luego se
+  registra **sin replay** (solo eventos futuros). Si el init falló, recibe el
+  error.
+- **Reentrante desde callback** (worker): se registra **sin replay** y **sin
+  esperarse a sí mismo** (esperar bloquearía al worker; la detección usa el
+  `threading.get_ident()` del hilo que inicializa).
+- **Suscriptor tardío** (post-init): solo eventos futuros; nunca replay del
+  estado inicial ni del cache (invariante 8).
+
+**Reentrancia de `Unsubscribe`.**
+
+- **`subscribe` reentrante durante A→B** (un callback de `on_ready` o de señal
+  llama a `subscribe_device_changes`): se registra **sin replay** (no recibe ni
+  el diff actual ni el resto de la entrega en curso) y **sin deadlock**; recibe
+  los eventos de señales futuras. Verificado por
+  `test_worker_on_ready_reentrant_subscriber_does_not_deadlock_or_replay` y
+  `test_reentrant_subscriber_from_callback_does_not_receive_current_event_but_gets_future`.
+- **Self-unsubscribe es solo posible después de poseer el `Unsubscribe`** (que
+  `subscribe_device_changes` haya retornado), p. ej. **desde un callback de
+  señal posterior**: `active=false` (no se le entregan más eventos, ni siquiera
+  el resto de la entrega en curso) y, si es el último suscriptor, se libera la
+  suscripción de bajo nivel y se descarta la cache. Sin deadlock (la espera de
+  in-flight se salta al propio hilo). Durante A→B **no** puede ocurrir, porque
+  el callable aún no existe; por eso no hay release pendiente.
+- **Unsubscribe externo** (otro hilo): `active=false` + `client.unsubscribe(sub_id)`
+  (cero callbacks futuros por el contrato del worker) y **espera a que termine
+  cualquier callback in-flight de ese suscriptor** (contador/condición de
+  dispatch) **salvo si el propio hilo es el del callback** (self). Garantía:
+  **cero callbacks de ese suscriptor después de que `Unsubscribe` retorne**.
+- `Unsubscribe` **idempotente**: la segunda invocación no lanza ni repite release.
+
+**Cero llamadas de usuario bajo lock.** Los callbacks (dispatch en `on_ready` y
+en refresh) se invocan **siempre fuera del lock** del repositorio: el lock solo
+protege cache, estado de init y lista de suscriptores. El snapshot/diff se
+computa bajo lock, pero la entrega se hace con una copia de la lista y fuera del
+lock.
+
+**Fallos de refresh (señal).** Si el snapshot fresco o el mapper fallan durante
+un `SignalEvent`: se **preserva la cache anterior** y se **emiten cero eventos**
+en esa entrega (invariante 6, sin cambios).
+
+---
+
+### 4.7 Casos de prueba concretos del dispatch (implementados)
+
+> Archivos reales: `tests/unit/test_bluez_repository_signals.py` (dispatch,
+> fakes deterministas sin GI/bus) y `tests/unit/test_device_change_diff.py`
+> (diff puro). Todos **implementados y en verde**; la columna "Verificación
+> esperada" describe el comportamiento real verificado.
+
+| # | Caso | Verificación esperada (real) |
+|---|------|------------------------------|
+| 1 | Primer registro: init completo | A tomado antes del `subscribe` bajo nivel; `on_ready` corre **antes** de que `subscribe` retorne; diff A→B calculado; cache actualizada a B. |
+| 2 | Señales durante el init | `on_ready` bloqueado → se procesa después (cache ya en B); los eventos del init no se pierden. |
+| 3 | Diff A→B | Solo emite cambios entre A y B; el estado preexistente en A no emite (igualdad → cero eventos). |
+| 4 | Init fallido (snapshot B lanza) | Rollback bajo nivel (callback lógico + IDs GIO + worker si último), estado repo revocado (cache/init), `BluetoothError` propagado, **cero eventos**. |
+| 5 | Init fallido + segundo concurrente | El segundo `subscribe_device_changes` espera y recibe el mismo error (no queda colgado); un registro posterior reinicia como primer suscriptor. |
+| 6 | Segundo concurrente tras init ok | Espera al init; se registra sin replay; solo recibe eventos futuros. |
+| 7 | Suscriptor tardío | Sin replay del estado inicial ni del cache; solo futuros (un único `subscribe` bajo nivel que hace fan-out). |
+| 8 | Reentrante desde callback (worker) | Se registra **sin replay y sin bloquear al worker** (sin deadlock); recibe eventos de señales futuras (probado también con `on_ready_in_worker_thread`). |
+| 9 | Self-unsubscribe desde un callback de señal (tras poseer el `Unsubscribe`) | `active=false` (no recibe ni el resto de la entrega en curso ni eventos futuros); al ser el último se libera el `subscribe` bajo nivel; sin deadlock. *(Self-unsubscribe durante A→B: no aplica — el callable aún no existe.)* |
+| 10 | Unsubscribe externo con callback in-flight | El `Unsubscribe` retorna solo cuando el callback en curso termina; **cero callbacks posteriores**. |
+| 11 | Unsubscribe externo sin in-flight | Retorno inmediato; cero callbacks posteriores; idempotente (segunda llamada no-op); un nuevo ciclo usa un `sub_id` nuevo y cache limpia. |
+| 12 | Reentrancia de `subscribe`/`unsubscribe` desde un callback | Sin deadlock del lock del repo (probado explícitamente). |
+| 13 | Refresh fallido (señal) | Snapshot/mapper falla → cache anterior intacta, **cero eventos** en esa entrega; la siguiente señal diffs contra la cache preservada. |
+| 14 | Doble registro del mismo callback | Dos suscripciones independientes; se entrega a ambas en orden de registro; dar de baja una no afecta a la otra. |
+| — | Orden determinista y `UPDATED` condicional | `REMOVED→ADDED→UPDATED` por `object_path`; `UPDATED` solo si `DeviceInfo` mapeado es desigual. |
+| — | Sin eventos Battery/RSSI-only | Cambios solo en `Battery1`/`RSSI`/`TxPower` o props no mapeadas no emiten evento. |
+| — | El repositorio nunca cierra el cliente | `close()` del cliente no se invoca nunca (`client.close_calls == 0`). |
+
+---
+
 ## 5. Contrato de hilos
 
 - El callback de usuario corre en el **hilo del worker** (contexto de señales;
@@ -260,19 +473,26 @@ cache.
 
 ## 6. Diagramas de secuencia (breves)
 
-**Primer registro (cierre de carrera A→B):**
+**Primer registro (cierre de carrera A→B, implementado §4.6):**
 
 ```
-Repo             BlueZDBusClient      Worker (Gio)          bus BlueZ
-  |--snapshot()--------->|======================>|   GetManagedObjects
-  |  snapshot A (lock)   |                      |
-  |--subscribe(ev)------>|--subscribe(ev)------>| new ctx+loop
-  |                      |                      | 3x signal_subscribe
-  |--snapshot()--------->|======================>|   GetManagedObjects
-  |  snapshot B (lock)   |                      |
-  |--diff A->B: solo cambios entre A y B (sin replay de preexistente)
-  |<--return Unsubscribe idempotente
+Llamador/repo           BlueZDBusClient         Worker (Gio)             bus BlueZ
+   |--snapshot()----------->|==========================>|   GetManagedObjects
+   |  snapshot A (lock)     |                          |
+   |--subscribe(cb,on_ready)-->|--subscribe(cb,on_ready)-->| new ctx+loop
+   |                         |                          | 3x signal_subscribe + registra cb
+   |                         |   on_ready() [worker]    |
+   |                         |--snapshot()======================>|  GetManagedObjects
+   |                         |  snapshot B (cierra carrera)
+   |                         |  diff A->B (lock) -> cache -> primer dispatch (fuera del lock)
+   |<--retorno (sub_id)------|<--retorno
+   |  (self-unsubscribe durante A->B: no aplica — el Unsubscribe aún no existe)
 ```
+
+> Las señales llegadas durante el init (entre la instalación de filtros y el fin
+> de `on_ready`) se **encolan en el mismo `MainContext`** y se procesan
+> **después** de `on_ready`: la cache ya está en B, por lo que **B cierra la
+> carrera**.
 
 **Señal → refresh → dispatch:**
 
@@ -304,10 +524,12 @@ Llamador (cualquier hilo)         Worker (Gio)
 
 ## 7. Invariantes
 
-> **Estado (2026-08-09):** las invariantes **1–3 (worker/lifecycle de bajo
-> nivel) están verificadas** por los unit tests y el integration de lifecycle.
-> Las invariantes **4–8 (repositorio/dispatch) siguen pendientes** de
-> implementación (§4).
+> **Estado (2026-08-10):** las invariantes **1–15** están **verificadas** por
+> los unit tests (fakes deterministas, sin GI/bus) y las integraciones reales
+> opt-in de lifecycle (worker A/B + repositorio A/B, Python 3.12/Gio). La 13
+> describe el self-unsubscribe válido (desde un callback de señal, tras poseer
+> el `Unsubscribe`); durante A→B no aplica porque el callable aún no existe
+> (§4.6).
 
 1. Cero callbacks de usuario después de que `unsubscribe` retorne; `Unsubscribe`
    y `close()` **idempotentes**.
@@ -322,6 +544,29 @@ Llamador (cualquier hilo)         Worker (Gio)
 7. Eventos fuera del lock, en orden de registro; un callback que lanza no
    afecta a los demás.
 8. Snapshot A nunca emite; solo el diff A→B emite para el primer registro.
+9. El init del primer registro corre en **`on_ready`, en el hilo del worker,
+   antes de que `subscribe` retorne** y antes de cualquier `SignalEvent`; **B
+   cierra la carrera** (las señales del init se serializan en el mismo
+   `MainContext` y se procesan después).
+10. Si el init falla (`on_ready`/snapshot B/mapper/diff): **rollback completo**
+    de la suscripción lógica/GIO (worker limpio si era la última), estado
+    parcial del repositorio **revocado** (cache/init) y `BluetoothError`
+    propagado; **cero eventos** entregados.
+11. Suscriptores posteriores al primero: **solo eventos futuros, sin replay**;
+    el segundo concurrente **espera al init**; el reentrante desde callback se
+    registra **sin replay y sin esperarse a sí mismo** (sin deadlock).
+12. **Cero llamadas de usuario bajo el lock** del repositorio (cache, init y
+    lista de suscriptores sí; el dispatch nunca).
+13. **Self-unsubscribe desde un callback de señal** (tras poseer el
+    `Unsubscribe`): `active=false` → no recibe ni el resto de la entrega en
+    curso ni eventos futuros; sin deadlock; si es el último suscriptor se libera
+    el `subscribe` bajo nivel y la cache. **Durante A→B no aplica** (el callable
+    aún no existe; lo válido ahí es `subscribe` reentrante sin replay).
+14. **Unsubscribe externo espera** cualquier callback in-flight de su
+    suscriptor (**salvo self**) para garantizar **cero callbacks tras el
+    retorno**; `Unsubscribe` idempotente.
+15. Fallo de snapshot/mapper en refresh (señal): **preserva la cache previa** y
+    **emite cero eventos** en esa entrega.
 
 ---
 
@@ -330,18 +575,20 @@ Llamador (cualquier hilo)         Worker (Gio)
 | Nivel | Archivo | GI | Bus | Estado | Qué valida |
 |-------|---------|----|-----|--------|------------|
 | Unit worker (fakes deterministas) | `tests/unit/test_bluez_signal_worker.py` | No | No | ✅ implementado | `_SignalWorker`: hilo daemon + contexto/loop dedicados, arranque sincronizado y timeout/failure, los 3 filtros exactos en el hilo del worker, `SignalEvent` con metadata correcta, callbacks en orden de registro y en el hilo del worker, **aislamiento de errores** (un callback que lanza no bloquea al siguiente), unsubscribe no-último conserva el worker y último libera los 3 IDs GIO (en el hilo del worker), close idempotente (antes/después de parar), rollback atómico del registro parcial, startup timeout/failure, unsubscribe desde el propio callback (sin deadlock), subscribe reentrante diferido a la siguiente señal |
-| Unit protocolo | `tests/unit/test_bluez_signal_protocol.py` | No | No | ✅ implementado | `GioDBusProtocol`: factory de worker **perezosa** (snapshot/close no la tocan), arranque único y delegación de IDs, restart limpio tras última baja, close idempotente **sin cerrar proxy/conexión**, suscripción tras close falla de inmediato, contexto manager, rechazo de suscripción concurrente con close (sin huérfanos), factory falsy usable |
-| Unit dispatch repo (contrato §4) | `tests/unit/...` (futuro) | No | No | ⏳ pendiente | diff cache→nuevo, cierre de carrera A→B, orden determinista, `UPDATED` solo si `DeviceInfo` desigual, errores de refresh (preserva cache, sin emitir), doble registro del mismo callback, `Unsubscribe` idempotente, unsubscribe desde callback, suscriptores tardíos sin replay |
+| Unit protocolo | `tests/unit/test_bluez_signal_protocol.py` | No | No | ✅ implementado | `GioDBusProtocol`: factory de worker **perezosa** (snapshot/close no la tocan), arranque único y delegación de IDs, restart limpio tras última baja, close idempotente **sin cerrar proxy/conexión**, suscripción tras close falla de inmediato, contexto manager, rechazo de suscripción concurrente con close (sin huérfanos), factory falsy usable; **`on_ready`** opcional (propagación al worker, rollback si lanza) |
+| Unit diff puro | `tests/unit/test_device_change_diff.py` | No | No | ✅ implementado | `diff_device_snapshots`: snapshots iguales → `()`; `REMOVED`/`ADDED`/`UPDATED` con `current`/`previous` correctos; orden agrupado `REMOVED→ADDED→UPDATED` por `object_path`; `UPDATED` solo si `DeviceInfo` mapeado es desigual; **sin eventos** por cambios solo de `Battery1`/`RSSI`/`TxPower`/props no mapeadas; alta/baja de `Device1` detectada aunque la ruta conserve otra interfaz; errores del mapper propagados sin eventos parciales; snapshots no mutados |
+| Unit dispatch repo | `tests/unit/test_bluez_repository_signals.py` | No | No | ✅ implementado | init vía `on_ready` en worker (snapshot A→B, diff, cache y primer dispatch **antes** del retorno de `subscribe`; `on_ready` en hilo worker con `on_ready_in_worker_thread`); diff A→B sin replay de preexistente; init fallido (snapshot B / subscribe bajo nivel: rollback + estado revocado + `BluetoothError`, cero eventos, retry como primer suscriptor); segundo concurrente espera init (y error si falló); suscriptor tardío sin replay (un único subscribe bajo nivel con fan-out en orden); reentrante desde callback sin deadlock ni replay; **self-unsubscribe** desde callback de señal sin deadlock ni eventos futuros; unsubscribe externo espera in-flight (cero callbacks tras retorno) e idempotente; reentrancia `subscribe`/`unsubscribe` desde callback sin deadlock del lock; refresh fallido (snapshot/mapper) preserva cache sin emitir; doble registro del mismo callback independiente; orden determinista y `UPDATED` solo si `DeviceInfo` desigual; **sin eventos Battery/RSSI-only**; **el repo nunca cierra el cliente** |
 | Integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) | `tests/integration/test_bluez_signal_lifecycle.py` | Sí | Sí | ✅ lifecycle (no recepción real) | **solo** subscribe/unsubscribe/close/snapshot reales: 25 ciclos + snapshot fresco; bus compartido usable; sin cierre de conexión; **nunca provoca BlueZ ni induce señales** |
+| Integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) | `tests/integration/test_bluez_repository_signals.py` | Sí | Sí | ✅ lifecycle A/B (no recepción real) | `subscribe_device_changes` real + unsubscribe idempotente + snapshot A/B (eventos con invariantes del dominio) + `list_devices` post-cierre; bus compartido usable; **sin** señales inducidas, **sin** afirmar recepción real, **sin** escrituras de hardware |
 
 > **Nota de alcance de la validación:** la **entrega de señales** está validada
 > con **fakes deterministas** (unit) y el spike genérico de D-Bus con Gio; el
 > integration real **no** afirma recepción de señales reales de BlueZ (solo
 > lifecycle).
 
-- Baseline por defecto (Python 3.14, sin GI/bus): **234 passed, 5 skipped** (las
-  5 omisiones son las integraciones opt-in). Con `OPENBUDS_RUN_INTEGRATION=1` en
-  **Python 3.12 / Gio**: **239 passed**. Comando de commit:
+- Baseline por defecto (Python 3.14, sin GI/bus): **276 passed, 6 skipped** (las
+  6 omisiones son las integraciones opt-in). Con `OPENBUDS_RUN_INTEGRATION=1` en
+  **Python 3.12 / Gio**: **282 passed**. Ruff y mypy en verde. Comando de commit:
   `make lint && make typecheck && make test` (AGENTS.md §13).
 
 ---
@@ -360,9 +607,9 @@ Llamador (cualquier hilo)         Worker (Gio)
 - **repository-design §2:** `SnapshotClient` se amplía en el Incremento 2 con
   `subscribe`/`unsubscribe`/`close` para señales; las consultas snapshot no se
   alteran. **Implementado** (cliente/protocolo).
-- **repository-design §6:** `subscribe_device_changes` dejará de lanzar
-  `NotImplementedError` al implementarse la **parte del repositorio** de este
-  contrato (§4, pendiente).
+- **repository-design §6:** `subscribe_device_changes` ya **no lanza
+  `NotImplementedError`**: la **parte del repositorio** de este contrato (§4)
+  está **implementada y verificada** ([repository-design §6](repository-design.md#6-subscribe_device_changes--implementado-incremento-2)).
 
 ---
 

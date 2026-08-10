@@ -8,6 +8,7 @@ from typing import Literal, cast
 from openbuds.infrastructure.bluez.dbus_protocol import (
     GioDBusProtocol,
     ManagedObjects,
+    ReadyCallback,
     SignalCallback,
     SignalProvider,
     SnapshotProvider,
@@ -38,9 +39,9 @@ class BlueZDBusClient:
         """Devuelve el snapshot obtenido por el proveedor configurado."""
         return self._provider.get_managed_objects()
 
-    def subscribe(self, callback: SignalCallback) -> int:
+    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
         """Registra una callback en el proveedor configurado."""
-        return cast(SignalProvider, self._provider).subscribe(callback)
+        return cast(SignalProvider, self._provider).subscribe(callback, on_ready=on_ready)
 
     def unsubscribe(self, subscription_id: int) -> None:
         """Cancela una suscripción en el proveedor configurado."""

@@ -173,6 +173,7 @@ class FakeProvider:
         self.snapshot_value = snapshot
         self.calls = 0
         self.subscribe_callbacks: list[Callable[[SignalEvent], None]] = []
+        self.subscribe_on_ready: list[Callable[[], None] | None] = []
         self.unsubscribe_ids: list[int] = []
         self.close_calls = 0
 
@@ -180,8 +181,15 @@ class FakeProvider:
         self.calls += 1
         return self.snapshot_value
 
-    def subscribe(self, callback: Callable[[SignalEvent], None]) -> int:
+    def subscribe(
+        self,
+        callback: Callable[[SignalEvent], None],
+        on_ready: Callable[[], None] | None = None,
+    ) -> int:
         self.subscribe_callbacks.append(callback)
+        self.subscribe_on_ready.append(on_ready)
+        if on_ready is not None:
+            on_ready()
         return 17
 
     def unsubscribe(self, subscription_id: int) -> None:
@@ -243,7 +251,24 @@ def test_client_delegates_subscribe_and_unsubscribe_to_provider() -> None:
     client.unsubscribe(subscription_id)
 
     assert provider.subscribe_callbacks == [callback]
+    assert provider.subscribe_on_ready == [None]
     assert provider.unsubscribe_ids == [17]
+
+
+def test_client_forwards_on_ready_exactly_to_provider() -> None:
+    provider = FakeProvider(SNAPSHOT)
+    client = BlueZDBusClient(provider=provider)
+
+    def callback(_event: SignalEvent) -> None:
+        pass
+
+    def on_ready() -> None:
+        pass
+
+    assert client.subscribe(callback, on_ready=on_ready) == 17
+
+    assert provider.subscribe_callbacks == [callback]
+    assert provider.subscribe_on_ready == [on_ready]
 
 
 def test_client_close_is_delegated_idempotently_by_real_client_contract() -> None:

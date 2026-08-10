@@ -289,8 +289,3 @@ def test_battery_mapper_bluetooth_error_preserves_value_error_cause() -> None:
 
     assert str(raised.value) == "Battery1.Percentage fuera de rango [0, 100]: 101"
     assert isinstance(raised.value.__cause__, ValueError)
-
-
-def test_subscribe_device_changes_remains_unimplemented() -> None:
-    with pytest.raises(NotImplementedError, match="Incremento 2"):
-        BlueZRepository(FakeSnapshotClient([])).subscribe_device_changes(lambda _: None)

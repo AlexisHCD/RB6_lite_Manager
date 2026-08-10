@@ -188,7 +188,7 @@ Ver `docs/ARCHITECTURE.md` para el detalle y el diagrama.
 | [0004](docs/ADR/0004-clean-architecture-dependency-rule.md) | Clean Architecture, regla de dependencias | `presentation → application → domain ← infrastructure`. |
 | [0005](docs/ADR/0005-device-profile-contract.md) | Perfiles de dispositivo en YAML | Añadir dispositivo = añadir YAML, sin tocar el núcleo. |
 | [0006](docs/ADR/0006-app-config-toml-xdg-atomic-write.md) | Configuración TOML con rutas XDG y escritura atómica | Configuración propia separada, rutas XDG válidas y guardado sin truncado. |
-| [0007](docs/ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo (`DeviceChangeEvent`) | `DeviceChangeKind`/`DeviceChangeEvent`/`Unsubscribe`; contrato del dominio listo y probado; nivel bajo de señales/lifecycle del Incremento 2 implementado y verificado; dispatch del repositorio (`subscribe_device_changes`) pendiente. |
+| [0007](docs/ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo (`DeviceChangeEvent`) | `DeviceChangeKind`/`DeviceChangeEvent`/`Unsubscribe`; contrato del dominio probado; **Incremento 2 completo**: nivel bajo de señales/lifecycle y dispatch del repositorio (`subscribe_device_changes`) implementados y verificados (fakes + integración real de lifecycle A/B). |
 
 ### Hallazgos críticos que condicionan el código
 
@@ -264,8 +264,8 @@ Ver [ADR-0005](docs/ADR/0005-device-profile-contract.md).
 | Fase | Estado | Contenido |
 |------|--------|-----------|
 | 1 — Planificación y arquitectura | ✅ Completada | Arquitectura, cimientos, tooling, docs |
-| 2 — Backend base | 🔜 En curso | Config, logging, CLI, errores, detección entorno |
-| 3 — Bluetooth | ⏳ | BlueZ, D-Bus, adaptadores, dispositivos, perfiles |
+| 2 — Backend base | ✅ Completada | Config, logging, CLI, errores, detección entorno |
+| 3 — Bluetooth | 🔜 En curso | BlueZ, D-Bus, adaptadores, dispositivos, perfiles |
 | 4 — Optimización | ⏳ | PipeWire, WirePlumber, optimización, backup/rollback |
 | 5 — Diagnóstico | ⏳ | Health Check, Benchmark, logs, reportes |
 | 6 — Interfaz gráfica | ⏳ | PySide6, dashboard, notificaciones, AppIndicator |

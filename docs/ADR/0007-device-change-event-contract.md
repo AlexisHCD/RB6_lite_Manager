@@ -148,18 +148,17 @@ Ninguno depende de GI ni de capas externas (cumple
 - **Negativas:** el dispatch debe refrescar el `DeviceInfo` completo y construir
   eventos que cumplan las invariantes; la UI debe marshalear al hilo de Qt;
   Battery/RSSI quedan fuera de este canal (se consumen por snapshot).
-- **Migración:** hoy **no hay usos activos** del callback: solo el alias en
-  `observer.py`, la firma en `bluetooth_repo.py` y `bluez_repository.py`, que
-  lanza `NotImplementedError` hasta el Incremento 2. El único consumidor es el
-  unit test `test_subscribe_device_changes_remains_unimplemented`, que cambiará
-  con el Incremento 2 (su lambda de dos parámetros se ajusta a la nueva firma).
-  El cambio se aplica sin tocar otras capas.
+- **Migración:** el alias `DeviceChangeCallback` se conservó en `observer.py`
+  con la nueva firma y `bluez_repository.py` lo implementa; el cambio se aplicó
+  sin tocar otras capas. No hubo consumidores activos con la firma antigua
+  (`DeviceChangeCallback` de dos parámetros).
 
-## Verificación (contrato y lifecycle bajo nivel probados; dispatch pendiente)
+## Verificación (contrato, lifecycle de bajo nivel y dispatch implementados)
 
 El **contrato del dominio** está **implementado y probado** sin GI ni bus del
-sistema (suite por defecto: **234 passed, 5 skipped**; suite completa en
-Python 3.12/Gio: **239 passed**, 2026-08-09):
+sistema (suite por defecto: **276 passed, 6 skipped**; suite completa en
+Python 3.12/Gio con `OPENBUDS_RUN_INTEGRATION=1`: **282 passed**, 2026-08-10;
+ruff/mypy en verde):
 
 - `DeviceChangeKind` con valores únicos (`@unique`), cubierto en
   `tests/unit/test_enums.py`.
@@ -168,20 +167,38 @@ Python 3.12/Gio: **239 passed**, 2026-08-09):
   `frozen` + `slots` (`tests/unit/test_device_change.py`).
 - Alias del contrato: `DeviceChangeCallback` re-definido con la nueva firma y
   `Unsubscribe` nuevo, ambos verificados (`test_device_change.py`).
-- `IBluetoothRepository.subscribe_device_changes` ya **devuelve `Unsubscribe`**
-  y `BlueZRepository` lo declara, pero su implementación real sigue lanzando
-  `NotImplementedError` hasta el **dispatch de señales del repositorio**
-  (`test_subscribe_device_changes_remains_unimplemented`).
+- El **diff puro de snapshots** que produce los eventos (`device_change_diff.py`):
+  orden `REMOVED→ADDED→UPDATED` por `object_path`, `UPDATED` solo si el
+  `DeviceInfo` mapeado es desigual (igualdad completa del dataclass), **sin**
+  eventos por cambios solo de `Battery1`/`RSSI`/`TxPower`, errores del mapper
+  propagados sin resultados parciales y snapshots no mutados
+  (`tests/unit/test_device_change_diff.py`).
 
-El lifecycle Gio de bajo nivel ya verifica registro, aislamiento, mismo hilo,
-unsubscribe y cierre. Quedan **pendientes del dispatch del repositorio**:
+El **Incremento 2 está completo y verificado**, incluyendo el **dispatch del
+repositorio**:
 
-- `Unsubscribe` **idempotente en ejecución**: invocarlo dos veces no lanza ni
-  repite la liberación de la suscripción GIO.
-- Aislamiento: un callback que lanza se loguea y no impide la entrega al resto
-  de suscriptores.
-- Hilos: sin callbacks posteriores a `unsubscribe` invocado en el mismo
-  hilo/contexto.
+- `BlueZRepository.subscribe_device_changes` **implementado**: init A→B con
+  snapshot B en el worker vía `on_ready` (antes de que `subscribe` retorne; B
+  cierra la carrera), cache de diff, refresh completo por señal, dispatch en
+  orden de registro fuera del lock, aislamiento de excepciones, suscriptores
+  múltiples/tardíos/reentrantes, `Unsubscribe` idempotente con espera de
+  callbacks in-flight, concurrencia de init y rollback de errores
+  (`tests/unit/test_bluez_repository_signals.py`, fakes sin GI/bus).
+- **Reentrancia probada:** `subscribe` reentrante durante A→B (desde un
+  callback de `on_ready` o de señal) se registra **sin replay y sin deadlock**;
+  self-unsubscribe **solo es posible una vez que el llamador posee el
+  `Unsubscribe`** (desde un callback de señal posterior, sin deadlock y sin
+  eventos futuros) — durante A→B el callable aún no existe porque
+  `subscribe_device_changes` no ha retornado, así que esa vía no aplica.
+  El unsubscribe **externo** espera cualquier callback in-flight de su
+  suscriptor (salvo self) y garantiza cero callbacks tras el retorno.
+- Integración real opt-in (**`tests/integration/test_bluez_repository_signals.py`**,
+  Python 3.12/Gio): **solo lifecycle A/B** — subscribe_device_changes +
+  unsubscribe (idempotente) + snapshot A/B + `list_devices`; el bus compartido
+  sigue usable. **No** se inducen señales, **no** se afirma recepción real de
+  eventos ni escrituras de hardware.
+- **Sin cierre de bus/cliente:** el repositorio nunca llama `close()` ni
+  cierra la conexión D-Bus compartida (verificado en tests).
 
 ## Fuentes oficiales
 
