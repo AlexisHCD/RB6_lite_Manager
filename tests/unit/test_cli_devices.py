@@ -60,6 +60,9 @@ def _run(
     calls = bootstrap_calls if bootstrap_calls is not None else []
     monkeypatch.setattr(cli, "load_config", lambda: calls.append("load") or default_config())
     monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: calls.append("logging"))
+    # This helper deliberately bypasses real logging setup. Isolate the CLI
+    # logger too, so handlers bound to a previous capsys stream cannot leak in.
+    monkeypatch.setattr(cli._LOGGER, "error", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(cli, "_build_scan_devices_use_case", lambda: use_case)
     return cli.main(argv)
 

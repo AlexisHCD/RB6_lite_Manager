@@ -34,13 +34,28 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   [contrato](object-mapper-contract.md): mapper puro sin GI
 >   (`map_adapter`/`map_device`/`map_battery`/`map_rssi`), validación estricta
 >   y defaults conservadores.
+> - **Incremento 2 — nivel bajo de señales/lifecycle:** **implementado y
+>   verificado**. `GioDBusProtocol.subscribe`/`unsubscribe`/`close` gestionan un
+>   **worker dedicado** (`_SignalWorker`, hilo daemon con `GLib.MainContext`/
+>   `MainLoop` propio): arranque perezoso con factory inyectable, **tres
+>   filtros exactos** (`InterfacesAdded`/`InterfacesRemoved`/`PropertiesChanged`,
+>   `sender="org.bluez"`), `SignalEvent` de metadata, cero callbacks tras el
+>   `unsubscribe`, timeout/rollback atómico y cierre idempotente **sin cerrar la
+>   conexión compartida**; `BlueZDBusClient` delega y expone el stream bajo
+>   nivel (§2.4/§2.5/§3). Contrato y verificación en
+>   [signal-lifecycle-design.md](signal-lifecycle-design.md). **No se afirma
+>   recepción de señales reales de BlueZ** (validez con fakes deterministas +
+>   spike genérico + integration real de lifecycle).
 > - Tests de integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) verificados en
 >   Ubuntu, Python 3.12.3, PyGObject 3.48.2, con BlueZ disponible: lectura real
 >   de `GetManagedObjects` coherente y mapeo de todos los objetos reales del
->   bus, **sin métodos mutadores** y sin exponer la MAC del dispositivo.
-> - Suite actual: **205 passed, 4 skipped** (las 4 omisiones son las
->   integraciones opt-in, desactivadas por defecto). El **contrato de eventos
->   del dominio** ([ADR-0007](../ADR/0007-device-change-event-contract.md))
+>   bus, **sin métodos mutadores** y sin exponer la MAC del dispositivo; y el
+>   **lifecycle real** de señales (25 ciclos subscribe/unsubscribe/close +
+>   snapshot fresco, bus compartido usable, sin inducir señales).
+> - Suite actual por defecto (Python 3.14, sin GI): **234 passed, 5 skipped**
+>   (las 5 omisiones son las integraciones opt-in, desactivadas por defecto);
+>   con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**: **239 passed**.
+>   El **contrato de eventos del dominio** ([ADR-0007](../ADR/0007-device-change-event-contract.md))
 >   está **implementado y probado**: `DeviceChangeKind` (`@unique`),
 >   `DeviceChangeEvent` (invariantes validadas en construcción) y los alias
 >   `DeviceChangeCallback`/`Unsubscribe`; `subscribe_device_changes` ya
@@ -51,14 +66,13 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   ([repository-design.md](repository-design.md)), incluida la integración
 >   real solo lectura en **Python 3.12 / Gio**. El **repositorio completo**
 >   sigue pendiente: `subscribe_device_changes` lanza `NotImplementedError`
->   hasta el **Incremento 2 de señales** (por eso el checkbox global del
->   roadmap permanece `[ ]`). También siguen pendientes las **señales/
->   lifecycle (Incremento 2)** —es decir, el dispatch de los eventos del
->   contrato y el `unsubscribe` real— y la **detección completa de
->   adaptadores/dispositivos**. La **CLI `devices`** ya está **implementada y
->   verificada** sobre las consultas snapshot (solo snapshot, sin señales;
->   [devices-command.md](../cli/devices-command.md)); el checkbox del roadmap
->   para la CLI está marcado `[x]`.
+>   hasta el **dispatch del repositorio** (registro, cache de diff y emisión
+>   de `DeviceChangeEvent`; [signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch)),
+>   por lo que el checkbox global del roadmap permanece `[ ]`. También sigue
+>   pendiente la **detección completa de adaptadores/dispositivos**. La **CLI
+>   `devices`** ya está **implementada y verificada** sobre las consultas
+>   snapshot (solo snapshot, sin señales; [devices-command.md](../cli/devices-command.md));
+>   el checkbox del roadmap para la CLI está marcado `[x]`.
 
 ---
 
@@ -219,8 +233,9 @@ GI). Esto es un prerrequisito de la inyección de backend (§2.7).
 
 ### 2.4 Señales con `Gio.DBusConnection.signal_subscribe`
 
-Para el Incremento 2, el cliente obtiene su conexión (vía `Gio.bus_get_sync`
-o `proxy.get_connection()`) y suscribe:
+Para el Incremento 2, el cliente obtiene su conexión vía
+**`proxy.get_connection()`** (decisión de lifecycle; ver
+[signal-lifecycle-design](signal-lifecycle-design.md)) y suscribe:
 
 ```
 connection.signal_subscribe(
@@ -235,7 +250,11 @@ connection.signal_subscribe(
 ```
 
 Y una segunda suscripción para `org.freedesktop.DBus.Properties` /
-`PropertiesChanged`. La firma del callback es
+`PropertiesChanged`. En el contrato del Incremento 2 el worker usa **tres
+filtros exactos** (`InterfacesAdded`, `InterfacesRemoved`, `PropertiesChanged`),
+cada uno con `sender="org.bluez"` en el match; ver
+[signal-lifecycle-design §3](signal-lifecycle-design.md#3-worker-dedicado-de-señales).
+La firma del callback es
 `(connection, sender_name, object_path, interface_name, signal_name, parameters)`
 — el `parameters` es un `GLib.Variant` que se unpackea con las reglas de §2.3.
 
@@ -274,7 +293,9 @@ un único daemon es seguro simplemente no filtrar por sender y validar por
 
 El contrato del cliente expone un ciclo de vida explícito:
 
-- `open()` / constructor → conexión + snapshot.
+- Constructor → conexión/snapshot; **sin `open()`**: la conexión se obtiene de
+  `proxy.get_connection()` y el worker de señales arranca **perezosamente** en
+  la primera suscripción ([signal-lifecycle-design §3](signal-lifecycle-design.md#3-worker-dedicado-de-señales)).
 - `subscribe(callback)` → devuelve `SubscriptionId`.
 - `unsubscribe(subscription_id)` → libera la suscripción.
 - `close()` → libera suscripciones y referencias propias (no cierra el bus);
@@ -398,17 +419,23 @@ class BlueZDBusClient:
     def get_battery(self, device_path: str) -> BatteryLevel | None
     def get_rssi(self, device_path: str) -> RSSIReading | None
 
-    def subscribe_device_changes(self, cb: DeviceChangeCallback) -> int
-    def unsubscribe_device_changes(self, sub_id: int) -> None
+    def subscribe(self, cb: SignalCallback) -> int   # SignalEvent (metadata); delega en el protocolo
+    def unsubscribe(self, sub_id: int) -> None
 
     def close(self) -> None  # idempotente; libera suscripciones y referencias propias (no cierra el bus)
     def __enter__(self) -> "BlueZDBusClient"
     def __exit__(self, *exc) -> None
 ```
 
-`subscribe_device_changes` mapea las señales a `DeviceChangeCallback`
-(`DeviceChangeEvent` con `DeviceChangeKind` `ADDED`/`UPDATED`/`REMOVED` y
-`current`/`previous`, [ADR-0007](../ADR/0007-device-change-event-contract.md)),
+El cliente expone el **stream bajo nivel de señales** (`SignalEvent` con
+`interface_name`/`signal_name`/`object_path`, sin payload); `subscribe`/`unsubscribe`
+delegan en `GioDBusProtocol` y gestionan el worker dedicado
+([signal-lifecycle-design §2/§3](signal-lifecycle-design.md#2-capa-baja-señales-en-giodbusprotocol)).
+El mapeo de `SignalEvent` → `DeviceChangeCallback` (`DeviceChangeEvent` con
+`DeviceChangeKind` `ADDED`/`UPDATED`/`REMOVED` y `current`/`previous`,
+[ADR-0007](../ADR/0007-device-change-event-contract.md)) lo hace el
+**repositorio**, que posee el cache de diff
+([signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch)),
 manteniendo el contrato del dominio intacto.
 
 En el límite del repositorio (`IBluetoothRepository`), `subscribe_device_changes`
@@ -448,27 +475,41 @@ interna del cliente; el cliente conserva el mecanismo `subscribe → sub_id` +
 
 ### Incremento 2 — Señales y lifecycle
 
+> El contrato técnico de este incremento (Documentation First) está en
+> [signal-lifecycle-design.md](signal-lifecycle-design.md): `SignalEvent` bajo
+> nivel, worker dedicado, cache de diff y dispatch. Este diseño (§2.4/§2.5/§3)
+> describe los mecanismos; el contrato fija las decisiones.
+>
+> **Estado (2026-08-09):** el **nivel bajo** de este incremento está
+> **implementado y verificado** (worker dedicado, tres filtros exactos,
+> `SignalEvent`, `unsubscribe`/`close` idempotentes, integración real de
+> lifecycle). **Queda pendiente la parte del repositorio** (dispatch de
+> `DeviceChangeEvent` con cache de diff, §4 del contrato), que cerrará
+> `IBluetoothRepository`.
+
 **Alcance:**
-- `signal_subscribe` para `ObjectManager` (InterfacesAdded/Removed) y
-  `Properties` (PropertiesChanged) (§2.4).
-- Dispatch a `DeviceChangeCallback` manteniendo estado incremental
+- ✅ `signal_subscribe` para `ObjectManager` (InterfacesAdded/Removed) y
+  `Properties` (PropertiesChanged) (§2.4; tres filtros exactos según
+  [signal-lifecycle-design §3](signal-lifecycle-design.md#3-worker-dedicado-de-señales)).
+- ⏳ Dispatch a `DeviceChangeCallback` manteniendo estado incremental
   (los eventos traen payloads parciales; se refrescan con el snapshot de la
   propiedad y se notifica `DeviceInfo` completo).
-- `unsubscribe` + `close()` idempotentes, sin cerrar la conexión compartida
+- ✅ `unsubscribe` + `close()` idempotentes, sin cerrar la conexión compartida
   (§2.5).
-- CLI de monitoreo (o vista de Logs/dashboard en Fase 6) que itere el
+- ⏳ CLI de monitoreo (o vista de Logs/dashboard en Fase 6) que itere el
   `GMainContext` para entregar señales.
-- Respaldo por polling periódico de propiedades críticas según
+- ⏳ Respaldo por polling periódico de propiedades críticas según
   [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4).
 
 **Criterios de aceptación (Incremento 2):**
-- Conectar/desconectar un dispositivo (p.ej. `bluetoothctl power on` /
+- ⏳ Conectar/desconectar un dispositivo (p.ej. `bluetoothctl power on` /
   encendido físico) dispara el callback con el `DeviceInfo` correcto, sin
-  bloqueos ni pérdida de callbacks.
-- `unsubscribe`/`close` idempotentes; sin excepción al cerrar dos veces y sin
-  callbacks posteriores al unsubscribe.
-- Tests unitarios de dispatch con señales fabricadas (sin GI).
-- Se documenta empíricamente la fiabilidad de `PropertiesChanged` para
+  bloqueos ni pérdida de callbacks. *(Pendiente: requiere el dispatch del
+  repositorio y validación empírica de señales reales.)*
+- ✅ `unsubscribe`/`close` idempotentes; sin excepción al cerrar dos veces y sin
+  callbacks posteriores al unsubscribe (verificado a nivel de worker/cliente).
+- ⏳ Tests unitarios de dispatch con señales fabricadas (sin GI).
+- ⏳ Se documenta empíricamente la fiabilidad de `PropertiesChanged` para
   `Device1.Connected` en el entorno objetivo.
 
 ---
@@ -477,10 +518,10 @@ interna del cliente; el cliente conserva el mecanismo `subscribe → sub_id` +
 
 ```
 src/openbuds/infrastructure/bluez/
-├── dbus_protocol.py      # [INC 1] GioDBusProtocol (única importación de gi)
+├── dbus_protocol.py      # [INC 1 + INC 2 bajo nivel] GioDBusProtocol (única importación de gi; worker _SignalWorker)
 ├── object_mapper.py      # [implementado] dicts nativos → modelos (puro)
-├── dbus_client.py        # [INC 1+2] BlueZDBusClient (protocolo + errores + observador; usa object_mapper)
-└── bluez_repository.py   # [consultas implementadas] IBluetoothRepository sobre BlueZDBusClient (señales → Inc 2)
+├── dbus_client.py        # [INC 1 + INC 2 bajo nivel] BlueZDBusClient (snapshot + delegación subscribe/unsubscribe/close)
+└── bluez_repository.py   # [consultas implementadas; dispatch señales → pendiente] IBluetoothRepository sobre BlueZDBusClient
 ```
 
 > El contrato técnico (Documentation First) del mapper está en
@@ -492,8 +533,12 @@ src/openbuds/infrastructure/bluez/
 `bluez_repository.py` empezó como esqueleto en Fase 1; sus **consultas
 snapshot** ya están **implementadas y verificadas** (cliente inyectable,
 snapshot fresco por llamada; ver [repository-design.md](repository-design.md)).
-La suscripción a cambios (`subscribe_device_changes`) se completará en el
-Incremento 2 y cerrará el contrato `IBluetoothRepository`.
+El **nivel bajo de señales** del Incremento 2 ya está disponible en el cliente
+(`subscribe`/`unsubscribe`/`close` sobre `SignalEvent`); la suscripción a
+cambios del repositorio (`subscribe_device_changes`, con cache de diff y
+dispatch de `DeviceChangeEvent`) se completará en la **parte repositorio** del
+Incremento 2 ([signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch))
+y cerrará el contrato `IBluetoothRepository`.
 
 ---
 
@@ -516,19 +561,22 @@ Incremento 2 y cerrará el contrato `IBluetoothRepository`.
 |-------|-------------|--------------------------|-----------|
 | Unit (mapper) | No | No | Traducción dicts → modelos, valores ausentes, tipos raros |
 | Unit (cliente) | No | No | Orquestación con `FakeDBusProtocol`, traducción de errores, lifecycle |
-| Unit (dispatch señales) | No | No | Fabricar `parameters` GVariant-like (dicts) → `DeviceChangeCallback` |
-| Integración (marcados) | Sí | Sí | `GetManagedObjects` real, señales reales con un dispositivo |
-| E2E / manual | Sí | Sí | `openbuds devices`, monitoreo con conexión/desconexión real |
+| Unit (worker señales) | No | No | `_SignalWorker` con fakes deterministas: 3 filtros exactos, `SignalEvent`, orden de registro, error isolation, unsubscribe/close, rollback, reentrancia |
+| Unit (dispatch repo) | No | No | ⏳ Pendiente: fabricar `SignalEvent` → `DeviceChangeCallback` (diff cache→nuevo, orden determinista) |
+| Integración (marcados) | Sí | Sí | `GetManagedObjects` real + lifecycle real de señales (subscribe/unsubscribe/close/snapshot; **sin** afirmar recepción de señales reales) |
+| E2E / manual | Sí | Sí | `openbuds devices`; monitoreo con conexión/desconexión real (⏳ cuando exista el dispatch) |
 
 - Los tests de integración se marcan (p.ej. `@pytest.mark.integration` /
   `@pytest.mark.slow`) y no forman parte del baseline por defecto, siguiendo
   el patrón del Makefile (`make test-quick` = solo unit).
-- El baseline actual del proyecto es de **205 tests** en verde + **4 skipped**
-  (las integraciones BlueZ opt-in desactivadas por defecto; 2026-08-09); las
-  pruebas del mapper, del cliente, del contrato de eventos
+- Baseline actual por defecto (Python 3.14, sin GI/bus): **234 tests** en verde
+  + **5 skipped** (las integraciones BlueZ opt-in desactivadas por defecto;
+  2026-08-09); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**:
+  **239 passed**. Las pruebas del mapper, del cliente, del worker de señales y
+  del lifecycle de bajo nivel, del contrato de eventos
   ([ADR-0007](../ADR/0007-device-change-event-contract.md)), de las consultas
-  del repositorio y de la CLI `devices` de este diseño ya forman parte del
-  suite y el resto de incrementos se añaden sin romperlo.
+  del repositorio y de la CLI `devices` ya forman parte del suite; el dispatch
+  del repositorio (Incremento 2, parte repositorio) se añadirá sin romperlo.
 - Verificación manual complementaria (solo lectura):
   `busctl tree org.bluez`, `busctl introspect org.bluez /`, `dbus-send
   --system --dest=org.bluez --print-reply / org.freedesktop.DBus.ObjectManager.GetManagedObjects`.

@@ -14,8 +14,10 @@
 > - Test de integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) verificado en
 >   **Python 3.12 / Gio** sobre un snapshot real de BlueZ (`GetManagedObjects`),
 >   sin métodos mutadores ni exposición de la MAC.
-> - Suite actual del proyecto: **205 passed, 4 skipped** (las 4 omisiones son
->   integraciones opt-in, desactivadas por defecto).
+> - Suite actual del proyecto por defecto (Python 3.14): **234 passed, 5
+>   skipped** (las 5 omisiones son integraciones opt-in, desactivadas por
+>   defecto); con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio: **239
+>   passed**.
 
 - **Fase:** 3 (Bluetooth) — ítem **separado** del roadmap (ver §5 de
   [gio-dbus-client-design.md](gio-dbus-client-design.md))

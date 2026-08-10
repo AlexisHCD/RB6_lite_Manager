@@ -188,7 +188,7 @@ Ver `docs/ARCHITECTURE.md` para el detalle y el diagrama.
 | [0004](docs/ADR/0004-clean-architecture-dependency-rule.md) | Clean Architecture, regla de dependencias | `presentation → application → domain ← infrastructure`. |
 | [0005](docs/ADR/0005-device-profile-contract.md) | Perfiles de dispositivo en YAML | Añadir dispositivo = añadir YAML, sin tocar el núcleo. |
 | [0006](docs/ADR/0006-app-config-toml-xdg-atomic-write.md) | Configuración TOML con rutas XDG y escritura atómica | Configuración propia separada, rutas XDG válidas y guardado sin truncado. |
-| [0007](docs/ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo (`DeviceChangeEvent`) | `DeviceChangeKind`/`DeviceChangeEvent`/`Unsubscribe`; contrato del dominio listo y probado, dispatch del Incremento 2 pendiente. |
+| [0007](docs/ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo (`DeviceChangeEvent`) | `DeviceChangeKind`/`DeviceChangeEvent`/`Unsubscribe`; contrato del dominio listo y probado; nivel bajo de señales/lifecycle del Incremento 2 implementado y verificado; dispatch del repositorio (`subscribe_device_changes`) pendiente. |
 
 ### Hallazgos críticos que condicionan el código
 

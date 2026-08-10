@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
 import pytest
 
 from openbuds.core.errors import BluetoothError
@@ -9,6 +12,9 @@ from openbuds.infrastructure.bluez.dbus_protocol import (
     GioDBusProtocol,
     ManagedObjects,
 )
+
+if TYPE_CHECKING:
+    from openbuds.infrastructure.bluez.dbus_protocol import SignalEvent
 
 SNAPSHOT: ManagedObjects = {
     "/org/bluez/hci0": {
@@ -166,10 +172,23 @@ class FakeProvider:
     def __init__(self, snapshot: ManagedObjects) -> None:
         self.snapshot_value = snapshot
         self.calls = 0
+        self.subscribe_callbacks: list[Callable[[SignalEvent], None]] = []
+        self.unsubscribe_ids: list[int] = []
+        self.close_calls = 0
 
     def get_managed_objects(self) -> ManagedObjects:
         self.calls += 1
         return self.snapshot_value
+
+    def subscribe(self, callback: Callable[[SignalEvent], None]) -> int:
+        self.subscribe_callbacks.append(callback)
+        return 17
+
+    def unsubscribe(self, subscription_id: int) -> None:
+        self.unsubscribe_ids.append(subscription_id)
+
+    def close(self) -> None:
+        self.close_calls += 1
 
 
 def test_client_delegates_snapshot_to_injected_provider() -> None:
@@ -190,3 +209,63 @@ def test_client_accepts_falsy_injected_provider() -> None:
 
     assert client.snapshot() == SNAPSHOT
     assert provider.calls == 1
+
+
+def test_signal_event_is_frozen_and_slotted() -> None:
+    from dataclasses import FrozenInstanceError, is_dataclass
+
+    from openbuds.infrastructure.bluez.dbus_protocol import SignalEvent
+
+    event = SignalEvent(
+        interface_name="org.freedesktop.DBus.ObjectManager",
+        signal_name="InterfacesAdded",
+        object_path="/org/bluez/hci0",
+    )
+
+    assert is_dataclass(event)
+    assert hasattr(type(event), "__slots__")
+    assert event.interface_name == "org.freedesktop.DBus.ObjectManager"
+    assert event.signal_name == "InterfacesAdded"
+    assert event.object_path == "/org/bluez/hci0"
+
+    with pytest.raises(FrozenInstanceError):
+        event.object_path = "/org/bluez/hci1"
+
+
+def test_client_delegates_subscribe_and_unsubscribe_to_provider() -> None:
+    provider = FakeProvider(SNAPSHOT)
+    client = BlueZDBusClient(provider=provider)
+
+    def callback(event: SignalEvent) -> None:
+        del event
+
+    subscription_id = client.subscribe(callback)
+    client.unsubscribe(subscription_id)
+
+    assert provider.subscribe_callbacks == [callback]
+    assert provider.unsubscribe_ids == [17]
+
+
+def test_client_close_is_delegated_idempotently_by_real_client_contract() -> None:
+    provider = FakeProvider(SNAPSHOT)
+    client = BlueZDBusClient(provider=provider)
+
+    client.close()
+    client.close()
+
+    assert provider.close_calls == 2
+
+
+def test_client_context_manager_closes_provider_on_normal_exit_and_exception() -> None:
+    normal_provider = FakeProvider(SNAPSHOT)
+    with BlueZDBusClient(provider=normal_provider):
+        pass
+    assert normal_provider.close_calls == 1
+
+    error_provider = FakeProvider(SNAPSHOT)
+    with (
+        pytest.raises(RuntimeError, match="context failure"),
+        BlueZDBusClient(provider=error_provider),
+    ):
+        raise RuntimeError("context failure")
+    assert error_provider.close_calls == 1

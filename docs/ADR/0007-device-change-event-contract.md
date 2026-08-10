@@ -155,10 +155,11 @@ Ninguno depende de GI ni de capas externas (cumple
   con el Incremento 2 (su lambda de dos parámetros se ajusta a la nueva firma).
   El cambio se aplica sin tocar otras capas.
 
-## Verificación (contrato implementado y probado; lifecycle real pendiente)
+## Verificación (contrato y lifecycle bajo nivel probados; dispatch pendiente)
 
 El **contrato del dominio** está **implementado y probado** sin GI ni bus del
-sistema (suite actual: **205 passed, 4 skipped**, 2026-08-09):
+sistema (suite por defecto: **234 passed, 5 skipped**; suite completa en
+Python 3.12/Gio: **239 passed**, 2026-08-09):
 
 - `DeviceChangeKind` con valores únicos (`@unique`), cubierto en
   `tests/unit/test_enums.py`.
@@ -169,11 +170,11 @@ sistema (suite actual: **205 passed, 4 skipped**, 2026-08-09):
   `Unsubscribe` nuevo, ambos verificados (`test_device_change.py`).
 - `IBluetoothRepository.subscribe_device_changes` ya **devuelve `Unsubscribe`**
   y `BlueZRepository` lo declara, pero su implementación real sigue lanzando
-  `NotImplementedError` hasta el **Incremento 2 de señales**
+  `NotImplementedError` hasta el **dispatch de señales del repositorio**
   (`test_subscribe_device_changes_remains_unimplemented`).
 
-Quedan **pendientes de la implementación del Incremento 2** (señales de BlueZ)
-y se verificarán cuando exista el dispatch real:
+El lifecycle Gio de bajo nivel ya verifica registro, aislamiento, mismo hilo,
+unsubscribe y cierre. Quedan **pendientes del dispatch del repositorio**:
 
 - `Unsubscribe` **idempotente en ejecución**: invocarlo dos veces no lanza ni
   repite la liberación de la suscripción GIO.

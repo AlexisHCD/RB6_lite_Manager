@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from types import TracebackType
+from typing import Literal, cast
+
 from openbuds.infrastructure.bluez.dbus_protocol import (
     GioDBusProtocol,
     ManagedObjects,
-    ManagedObjectsProvider,
+    SignalCallback,
+    SignalProvider,
+    SnapshotProvider,
 )
 
 # Constantes estables del servicio BlueZ D-Bus (verificadas en docs).
@@ -26,9 +31,36 @@ IFACE_MEDIA_PLAYER1 = "org.bluez.MediaPlayer1"
 class BlueZDBusClient:
     """Orquesta la obtención de snapshots sin mapearlos al dominio."""
 
-    def __init__(self, provider: ManagedObjectsProvider | None = None) -> None:
+    def __init__(self, provider: SnapshotProvider | None = None) -> None:
         self._provider = provider if provider is not None else GioDBusProtocol()
 
     def snapshot(self) -> ManagedObjects:
         """Devuelve el snapshot obtenido por el proveedor configurado."""
         return self._provider.get_managed_objects()
+
+    def subscribe(self, callback: SignalCallback) -> int:
+        """Registra una callback en el proveedor configurado."""
+        return cast(SignalProvider, self._provider).subscribe(callback)
+
+    def unsubscribe(self, subscription_id: int) -> None:
+        """Cancela una suscripción en el proveedor configurado."""
+        cast(SignalProvider, self._provider).unsubscribe(subscription_id)
+
+    def close(self) -> None:
+        """Cierra el proveedor configurado sin añadir semántica propia."""
+        cast(SignalProvider, self._provider).close()
+
+    def __enter__(self) -> BlueZDBusClient:
+        """Devuelve el cliente para usarlo como context manager."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> Literal[False]:
+        """Cierra el proveedor y deja propagarse cualquier excepción."""
+        del exc_type, exc_value, traceback
+        self.close()
+        return False

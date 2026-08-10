@@ -80,7 +80,9 @@ def test_device_change_event_is_frozen_and_slotted() -> None:
 
     with pytest.raises(FrozenInstanceError):
         event.kind = DeviceChangeKind.UPDATED  # type: ignore[misc]
-    with pytest.raises(AttributeError):
+    # CPython 3.12 raises TypeError here while 3.14 raises AttributeError for
+    # an unknown field on a frozen, slotted dataclass; both reject mutation.
+    with pytest.raises((AttributeError, TypeError)):
         event.extra = None  # type: ignore[attr-defined]
 
 

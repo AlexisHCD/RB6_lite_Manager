@@ -38,11 +38,15 @@ cache, sin lifecycle y sin escritura.
 > `bluez_repository.py` corren **sin GI ni bus del sistema**, y el test de
 > integración opt-in (`tests/integration/test_bluez_repository.py`,
 > `OPENBUDS_RUN_INTEGRATION=1`) pasó en **Python 3.12 / Gio** sobre BlueZ real
-> (solo lectura). Suite total: **205 passed, 4 skipped** (las 4 omisiones son
-> las integraciones opt-in, desactivadas por defecto).
-> `subscribe_device_changes` **sigue lanzando `NotImplementedError`** hasta el
-> Incremento 2, por lo que el checkbox global del roadmap **permanece `[ ]`**
-> (ver §6).
+> (solo lectura). Suite total por defecto (Python 3.14): **234 passed, 5
+> skipped**; con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio: **239
+> passed**.
+> `subscribe_device_changes` **sigue lanzando `NotImplementedError`**: el
+> **nivel bajo de señales** del Incremento 2 ya está implementado en el cliente
+> (worker dedicado, `SignalEvent`, suscripción/unsubscribe/close;
+> [signal-lifecycle-design](signal-lifecycle-design.md)), pero **falta el
+> dispatch del repositorio** (registro, cache de diff y emisión), por lo que el
+> checkbox global del roadmap **permanece `[ ]`** (ver §6).
 
 ---
 
@@ -86,7 +90,10 @@ class BlueZRepository(IBluetoothRepository):
 - En producción el default construye `BlueZDBusClient()` (GI real); en tests se
   inyecta un `FakeSnapshotClient` con snapshots guionados.
 - **El Protocol vive en `bluez_repository.py`** (contrato interno de
-  infraestructura, no del dominio).
+  infraestructura, no del dominio). Para el **Incremento 2 de señales** este
+  Protocol se amplía con `subscribe`/`unsubscribe`/`close` (stream bajo nivel de
+  `SignalEvent`), sin alterar las consultas snapshot; ver
+  [signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch).
 
 ---
 
@@ -204,16 +211,26 @@ sin envolverlas de nuevo ni tragarlas (§5.2).
 
 ## 6. `subscribe_device_changes` → NotImplemented (Incremento 2)
 
-`subscribe_device_changes(callback)` **sigue lanzando `NotImplementedError`**:
-las señales (`InterfacesAdded`/`InterfacesRemoved`/`PropertiesChanged`) y el
-lifecycle del cliente D-Bus son del Incremento 2
-([gio-dbus-client-design §4 — Incremento 2](gio-dbus-client-design.md#incremento-2--señales-y-lifecycle)).
+`subscribe_device_changes(callback)` **sigue lanzando `NotImplementedError`**.
+El **nivel bajo de señales** del Incremento 2 ya está **implementado y
+verificado** en el cliente D-Bus: worker dedicado, tres filtros exactos
+(`InterfacesAdded`/`InterfacesRemoved`/`PropertiesChanged`), `SignalEvent` y el
+lifecycle `subscribe`/`unsubscribe`/`close` idempotente
+([gio-dbus-client-design §4 — Incremento 2](gio-dbus-client-design.md#incremento-2--señales-y-lifecycle),
+[signal-lifecycle-design §2/§3](signal-lifecycle-design.md#2-capa-baja-señales-en-giodbusprotocol)).
+Lo que **falta es la parte del repositorio**: el **registro de suscriptores, la
+cache de diff y el dispatch de `DeviceChangeEvent`** (con `Unsubscribe`
+idempotente y el cierre de carrera A→B). El **contrato técnico** de esa parte
+está en
+[signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch);
+al implementarla, este método deja de lanzar `NotImplementedError`.
 
 **Por eso el checkbox global del roadmap no se marca completo:**
 [ROADMAP §Fase 3](../ROADMAP.md) — *"Implementación de `IBluetoothRepository`"* —
 **permanece `[ ]`** tras este incremento. El contrato `IBluetoothRepository`
-solo se cumplirá en su totalidad cuando existan señales; este incremento
-documenta y prueba explícitamente que la suscripción aún no está disponible.
+solo se cumplirá en su totalidad cuando exista el **dispatch** del repositorio;
+este incremento documenta y prueba explícitamente que la suscripción aún no
+está disponible.
 
 ---
 
