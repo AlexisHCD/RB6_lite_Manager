@@ -23,6 +23,8 @@ class SystemInfo:
             Crítico: Ubuntu 24.04 usa "lua-0.4".
         dbus_version: Versión del daemon D-Bus / systemd.
         has_bluetooth_adapter: Si se detectó al menos un adaptador Bluetooth.
+        system_bus_available: Si el bus D-Bus del sistema está accesible.
+        user_config_writable: Si el usuario puede escribir en su configuración.
         is_supported: Si el entorno cumple los requisitos mínimos del proyecto.
     """
 
@@ -35,4 +37,6 @@ class SystemInfo:
     wireplumber_config_style: str
     dbus_version: str
     has_bluetooth_adapter: bool
+    system_bus_available: bool
+    user_config_writable: bool
     is_supported: bool

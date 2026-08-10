@@ -7,7 +7,7 @@ Subcomandos (planificados):
   - health     Ejecuta un Health Check (Fase 5).
   - bench      Ejecuta un benchmark de enlace (Fase 5).
 
-Estado: Fase 1 — ``doctor`` funcional (usa el detector de entorno real);
+Estado: Fase 2 — ``doctor`` funcional (usa el detector de entorno real);
 el resto se implementa en sus fases correspondientes.
 """
 
@@ -32,6 +32,8 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     print(f"PipeWire:        {info.pipewire_version}")
     print(f"WirePlumber:     {info.wireplumber_version} ({info.wireplumber_config_style})")
     print(f"D-Bus/systemd:   {info.dbus_version}")
+    print(f"Bus del sistema:  {'sí' if info.system_bus_available else 'no'}")
+    print(f"Configuración usuario: {'sí' if info.user_config_writable else 'no'}")
     print(f"Adaptador BT:    {'sí' if info.has_bluetooth_adapter else 'no detectado'}")
     print(f"Entorno soportado: {'SÍ' if info.is_supported else 'NO'}")
     return 0 if info.is_supported else 1

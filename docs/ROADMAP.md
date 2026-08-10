@@ -19,7 +19,7 @@ de comenzar la siguiente. El progreso se marca con checkbox.
 - [ ] Logging estructurado (rotación, handler puente hacia la vista de Logs)
 - [ ] CLI ampliada (subcomandos `devices`, `health`)
 - [ ] Gestión de errores (jerarquía ya definida en Fase 1; integrar aquí)
-- [ ] Detección de entorno completa (`system/environment_detector.py`)
+- [x] Detección de entorno completa (`system/environment_detector.py`)
 
 ## Fase 3 — Bluetooth
 
