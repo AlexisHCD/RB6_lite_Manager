@@ -54,6 +54,15 @@ escritura y sin mutación.
 > passed, 6 skipped**; con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio:
 > **282 passed**. Ruff y mypy en verde. El checkbox global del roadmap queda
 > **`[x]`** (ver [§6](#6-subscribe_device_changes--implementado-incremento-2)).
+>
+> **Alcance de lo "completo":** el contrato **`IBluetoothRepository`** (consultas
+> snapshot + `subscribe_device_changes`) está **completo**. La **resiliencia por
+> polling** recomendada en [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4) es
+> **externa al contrato y sigue pendiente** de implementar (deuda de la Fase 3;
+> [ROADMAP](../ROADMAP.md)): se implementaría fuera de `IBluetoothRepository`,
+> **sin cambiar la interfaz**. Hoy no hay auriculares conectados ni nodos
+> Bluetooth (`pw-dump` con 0 objetos) para validar el flujo real contra
+> hardware.
 
 ---
 
@@ -236,7 +245,9 @@ técnico completo (código real, invariantes y tests) está en
 **Por eso el checkbox global del roadmap se marca completo:**
 [ROADMAP §Fase 3](../ROADMAP.md) — *"Implementación de `IBluetoothRepository`"* —
 queda **`[x]`**: el contrato `IBluetoothRepository` se cumple en su totalidad
-(consultas snapshot + suscripción con dispatch).
+(consultas snapshot + suscripción con dispatch). La **resiliencia por polling**
+de [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4) queda **fuera del contrato y
+pendiente** (externo, sin cambiar la interfaz; [ROADMAP](../ROADMAP.md)).
 
 ### 6.1 Implementación del dispatch (`subscribe_device_changes`)
 
@@ -497,7 +508,8 @@ Internas:
   `dbus_protocol.py`, [dbus-interfaces.md](dbus-interfaces.md),
   [ADR-0007](../ADR/0007-device-change-event-contract.md),
   [RESEARCH_LIMITS §3](../RESEARCH_LIMITS.md#3) (batería opcional) y §4
-  (señales/polling → Incremento 2), [ROADMAP](../ROADMAP.md) §Fase 3.
+  (señal primaria implementada; **polling de respaldo pendiente**),
+  [ROADMAP](../ROADMAP.md) §Fase 3.
 
 Oficiales (verificadas en [gio-dbus-client-design §8](gio-dbus-client-design.md#8-fuentes-oficiales-verificadas)
 y [object-mapper-contract §11](object-mapper-contract.md#11-fuentes-oficiales-verificadas)):

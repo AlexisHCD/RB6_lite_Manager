@@ -55,9 +55,20 @@ y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md). El
 del roadmap marcado), incluido el contrato de eventos
 ([ADR-0007](docs/ADR/0007-device-change-event-contract.md):
 `DeviceChangeKind`, `DeviceChangeEvent` y `Unsubscribe`), probado con fakes y
-integración. **Pendientes de la Fase 3:** la detección completa de
-adaptadores/dispositivos y la validación empírica de propiedades runtime
-inciertas (ver
+integración. La **detección de adaptadores y dispositivos** está **completa**
+(implementación + verificación real). **Verificación real 2026-08-10** (sin
+auriculares conectados): `doctor` exit 0 (Ubuntu 24.04, BlueZ 5.72, PipeWire
+1.0.5, WirePlumber 0.4.17 Lua, bus/adaptador/config sí); adaptador detectado
+(`hci0`, `Powered=True`, `Discovering=False`, `Discoverable=False`); **caso
+cero dispositivos**: `openbuds devices` exit 0 con `No se encontraron
+dispositivos Bluetooth.` y `pw-dump` con **0 nodos Bluetooth** (sin property
+keys). **No** se afirma detección del Redmi Buds 6 Lite (no había hardware
+conectado). **Pendientes de la Fase 3:** la **validación empírica de
+propiedades runtime inciertas** (bloqueada: sin auriculares conectados ni nodos
+Bluetooth) y el **polling periódico de respaldo** para
+`Connected`/`Paired`/`Trusted`
+([RESEARCH_LIMITS §4](docs/RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)),
+**no implementado** y necesario antes de cerrar la Fase 3 (ver
 [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/cli/devices-command.md`](docs/cli/devices-command.md)).
 La aplicación completa aún no está terminada: diagnóstico y la GUI se
 implementan en las fases siguientes.

@@ -66,14 +66,22 @@ Fuente: [battery-api.txt](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tre
 
 ## 4. Fiabilidad de señales D-Bus
 
-**Estado:** mayoritariamente fiable, con respaldo recomendado.
+**Estado:** señal primaria **implementada**; respaldo por **polling
+pendiente**.
 
 En ciertas situaciones, la señal `PropertiesChanged` de BlueZ puede no llegar.
 Como respaldo, se recomienda **polling periódico** de propiedades críticas
 (`Connected`, `Paired`, `Trusted`) además de la suscripción a señales.
 
-**Implicación:** el repositorio Bluetooth implementa suscripción a señales
-(primario) + polling periódico (respaldo) en Fase 3.
+**Implicación:** el repositorio Bluetooth implementa la **señal primaria**
+(`BlueZRepository.subscribe_device_changes`: refresh completo por señal + diff
+de snapshots; ver [repository-design §6](bluez/repository-design.md#6-subscribe_device_changes--implementado-incremento-2)).
+El **polling periódico de respaldo sigue pendiente de implementar** (deuda
+explícita de la Fase 3; [ROADMAP](ROADMAP.md)); no debe afirmarse que ambos
+mecanismos ya están en producción. **Hoy no hay dispositivo ni nodos Bluetooth
+para validar** ninguna de las dos vías contra hardware real: sin auriculares
+conectados, `pw-dump` reporta **0 objetos Bluetooth** (sin property keys) y el
+snapshot de BlueZ tiene 0 dispositivos.
 
 Fuente: discusiones de la comunidad; el mecanismo base está en la
 [DBus specification](https://dbus.freedesktop.org/doc/dbus-specification.html).
