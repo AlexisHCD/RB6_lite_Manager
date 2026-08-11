@@ -1,112 +1,133 @@
 # Roadmap de OpenBuds Manager
 
-Las fases se desarrollan **secuencialmente**: cada una se completa y valida antes
-de comenzar la siguiente. El progreso se marca con checkbox.
+El roadmap prioriza una aplicación usable para Redmi Buds 6 Lite. Una etapa que
+dependa del hardware queda como **implementación software completa; validación
+física pendiente** hasta obtener evidencia real. No se infieren propiedades
+ausentes ni se ejecutan acciones de hardware sin aprobación explícita.
 
-> **Nota (2026-08-10):** la **implementación software de la Fase 3 está
-> completa** (todos sus ítems de código marcados `[x]`), pero la **validación
-> empírica del Redmi Buds 6 Lite sigue bloqueada por hardware no conectado**
-> (PipeWire reporta 0 nodos Bluetooth). Mientras esa validación esté pendiente,
-> la **Fase 4 puede avanzar en paralelo**: no depende de la validación empírica
-> del dispositivo.
+## Etapa 0 — Estabilización inmediata (en curso)
 
-## Fase 1 — Planificación y Arquitectura ✅
+**Objetivo:** recuperar una base reproducible antes de añadir funciones.
 
-- [x] Comprender el problema y los requisitos
-- [x] Revisar documentación oficial (BlueZ, PipeWire, WirePlumber, D-Bus)
-- [x] Definir la arquitectura (Clean Architecture por capas)
-- [x] Definir módulos y árbol del proyecto
-- [x] Documentar decisiones técnicas (ADRs)
-- [x] Crear cimientos: modelos del dominio, contratos, core, esqueletos
-- [x] Configurar tooling (ruff, mypy, pytest) y validar base (31 tests)
+- [x] Revisar y cerrar el trabajo local de `WpctlAdapter`: validado y aprobado;
+  publicación pendiente de commit/push autorizado. Solo lectura, mutaciones
+  deshabilitadas.
+- [x] Ruff no presenta el fallo anunciado al inicio de esta revisión; volver a
+  ejecutar todos los gates al cerrar el incremento local.
+- [x] Recrear, en una tarea aprobada aparte, `.venv` con `/usr/bin/python3` y
+  `--system-site-packages`; validar PyGObject/Gio. No usar Linuxbrew para BlueZ.
+- [ ] Hacer que `openbuds doctor` distinga sistema soportado, runtime listo y
+  hardware disponible, incluido un venv que no pueda importar Gio.
+- [ ] Corregir rutas y afirmaciones obsoletas restantes.
+- [ ] Añadir `LICENSE` GPL-3.0-or-later.
+- [ ] Diseñar CI básica para unit tests, Ruff y mypy.
+- [ ] Mantener WirePlumber en modo de solo lectura.
 
-## Fase 2 — Backend base ✅
+**Salida:** unit tests, Ruff y mypy pasan; `doctor` detecta un runtime inválido;
+las integraciones de lectura pasan con Python 3.12/Gio; README y roadmap no
+afirman capacidades no verificadas.
 
-- [x] Gestión de configuración (`core/config.py` + `persistence/app_config.py`)
-- [x] Logging estructurado (rotación, handler puente hacia la vista de Logs)
-- [x] CLI base (`doctor`, `config`, `version`, bootstrap)
-- [x] Gestión de errores (manejo uniforme de `OpenBudsError`)
-- [x] Detección de entorno completa (`system/environment_detector.py`)
+## Etapa 1 — Caracterización física pasiva
 
-## Fase 3 — Bluetooth
+**Objetivo:** observar los Redmi Buds 6 Lite reales antes de detectar códec,
+cambiar perfiles o cerrar la interfaz definitiva.
 
-> **Estado (2026-08-10):** **implementación software completa** (todos los ítems
-> de código `[x]`). La **validación empírica del Redmi Buds 6 Lite sigue
-> pendiente** (último ítem `[ ]`): no hay hardware conectado ni nodos Bluetooth.
-> **No** se afirma el dispositivo validado ni la Fase 3 cerrada empíricamente;
-> la **Fase 4 puede continuar en paralelo**.
+Estados de prueba, en este orden:
 
-- [x] CLI `devices` (`openbuds devices` sobre las consultas snapshot: `-p|--paired-only` y `-a|--adapter`; TSV en español con privacidad y sanitización; solo snapshot, sin señales; TDD + smoke real Python 3.12/Gio verificados)
-- [x] Cliente D-Bus BlueZ — Incremento 1: snapshot `GetManagedObjects` (`bluez/dbus_protocol.py` + `bluez/dbus_client.py`, PyGObject/Gio; verificado con test de integración opt-in)
-- [x] Cliente D-Bus BlueZ — Incremento 2: señales y lifecycle (`InterfacesAdded/Removed`, `PropertiesChanged`; suscripción, unsubscribe, cierre) — ✅ **completo (nivel bajo + dispatch del repositorio + polling de respaldo)**:
-  - **Nivel bajo:** worker dedicado (`_SignalWorker`, GLib `MainContext`/`MainLoop` daemon), tres filtros exactos, `SignalEvent` (metadata, sin payload), suscripción/unsubscribe/close idempotentes con cero callbacks tras el unsubscribe, arranque perezoso/restart, **hook `on_ready` opcional** (corre en el hilo del worker tras instalar filtros y registrar el callback lógico, **antes** de que `subscribe` retorne; con rollback atómico si lanza) y **polling de respaldo `on_poll`/`poll_interval_ms`** (`GSource` de timeout monotónico en el worker tras `on_ready`; validación pura `type int > 0` antes del worker/GIO), timeout y rollback atómico; TDD determinista (sin GI) + integración real de **lifecycle** en Python 3.12/Gio (25 ciclos subscribe/unsubscribe/close + snapshot fresco, creación/destrucción inmediata del timer de polling con `poll_interval_ms=60_000` sin tick real, sin cerrar el bus, sin inducir señales).
-  - **Dispatch del repositorio:** `BlueZRepository.subscribe_device_changes` implementado, con **diff puro de snapshots** (`device_change_diff.py`: orden REMOVED→ADDED→UPDATED por `object_path`, `UPDATED` solo si `DeviceInfo` mapeado es desigual, sin eventos Battery/RSSI-only), init A→B en el worker vía `on_ready` (snapshot B cierra la carrera, sin replay de preexistente), cache de diff con refresh completo por señal, aislamiento de callbacks, suscriptores múltiples/tardíos/reentrantes, `Unsubscribe` idempotente con espera de in-flight, concurrencia de init, rollback de errores y sin cerrar cliente/bus. El **polling** (`_handle_poll` → `_refresh_and_dispatch`, mismo pipeline que `_handle_signal`) es el **respaldo** de la señal y detecta `Connected`/`Paired`/`Trusted`. TDD determinista (`tests/unit/test_bluez_repository_signals.py`, `tests/unit/test_device_change_diff.py`) + integración real opt-in de **lifecycle A/B** (`tests/integration/test_bluez_repository_signals.py`: subscribe/unsubscribe + snapshot A/B + bus usable; **sin** señales inducidas, **sin** afirmar recepción real, **sin** escrituras). Contrato técnico en [signal-lifecycle-design](bluez/signal-lifecycle-design.md). El contrato de eventos del dominio ([ADR-0007](ADR/0007-device-change-event-contract.md): `DeviceChangeKind`/`DeviceChangeEvent`/`Unsubscribe`) está **implementado y probado**
-- [x] Mapeo de objetos D-Bus → modelos (`bluez/object_mapper.py`)
-- [x] Implementación de `IBluetoothRepository` (`bluez/bluez_repository.py`) — ✅ **completo**: consultas snapshot (`list_adapters`/`list_devices`/`get_device`/`get_battery`/`get_rssi`, cliente inyectable + snapshot fresco; TDD e integración real solo lectura) **y** `subscribe_device_changes` con dispatch de `DeviceChangeEvent` (registro de suscriptores, cache de diff, cierre de carrera A→B vía `on_ready` en el worker, orden determinista REMOVED→ADDED→UPDATED y `Unsubscribe` idempotente; contrato en [signal-lifecycle-design §4](bluez/signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch), eventos del dominio [ADR-0007](ADR/0007-device-change-event-contract.md) probados), **con polling de respaldo inyectable** (`poll_interval_ms`, default 5000 ms, validado en el constructor). Verificado con fakes deterministas + integración real de lifecycle A/B en Python 3.12/Gio
-- [x] Detección de adaptadores y dispositivos — **implementación completa** (repo + mapper + CLI `devices` + señales + polling) y **verificación real** (2026-08-10, sin auriculares conectados): adaptador detectado (`hci0`, `Powered=True`, `Discovering=False`, `Discoverable=False`) y **caso cero dispositivos** (`openbuds devices` → exit 0 con `No se encontraron dispositivos Bluetooth.`; snapshot con 0 `Device1`). **No** se afirma detección del Redmi Buds 6 Lite: no había hardware conectado; la detección del dispositivo real se valida cuando haya uno
-- [ ] Validación empírica de propiedades runtime inciertas — **bloqueada**: los auriculares no están conectados y PipeWire reporta **0 nodos Bluetooth** (`pw-dump` exit 0, sin objetos ni property keys); requiere un dispositivo real conectado
-- [x] Polling periódico de respaldo para `Connected`/`Paired`/`Trusted` — recomendado por [RESEARCH_LIMITS §4](RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus); **implementado y verificado (2026-08-10)** ([signal-lifecycle-design §12](bluez/signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10) y [repository-design §12](bluez/repository-design.md#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10): extensión interna compatible `on_poll`/`poll_interval_ms`, validación pura `type int > 0` antes del worker/GIO, `GSource` de timeout monotónico en el worker tras `on_ready`, un solo timer por repositorio, pipeline común señal/poll). La señal primaria (refresh completo por señal + diff de snapshots) y el respaldo por polling están **implementados**; la **validación empírica contra el dispositivo real sigue pendiente** (sin hardware conectado)
+1. Emparejados y desconectados.
+2. Conectados sin reproducir audio.
+3. Reproduciendo música mediante A2DP.
+4. Usando el micrófono mediante HFP.
+5. Desconexión y reconexión manuales.
+6. Suspensión y reanudación de Ubuntu.
 
-## Fase 4 — Optimización
+En cada estado se observarán `Device1`, `Battery1` si aparece, RSSI,
+`ServicesResolved`, nodos de `pw-dump`, `wpctl status`, `wpctl inspect`, perfiles
+ofrecidos, propiedades de códec/transporte si existen, señales y polling.
 
-- [x] Parser de `pw-dump` → nodos Bluetooth (`pipewire/pw_dump_parser.py`) — **implementado y verificado (2026-08-10)**: función **pura** `parse_bluetooth_audio_nodes(payload: str) -> list[dict[str, str]]` sin subprocess (ADR-0003); root JSON no-lista o inválido → `PipeWireParseError(AudioSubsystemError)` (ya existe en `core/errors.py`); política «ignore, don't fail» (solo errores estructurales); filtrado por `media.class` `Audio/Sink`/`Audio/Source` y marcadores Bluetooth (`bluez_output.`/`bluez_input.` o `device.api=bluez5`); normalización escalar con `object.id` canónico y `bluez5.codec`/`api.bluez5.transport` verbatim sin validar/inferir. **20 unit tests** TDD (sin `pw-dump`/PipeWire/GI) + **integración real opt-in** `tests/integration/test_pw_dump_parser.py` (`pw-dump --no-colors`, gated `OPENBUDS_RUN_INTEGRATION=1`; **no exige nodos conectados**, resultado local **0 nodos**, sin MAC/payload). Contrato: [pw-dump-parser-contract](pipewire/pw-dump-parser-contract.md)
-- [x] Runner seguro de `pw-dump` (`pipewire/pw_dump_runner.py`) — **implementado y verificado (2026-08-10)**: `PwDumpRunner.dump()` ejecuta `pw-dump --no-colors` vía `subprocess.run` (sin `shell=True`, sin argumentos de usuario, `timeout` default 5 s, `capture_output`/`text`/`check=False`), traduce `OSError`/`TimeoutExpired`/`returncode != 0`/stdout no-`str` a `PipeWireUnavailableError(AudioSubsystemError)` con mensajes genéricos (sin paths/stdout/stderr/MAC) y devuelve el payload JSON exacto para el parser puro (ADR-0003). Ctor valida `binary` (`str` no vacío, sin NUL) y `timeout_seconds` (tipo exacto `int|float` no-`bool`, `> 0` y **finito** `math.isfinite` — NaN/±inf rechazados; **divergencia aprobada**); executor inyectable por Protocol; sin `shutil.which` (TOCTOU); sin logging de payload/stderr. **29 unit tests** (fakes, sin `pw-dump`/PipeWire/GI) + **integración real opt-in** `tests/integration/test_pw_dump_runner.py` (`OPENBUDS_RUN_INTEGRATION=1`: `runner.dump()` → parser, `--no-colors` implícito, **sin assert de nodos**, resultado local **0 nodos**). Contrato: [pw-dump-runner-contract](pipewire/pw-dump-runner-contract.md)
-- [ ] Implementación de `IAudioRepository` (`pipewire/pipewire_repository.py`) — **parcialmente implementada**:
-  - [x] **Incremento 1** — `list_bluetooth_audio_nodes` **implementado y verificado (2026-08-10)**: capa de composición `runner.dump()` **fresco por llamada** (Protocol `DumpRunner` inyectable por ctor con `is None`; runner **falsy** preservado) + parser puro, retorno directo del `list[dict[str, str]]`, sin cache/logs/subprocess propio ni mutación; errores **propagados sin re-envolver** (`PipeWireUnavailableError`/`PipeWireParseError`, misma instancia). **8 unit tests** fakes (`tests/unit/test_pipewire_repository.py`) + **integración real opt-in** (`tests/integration/test_pipewire_repository.py`, `OPENBUDS_RUN_INTEGRATION=1`: solo `isinstance(result, list)` y dicts `str`, **sin assert de nodos ni payload/MAC**, resultado local **0 nodos**). Contrato: [repository-design](pipewire/repository-design.md)
-  - [ ] `get_active_codec` / `get_default_audio_sink` — **NotImplementedError**; **no** se infiere ni afirma códec; se diseñarán en un incremento posterior con hardware real (RESEARCH_LIMITS §2)
-- [ ] Adaptador `wpctl` (`wireplumber/wpctl_adapter.py`)
-- [ ] Editor seguro de config Lua 0.4 (`wireplumber/config_editor.py`)
-- [ ] Gestión de backups (`wireplumber/backup_manager.py`)
-- [ ] Implementación de `IConfigRepository` (`wireplumber/wireplumber_repository.py`)
-- [ ] Caso de uso `ApplyOptimizationUseCase` con flujo seguro completo
-- [ ] Validación de propiedades runtime de PipeWire (`bluez5.codec`, etc.)
+**Gate físico:** antes de comenzar se presentará el protocolo exacto, comandos de
+solo lectura y política de redacción; se esperará confirmación de que el usuario
+conectó manualmente los audífonos desde GNOME. OpenBuds no llamará métodos
+mutadores, cambiará perfiles/volumen, reiniciará servicios ni guardará MAC,
+object paths o payloads completos.
 
-## Fase 5 — Diagnóstico
+**Salida:** detección privada; conectado/desconectado estable; nodos y perfiles
+reales conocidos; propiedades ausentes se muestran como «No disponible»; breve
+registro de evidencia empírica.
 
-- [ ] CLI `health`
-- [ ] Implementación de `IDiagnosticsRepository`
-- [ ] Health Check completo (BlueZ, PipeWire, WirePlumber, servicios, codecs, permisos)
-- [ ] Generación de recomendaciones y auto-fix seguro
-- [ ] Benchmark (RSSI, jitter, latencia, packet loss, retransmisiones)
-- [ ] Historial de benchmarks (`persistence/benchmark_history.py`)
-- [ ] Reportes
+## Etapa 2 — Backend funcional de control de sesión
 
-## Fase 6 — Interfaz gráfica
+**Objetivo:** entregar la rebanada dispositivo → estado agregado → perfil/códec
+observado → casos de uso → CLI, sin configuración persistente.
 
-- [ ] PySide6: ventana principal con sidebar de 10 vistas
-- [ ] Dashboard
-- [ ] Vista de Dispositivo
-- [ ] Vista de Audio
-- [ ] Vista de Optimización
-- [ ] Vista de Health Check
-- [ ] Vista de Diagnóstico
-- [ ] Vista de Benchmark
-- [ ] Vista de Logs
-- [ ] Vista de Configuración
-- [ ] Vista de Laboratorio Experimental
-- [ ] Notificaciones de escritorio
-- [ ] AppIndicator (bandeja del sistema para GNOME)
-- [ ] ViewModels (puente presentation → application)
+- [x] Base BlueZ de solo lectura: snapshots, eventos y polling.
+- [x] Base PipeWire de solo lectura: `pw-dump`, parser y listado de nodos.
+- [ ] `GetDeviceInfoUseCase` y estado agregado tipado.
+- [ ] Asociación segura entre `Device1` y nodos PipeWire.
+- [ ] Sink/source activos; códec solo con propiedades validadas en la Etapa 1.
+- [ ] CLI `openbuds status` y `openbuds watch`.
+- [ ] Casos de uso Connect, Disconnect, Música (A2DP) y Micrófono (HFP).
 
-## Fase 7 — Device Profiles
+No se hardcodean índices ni nombres de perfiles. Connect/Disconnect usarán APIs
+oficiales BlueZ detrás de interfaces y con fakes. Antes de una prueba real se
+mostrarán método/comando, riesgos y reversibilidad, y se esperará aprobación.
 
-- [ ] Cargador de perfiles YAML → `DeviceProfile` (`device_profiles/loader.py`)
-- [ ] Validación de perfiles
-- [ ] Resolución de dispositivo → perfil (`match_device`)
-- [ ] Validación empírica del perfil Redmi Buds 6 Lite (códecs, batería, RSSI)
+**Salida:** estado completo por CLI; errores claros; A2DP/HFP solo si el sistema
+los ofrece; ningún cambio persistente.
 
-## Fase 8 — Plugins
+## Etapa 3 — Interfaz gráfica MVP
 
-- [ ] Mecanismo de descubrimiento y carga de plugins
-- [ ] Registro de perfiles vía plugins
-- [ ] Hooks de diagnóstico extendibles
+**Objetivo:** una ventana PySide6 útil antes de añadir vistas secundarias.
 
-## Fase 9 — Ingeniería inversa (experimental)
+- Nombre, estado, batería/RSSI opcionales, perfil, códec o «No disponible».
+- Sink/source y selector Música/Micrófono con aviso de pérdida de calidad.
+- Botón Conectar/Desconectar, estado del sistema y acceso a Diagnóstico.
+- Paleta del sistema, accesibilidad y operaciones no bloqueantes.
+- Widgets → ViewModels → casos de uso; sin D-Bus/subprocess en la UI.
+- Bandeja GNOME y notificaciones después del MVP.
 
-> ⚠️ Solo cuando el proyecto sea completamente estable. Análisis **pasivo**
-> exclusivamente. **Nunca** se envían comandos propietarios sin comprensión total.
+**Salida:** funciona con estados reales y sin audífonos; ausencias no rompen el
+layout; operaciones en curso deshabilitan controles; errores sin datos sensibles.
 
-- [ ] Captura de tráfico Bluetooth (`btmon`, solo lectura)
-- [ ] Análisis del protocolo propietario de Xiaomi (passive)
-- [ ] Estudio de comandos del fabricante (documentación, no envío)
-- [ ] Implementación de funciones **solo** cuando se comprendan completamente
+## Etapa 4 — Health Check y diagnóstico
+
+- Runtime Python/Gio, BlueZ/D-Bus, PipeWire, WirePlumber y adaptador.
+- Dispositivo, perfil, códec, sink/source, micrófono y configuración efectiva.
+- Logs relevantes con redacción de identificadores.
+- Cada dato se etiqueta como **observado**, **inferido**, **no disponible**,
+  **recomendación** o **acción segura disponible**.
+
+No se prometen jitter, packet loss, retransmisiones o latencia exacta si el
+sistema no los expone; toda estimación se etiqueta como tal.
+
+## Etapa 5 — Optimización persistente y rollback
+
+No comienza hasta que las etapas anteriores funcionen con hardware real.
+
+1. Dry-run.
+2. Validación del entorno y ruta confinada.
+3. Lectura de configuración existente y backup.
+4. Validación sintáctica y escritura atómica.
+5. Recarga o reinicio previamente aprobado.
+6. Verificación y rollback automático si falla.
+7. Verificación del rollback.
+
+La lógica se prueba primero en directorios temporales, nunca usando los
+audífonos para ensayar backup o rollback. Solo se escribe bajo
+`~/.config/wireplumber/`; nunca globalmente ni con `sudo`.
+
+## Etapas posteriores
+
+- Historial y benchmark limitados a métricas observables.
+- Otros modelos solo cuando exista una necesidad real; no crear plugins antes.
+- Ingeniería inversa exclusivamente pasiva si el producto estable la justifica.
+- Funciones propietarias, OTA y firmware permanecen fuera de alcance.
+
+## Gate del contrato Device Profiles
+
+Antes de implementar el loader se presentará una propuesta breve para reconciliar
+`DeviceProfile` y el YAML. Debe tipar identificación, códecs, perfiles,
+capacidades, fuente, evidencia, fecha y seguridad decisional, diferenciando
+`standard_guaranteed`, `vendor_claimed`, `runtime_observed`,
+`hardware_verified` y `unknown`. No se modificará el esquema ni el YAML sin
+aprobación; OTA se eliminará de las funciones experimentales en ese incremento.

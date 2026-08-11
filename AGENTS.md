@@ -9,15 +9,16 @@
 
 ## 1. Identidad del proyecto
 
-**OpenBuds Manager** — Administrador profesional de auriculares Bluetooth para
-Linux (Ubuntu 24.04 LTS). El primer dispositivo soportado es **Redmi Buds 6
-Lite**. El objetivo es crear el equivalente en Linux a aplicaciones como
-*Xiaomi Earbuds*, *Sony Headphones Connect*, *Galaxy Wearable* o *Nothing X*.
+**OpenBuds Manager** — aplicación de escritorio para gestionar auriculares
+Bluetooth en Linux (Ubuntu 24.04 LTS). El primer dispositivo objetivo es
+**Redmi Buds 6 Lite**. La prioridad es entregar una aplicación usable y segura,
+no una biblioteca genérica ni una colección de adaptadores.
 
 - **Repositorio:** https://github.com/AlexisHCD/RB6_lite_Manager.git
 - **Remoto (push):** `git@github.com:AlexisHCD/RB6_lite_Manager.git` (SSH)
 - **SO objetivo:** Ubuntu 24.04 LTS (Noble Numbat)
-- **Python:** ≥ 3.12 (probado con 3.14)
+- **Runtime objetivo:** `/usr/bin/python3` de Ubuntu 24.04 (Python 3.12), con
+  acceso a PyGObject/Gio mediante paquetes del sistema.
 - **Licencia:** GPL-3.0-or-later
 
 ---
@@ -55,14 +56,21 @@ Este proyecto:
 Estas restricciones rigen todo el proyecto y **nunca** se violan:
 
 1. **Nunca** modificar firmware, EEPROM ni NVRAM del dispositivo.
-2. **Nunca** enviar comandos Bluetooth desconocidos o propietarios sin
-   comprensión total (la ingeniería inversa es **pasiva** y solo en Fase 9).
+2. **Nunca** enviar comandos Bluetooth propietarios o desconocidos.
 3. **Nunca** aplicar ingeniería inversa directamente sobre el dispositivo.
 4. **Nunca** modificar hardware.
 5. **Nunca** eliminar configuraciones existentes del sistema sin backup.
 6. **Nunca** sobrescribir archivos sin crear backup previo.
 7. **Nunca** asumir soporte para un códec o capacidad del dispositivo.
 8. **Todo** cambio sobre el sistema Linux debe poder revertirse.
+9. **Nunca** ejecutar OTA ni modificar firmware del dispositivo o del adaptador.
+10. **Nunca** eliminar emparejamientos ni cambiar `Trusted`, `Blocked` o
+    `Pairable` automáticamente.
+11. **Nunca** escribir en `/usr/share`, `/etc` ni usar `sudo` sin aprobación
+    explícita del usuario.
+12. **Nunca** reiniciar servicios, conectar/desconectar hardware, cambiar un
+    perfil real ni escribir configuración sin explicar antes la acción y recibir
+    aprobación explícita.
 
 ---
 
@@ -90,6 +98,13 @@ decisiones.
 - Si detectas varias alternativas de implementación, presenta ventajas y
   desventajas antes de continuar.
 - La implementación comienza únicamente cuando todos los requisitos están claros.
+- El usuario supervisa el desarrollo. Las lecturas, tests, lint, mypy,
+  consultas estrictamente de solo lectura y correcciones internas aprobadas no
+  requieren confirmación adicional.
+- Se requiere aprobación explícita antes de cambiar contratos públicos
+  importantes, instalar dependencias, usar `sudo`, escribir configuración,
+  reiniciar servicios, controlar hardware real, cambiar perfiles, crear commits,
+  hacer push, crear ramas/tags/releases o ampliar el alcance actual.
 
 ---
 
@@ -97,23 +112,24 @@ decisiones.
 
 - **Repositorio único:** todo el código pertenece a
   `git@github.com:AlexisHCD/RB6_lite_Manager.git`. Nunca crear proyectos
-  paralelos ni revisar carpetas fuera de `/home/alexdev/proyectos/RedMIAPP2`.
+  paralelos ni revisar carpetas fuera de
+  `/home/alexdev/proyectos/RedmiBuds6LinuxAPP`.
 - **Push por SSH** (la llave SSH está configurada en la máquina anfitriona).
 - Estructura de carpetas limpia (ver §10).
 - **Commits pequeños y atómicos:** un commit = una funcionalidad o mejora.
   Nunca mezclar varias funcionalidades importantes en un mismo commit.
 - **Mensaje de commit:** conventional commits en inglés
   (`feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`).
-- Se hace commit **al completar cada tarea**, no al final de la fase.
+- Los commits se hacen únicamente tras aprobación explícita del usuario.
 - Documentar decisiones arquitectónicas importantes mediante ADRs en `docs/ADR/`.
 
 ### Flujo de trabajo por tarea
 
 1. Implementar **una** tarea (módulo/funcionalidad).
 2. `ruff check` + `ruff format --check` + `mypy src` + `pytest` deben pasar.
-3. `git add` + `git commit` con mensaje descriptivo.
-4. `git push` (por SSH).
-5. Continuar con la siguiente tarea.
+3. Mostrar resumen, archivos, validaciones, límites y riesgos pendientes.
+4. Detenerse para revisión.
+5. Tras aprobación explícita: `git add`, commit descriptivo y push por SSH.
 
 ---
 
@@ -130,27 +146,25 @@ proyecto como lo haría un equipo profesional:
 6. Implementa **un único módulo**.
 7. Prueba ese módulo.
 8. Corrige errores.
-9. Haz commit.
-10. Continúa con el siguiente módulo.
+9. Presenta el resultado y detente para revisión.
+10. Haz commit/push solo si el usuario lo aprueba explícitamente.
 
 ---
 
 ## 9. Prioridades del proyecto
 
 ### Prioridad máxima
-Arquitectura · Backend sólido · Código limpio · Seguridad · Estabilidad ·
-Modularidad · Documentación · Backups · Rollback · Health Check · Diagnóstico ·
-Optimización automática · Interfaz moderna.
+Aplicación usable · Seguridad · Estabilidad · Estado real del dispositivo ·
+Backend sólido · Interfaz simple · Health Check · Backups y rollback.
 
 ### Prioridad media
 Información del dispositivo · Nivel general de batería · RSSI · Códec activo ·
 Perfil Bluetooth · Estado del micrófono · Información del adaptador ·
 Notificaciones · Benchmark · Logs.
 
-### Prioridad baja (solo cuando la app sea completamente estable)
-Ingeniería inversa · Funciones propietarias · ANC · Modo Transparencia ·
-Batería individual · Batería del estuche · Ecualizador · Controles táctiles ·
-OTA.
+### Fuera del alcance actual
+OTA · firmware · comandos propietarios · escritura GATT propietaria. La
+ingeniería inversa, si alguna vez se justifica, será exclusivamente pasiva.
 
 ---
 
@@ -251,27 +265,27 @@ Cada dispositivo soportado es un perfil independiente (YAML en
 `src/openbuds/device_profiles/`). El núcleo del programa **nunca** contiene
 lógica específica de un dispositivo.
 
-Cada perfil describe: fabricante, modelo, versión Bluetooth, códecs esperados
-(con flag `verified`), perfiles Bluetooth, capacidades, funciones
-experimentales y limitaciones conocidas.
+El contrato actual y el YAML todavía son incompatibles. Antes de implementar el
+loader se debe presentar para aprobación una propuesta tipada que distinga
+fuente, evidencia, fecha y nivel de verificación (`standard_guaranteed`,
+`vendor_claimed`, `runtime_observed`, `hardware_verified`, `unknown`). Publicado
+por el fabricante no equivale a verificado en hardware. No asumir HSP, hardware
+volume, batería GATT ni codec switching; OTA queda fuera del alcance absoluto.
 
 Ver [ADR-0005](docs/ADR/0005-device-profile-contract.md).
 
 ---
 
-## 15. Roadmap (9 fases secuenciales)
+## 15. Roadmap orientado al producto
 
-| Fase | Estado | Contenido |
+| Etapa | Estado | Resultado |
 |------|--------|-----------|
-| 1 — Planificación y arquitectura | ✅ Completada | Arquitectura, cimientos, tooling, docs |
-| 2 — Backend base | ✅ Completada | Config, logging, CLI, errores, detección entorno |
-| 3 — Bluetooth | 🔜 En curso | BlueZ, D-Bus, adaptadores, dispositivos, perfiles |
-| 4 — Optimización | ⏳ | PipeWire, WirePlumber, optimización, backup/rollback |
-| 5 — Diagnóstico | ⏳ | Health Check, Benchmark, logs, reportes |
-| 6 — Interfaz gráfica | ⏳ | PySide6, dashboard, notificaciones, AppIndicator |
-| 7 — Device Profiles | ⏳ | Perfil Redmi Buds 6 Lite validado |
-| 8 — Plugins | ⏳ | Soporte para nuevos modelos |
-| 9 — Ingeniería inversa (experimental) | ⏳ | Solo análisis pasivo, cuando todo sea estable |
+| 0 — Estabilización | 🔜 En curso | Runtime reproducible, doctor fiable, WpctlAdapter cerrado, CI y licencia |
+| 1 — Caracterización física pasiva | ⏳ | Evidencia real de BlueZ/PipeWire/WirePlumber sin controlar hardware |
+| 2 — Backend de sesión | ⏳ | Estado agregado, CLI y controles estándar aprobados |
+| 3 — GUI MVP | ⏳ | Una ventana útil PySide6; bandeja después del MVP |
+| 4 — Health Check | ⏳ | Diagnóstico con observado/inferido/no disponible |
+| 5 — Persistencia segura | ⏳ | Dry-run, backup, escritura atómica, verificación y rollback |
 
 Detalle en `docs/ROADMAP.md`.
 
@@ -279,7 +293,8 @@ Detalle en `docs/ROADMAP.md`.
 
 ## 16. Ámbito de trabajo
 
-- **Directorio de trabajo exclusivo:** `/home/alexdev/proyectos/RedMIAPP2`
+- **Directorio de trabajo exclusivo:**
+  `/home/alexdev/proyectos/RedmiBuds6LinuxAPP`
 - No revisar ni modificar carpetas fuera de este directorio.
 - El `venv` vive en `.venv/` (ignorado por git).
 
@@ -287,7 +302,27 @@ Detalle en `docs/ROADMAP.md`.
 
 ## 17. Documentación
 
-- Toda funcionalidad implementada lleva **documentación técnica en Markdown**.
-- Toda decisión importante queda en un **ADR**.
-- Todo módulo incluye **docstrings** donde aporten valor.
-- Los `README.md` y este `AGENTS.md` se mantienen actualizados.
+- Documentar cambios visibles, contratos públicos, riesgos, evidencia empírica,
+  decisiones difíciles de revertir e instrucciones necesarias para ejecutar.
+- `ROADMAP.md` es breve y orientado a resultados; `README.md` refleja el estado
+  y uso actuales; un ADR se reserva para decisiones importantes y duraderas.
+- No duplicar contratos, documentar validaciones triviales ni mantener conteos
+  exactos de tests que se vuelven obsoletos.
+- Los docstrings explican intención o riesgo; no repiten el código.
+
+---
+
+## 18. Mínima intervención y evitar sobreingeniería
+
+- Flujo de cambios sobre Linux: **observar → diagnosticar → explicar → proponer
+  → aprobar → backup → aplicar → verificar → revertir si falla**.
+- Hasta probar backup y rollback, solo se permiten lecturas o cambios efímeros
+  de sesión previamente aprobados.
+- Implementar necesidades actuales y rebanadas verticales; no crear plugins,
+  pantallas, DTO, parsers o repositorios sin un consumidor real inmediato.
+- Una abstracción nueva debe aislar una API externa, una frontera de seguridad o
+  resolver más de un uso real; si una solución directa es clara, usarla.
+- Tests proporcionales al comportamiento y al riesgo; evitar probar detalles
+  privados irrelevantes o multiplicar casos equivalentes.
+- No hacer refactors amplios ni añadir dependencias durante un incremento
+  funcional sin justificación y aprobación.

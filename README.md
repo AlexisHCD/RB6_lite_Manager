@@ -13,9 +13,9 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 
 ## Estado del proyecto
 
-✅ **Fase 2 — Backend base (completada).** ✅ **Fase 3 — Bluetooth
-(implementación software completa; validación empírica del dispositivo pendiente).**
-🔜 **Fase 4 — Optimización (en curso).**
+🔜 **Etapa 0 — Estabilización inmediata.** La base BlueZ y la inspección
+PipeWire de solo lectura están implementadas, pero el producto completo y la
+validación física de Redmi Buds 6 Lite siguen pendientes.
 
 El repositorio contiene la arquitectura por capas, los cimientos del dominio,
 la configuración TOML, logging, detección del entorno y una CLI base funcional.
@@ -85,15 +85,14 @@ repositorio**; la señal primaria y el poll comparten el **pipeline común
 señal/poll** (`_refresh_and_dispatch`). El diseño y el código real están en
 [`docs/bluez/signal-lifecycle-design.md`](docs/bluez/signal-lifecycle-design.md)
 (§12) y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md)
-(§12). La **implementación software de la Fase 3 está completa**; la
-**validación empírica del Redmi Buds 6 Lite sigue `[ ]`** (bloqueada por
-hardware no conectado y PipeWire con 0 nodos) y la **Fase 4 puede continuar en
-paralelo**. Ver
+(§12). La base Bluetooth de solo lectura está implementada; la validación
+empírica del Redmi Buds 6 Lite se realizará en la Etapa 1, después de estabilizar
+el runtime y presentar el protocolo pasivo para aprobación. Ver
 [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/cli/devices-command.md`](docs/cli/devices-command.md).
-La aplicación completa aún no está terminada: diagnóstico y la GUI se
-implementan en las fases siguientes.
+La aplicación completa aún no está terminada: controles de sesión, diagnóstico
+y GUI se implementan en las etapas siguientes.
 
-La **Fase 4 (Optimización) está en curso**. Su primera pieza — el **parser de
+La base de inspección de audio incluye el **parser de
 `pw-dump`** (`infrastructure/pipewire/pw_dump_parser.py`, ADR-0003) — está
 **implementada y verificada (2026-08-10)**: función **pura**
 (`payload: str` de `pw-dump` → `list[dict[str, str]]`, sin subprocess, sin
@@ -113,7 +112,7 @@ caso positivo (códec/transporte reales); **no** se afirma el Redmi Buds 6 Lite
 detectado ni códec verificado. Ver
 [`docs/pipewire/pw-dump-parser-contract.md`](docs/pipewire/pw-dump-parser-contract.md).
 
-La **segunda pieza de la Fase 4 — el runner seguro `PwDumpRunner`**
+El runner seguro `PwDumpRunner`
 (`infrastructure/pipewire/pw_dump_runner.py`, ADR-0003) — está **implementada
 y verificada (2026-08-10)**: ejecuta `pw-dump --no-colors` de forma aislada y
 privada (`subprocess.run` con `capture_output`/`text`/`check=False`, `timeout`
@@ -132,7 +131,7 @@ real opt-in** (`OPENBUDS_RUN_INTEGRATION=1`) que encadena `runner.dump()` →
 nodos**). Ver
 [`docs/pipewire/pw-dump-runner-contract.md`](docs/pipewire/pw-dump-runner-contract.md).
 
-La **tercera pieza de la Fase 4 — el repositorio `PipeWireRepository`**
+El repositorio `PipeWireRepository`
 (`infrastructure/pipewire/pipewire_repository.py`, ADR-0003) — está
 **implementada y verificada (2026-08-10)** en su **Incremento 1**
 (`list_bluetooth_audio_nodes`): es una **capa de composición** que ejecuta
@@ -154,6 +153,11 @@ Cubierto por **8 unit tests** con fakes (sin `pw-dump`/PipeWire/GI) y una
 local **0 nodos**, sin afirmación positiva de hardware). Ver
 [`docs/pipewire/repository-design.md`](docs/pipewire/repository-design.md).
 
+El incremento local de solo lectura de `WpctlAdapter` (`status` e `inspect`,
+con `set_profile`/`restart_service` en `NotImplementedError`) fue **validado y
+aprobado** por el usuario; la **publicación queda pendiente** de un commit/push
+autorizado. Solo lectura: las mutaciones permanecen deshabilitadas.
+
 Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Requisitos del sistema
@@ -162,7 +166,8 @@ Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - **BlueZ** ≥ 5.72
 - **PipeWire** ≥ 1.0
 - **WirePlumber** 0.4.x (Ubuntu 24.04 trae 0.4.17 — sintaxis de configuración Lua)
-- **Python** ≥ 3.12 (probado con 3.14)
+- **Python del sistema de Ubuntu 24.04:** `/usr/bin/python3` (3.12), necesario
+  para reutilizar PyGObject/Gio de la distribución en las integraciones BlueZ.
 - Adaptador USB Bluetooth (o integrado)
 
 > ⚠️ **Importante sobre WirePlumber:** Ubuntu 24.04 usa WirePlumber **0.4.x**
@@ -270,10 +275,10 @@ mensaje en stderr. Detalles en
 
 ### GUI (PySide6)
 
-La interfaz gráfica se implementa en la **Fase 6**. Incluirá las 10 vistas
-requeridas (Dashboard, Dispositivo, Audio, Optimización, Health Check,
-Diagnóstico, Benchmark, Logs, Configuración, Laboratorio Experimental) y un
-icono residente en la bandeja del sistema.
+La GUI se implementará después de la caracterización física y del backend de
+sesión. El MVP será una sola ventana útil con estado, batería/RSSI opcionales,
+perfil, códec observado, sink/source, modos Música/Micrófono y Diagnóstico. La
+bandeja de GNOME y vistas avanzadas se añadirán después del MVP.
 
 ## Desarrollo
 
@@ -284,29 +289,10 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual por defecto (Python 3.14):** **367 tests** en verde +
-**9 skipped** (las 9 integraciones BlueZ/PipeWire opt-in desactivadas por
-defecto; 2026-08-10); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**
-(`/tmp/openbuds-status-venv`): **376 passed**. Ruff y mypy en verde. El cliente
-D-Bus (Incremento 1), el mapper de objetos, el **worker y lifecycle de señales
-de bajo nivel**, el **dispatch del repositorio** (Incremento 2 completo), el
-**polling de respaldo** (2026-08-10), el **diff puro de
-snapshots** (`device_change_diff.py`), el contrato de eventos de cambio de
-dispositivo ([ADR-0007](docs/ADR/0007-device-change-event-contract.md)), las
-consultas snapshot del repositorio, la CLI `devices`, el **parser puro de
-`pw-dump`**, el **runner seguro `PwDumpRunner`** y el **repositorio
-`PipeWireRepository`** (Fase 4; Incremento 1: `list_bluetooth_audio_nodes`
-implementado, codec/default sink pendientes) ya están cubiertos por la suite
-(`tests/unit/test_device_change_diff.py`,
-`tests/unit/test_bluez_repository_signals.py`,
-`tests/integration/test_bluez_repository_signals.py`,
-`tests/integration/test_bluez_signal_lifecycle.py`,
-`tests/unit/test_pw_dump_parser.py`,
-`tests/integration/test_pw_dump_parser.py`,
-`tests/unit/test_pw_dump_runner.py`,
-`tests/integration/test_pw_dump_runner.py`,
-`tests/unit/test_pipewire_repository.py`,
-`tests/integration/test_pipewire_repository.py`).
+Las pruebas unitarias se ejecutan en el venv de desarrollo. Las integraciones
+BlueZ deben ejecutarse con un venv creado desde `/usr/bin/python3`, con acceso a
+PyGObject/Gio, y requieren `OPENBUDS_RUN_INTEGRATION=1`. No se mantienen conteos
+exactos en esta documentación: la salida de pytest es la fuente de verdad.
 
 ## Arquitectura
 
