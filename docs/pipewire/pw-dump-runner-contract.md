@@ -12,11 +12,12 @@
 > [0003](../ADR/0003-no-pipewire-python-binding.md) y
 > [0002](../ADR/0002-wireplumber-0.4-lua-config-scope.md)).
 
-- **Fase:** 4 (Optimización) — runner base de inspección de audio PipeWire
+- **Etapa:** 2 (backend PipeWire de solo lectura) — runner base de
+  inspección de audio PipeWire
 - **Tipo:** contrato de implementación (no es un ADR)
 - **Fecha del contrato:** 2026-08-10
 - **Estado:** ✅ IMPLEMENTADO Y VERIFICADO — `PwDumpRunner` implementado en
-  `infrastructure/pipewire/pw_dump_runner.py`, cubierto por **29 unit tests**
+  `infrastructure/pipewire/pw_dump_runner.py`, cubierto por unit tests
   (`tests/unit/test_pw_dump_runner.py`, fakes sin `pw-dump`/PipeWire/GI) y una
   **integración real opt-in** (`tests/integration/test_pw_dump_runner.py`)
 - **Documentos relacionados:** [ADR-0003 (pw-dump vía subprocess)](../ADR/0003-no-pipewire-python-binding.md),
@@ -323,7 +324,7 @@ Notas sobre el pseudocódigo:
 
 ## 10. Criterios de aceptación (unit tests TDD) — VERIFICADO
 
-Archivo de tests: **`tests/unit/test_pw_dump_runner.py`** — **29 unit tests**
+Archivo de tests: **`tests/unit/test_pw_dump_runner.py`** — unit tests
 todos en verde (2026-08-10). Corren **sin** `pw-dump`, sin PipeWire y sin GI;
 usan **fakes** del executor (objetos ligeros con
 `returncode`/`stdout`/`stderr`, o lambdas que registran la llamada). Ningún
@@ -382,8 +383,7 @@ pasando**, no criterios pendientes.
 Archivo: **`tests/integration/test_pw_dump_runner.py`**, gated por
 `OPENBUDS_RUN_INTEGRATION=1` y auto-marcado `@pytest.mark.integration`
 (conftest). Es **solo lectura** y **no exige dispositivos Bluetooth
-conectados**. Verificada en verde (2026-08-10, `/tmp/openbuds-status-venv`,
-Python 3.12).
+conectados**. Verificada en verde (2026-08-10, Python 3.12).
 
 Flujo real del test:
 
@@ -409,9 +409,8 @@ falta o PipeWire no responde, `dump()` lanza `PipeWireUnavailableError` y el
 test **falla**, coherente con el diseño "la ejecución es la verdad" (§6), que
 exige un entorno PipeWire real para la integración.
 
-Gates (2026-08-10): suite por defecto **359 passed / 8 skipped**; con
-`OPENBUDS_RUN_INTEGRATION=1` en `/tmp/openbuds-status-venv` (Python 3.12)
-**367/367 passed**; ruff y mypy en verde.
+Gates (2026-08-10): los gates ordinarios y la integración opt-in pasaron al
+cierre del incremento; ruff y mypy en verde.
 
 ---
 
@@ -484,7 +483,7 @@ Verificación local (2026-08-10): `pw-dump --help` muestra
 8. Sin logging de payload ni stderr; sin mutación de `os.environ`; sin
    cambios de hardware/configuración; subprocess acotado por `timeout`.
 9. **Sin `shutil.which`** (TOCTOU): la ejecución es la verdad.
-10. **29 unit tests** con fakes (sin `pw-dump`/PipeWire/GI) cubren argv/kwargs
+10. Unit tests con fakes (sin `pw-dump`/PipeWire/GI) cubren argv/kwargs
     exactos, éxito Unicode, invalid ctor sin tocar executor (incl. NaN/±inf y
     `None` rechazados), mapeo de errores con privacidad, secretos ausentes,
     `""`, stdout no-`str`, ruta con espacios permitida, NUL rechazado y
@@ -492,5 +491,5 @@ Verificación local (2026-08-10): `pw-dump --help` muestra
 11. Integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`, timeout 5, sin logging)
     ejecuta `pw-dump` real → `dump()` → parser; `--no-colors` implícito en el
     runner; **sin assert de nodos**; skip solo por entorno, fallo si el
-    `pw-dump` real falla. Verificada (2026-08-10): gates 359/8 default y
-    367/367 opt-in (Python 3.12, `/tmp/openbuds-status-venv`); ruff/mypy.
+    `pw-dump` real falla. Verificada (2026-08-10): gates ordinarios e
+    integración opt-in en verde (Python 3.12); ruff/mypy.

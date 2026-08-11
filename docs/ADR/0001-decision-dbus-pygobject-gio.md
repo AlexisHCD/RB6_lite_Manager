@@ -49,7 +49,7 @@ Usar **PyGObject / Gio (GDBus)**.
 - **Negativas:** PyGObject requiere paquetes de sistema (`libgirepository1.0-dev`)
   que no siempre se instalan limpiamente vía pip; se documenta la alternativa
   `apt` en el README. Hay que gestionar la convivencia de dos event loops
-  (GLib + Qt) en la GUI — se aborda en Fase 3/6.
+  (GLib + Qt) en la GUI — se aborda en la Etapa 3.
 
 ## Verificación
 

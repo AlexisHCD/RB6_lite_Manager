@@ -33,7 +33,7 @@ El archivo se escribe en un temporal del mismo directorio, se vacía con
 `flush` y `fsync`, y se instala con `os.replace`. El temporal se limpia
 best-effort si falla cualquier paso. Esta configuración propia no crea backups
 versionados: la atomicidad evita el truncado y los backups obligatorios de
-configuración del sistema corresponden a la Fase 4.
+configuración del sistema corresponden a la Etapa 5.
 
 ## Alternativas
 

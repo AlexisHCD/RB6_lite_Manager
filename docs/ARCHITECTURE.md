@@ -57,29 +57,29 @@ uso los reciben por **inyección de dependencias**.
 
 Cada caso de uso modela **una intención del usuario** y orquesta repositorios:
 
-| Caso de uso | Descripción | Fase |
-|-------------|-------------|------|
-| `ScanDevicesUseCase` | Listar dispositivos Bluetooth | 3 |
-| `GetDeviceInfoUseCase` | Información agregada (dispositivo + batería + RSSI + códec) | 3/4 |
-| `ApplyOptimizationUseCase` | Aplicar optimización con flujo seguro (backup → validate → apply → verify → rollback) | 4 |
-| `RunHealthCheckUseCase` | Health Check completo del stack | 5 |
-| `RunBenchmarkUseCase` | Benchmark de calidad de enlace | 5 |
+| Caso de uso | Descripción | Estado |
+|-------------|-------------|--------|
+| `ScanDevicesUseCase` | Listar dispositivos Bluetooth | Implementado (backend base publicado); se consumirá en la Etapa 2 |
+| `GetDeviceInfoUseCase` | Información agregada (dispositivo + batería + RSSI + códec) | Pendiente, Etapa 2 |
+| `ApplyOptimizationUseCase` | Aplicar optimización con flujo seguro (backup → validate → apply → verify → rollback) | Pendiente, Etapa 5 |
+| `RunHealthCheckUseCase` | Health Check completo del stack | Pendiente, Etapa 4 |
+| `RunBenchmarkUseCase` | Benchmark de calidad de enlace | Posteriores |
 
 ### `infrastructure/` — Adaptadores externos
 
-| Subpaquete | Tecnología | Implementa | Fase |
-|------------|------------|------------|------|
-| `bluez/` | D-Bus vía PyGObject/Gio | `IBluetoothRepository` | 3 |
-| `pipewire/` | `pw-dump`/`wpctl` vía subprocess | `IAudioRepository` | 3/4 |
-| `wireplumber/` | Edición segura de config Lua 0.4 | `IConfigRepository` | 4 |
-| `system/` | Detección de entorno | (parte de `IDiagnosticsRepository`) | 2/5 |
-| `persistence/` | Config de la app + historial | — | 2/5 |
+| Subpaquete | Tecnología | Implementa | Etapa |
+|------------|------------|------------|-------|
+| `bluez/` | D-Bus vía PyGObject/Gio | `IBluetoothRepository` | 2 |
+| `pipewire/` | `pw-dump`/`wpctl` vía subprocess | `IAudioRepository` | 1/2 |
+| `wireplumber/` | Edición segura de config Lua 0.4 | `IConfigRepository` | 5 |
+| `system/` | Detección de entorno | (parte de `IDiagnosticsRepository`) | 0/4 |
+| `persistence/` | Config de la app + historial | — | 0 / posteriores |
 
 ### `presentation/` — Interfaz
 
 | Subpaquete | Contenido |
 |------------|-----------|
-| `qt/` | Ventana principal, 10 vistas, ViewModels, tray indicator |
+| `qt/` | GUI MVP de una ventana (Etapa 3), ViewModels; bandeja y notificaciones después del MVP |
 | `notifications/` | Notificaciones de escritorio (freedesktop D-Bus) |
 
 La UI **nunca** contiene lógica de negocio: delega en casos de uso.
@@ -91,15 +91,17 @@ La UI **nunca** contiene lógica de negocio: delega en casos de uso.
 
 ## Flujo: añadir un nuevo dispositivo
 
-Añadir soporte para un nuevo modelo de auriculares **no** requiere tocar el
-núcleo. El proceso es:
+El objetivo es que añadir soporte para un nuevo modelo **no** requiera tocar el
+núcleo, pero hoy **no** basta con crear un YAML: el contrato `DeviceProfile` y el
+archivo YAML son todavía incompatibles. El rediseño tipado del contrato
+(diferenciando fuente, evidencia, fecha y nivel de verificación) está pendiente
+de aprobación, y el flujo de incorporación se definirá después de aprobarlo y de
+disponer de evidencia de la Etapa 1 (caracterización física). No se asume que el
+loader actual cargue un perfil nuevo ni que el YAML declare capacidades
+verificadas.
 
-1. Crear un archivo YAML en `src/openbuds/device_profiles/` describiendo el
-   dispositivo (fabricante, modelo, códecs, capacidades, limitaciones).
-2. (Opcional) Añadir heurísticas de resolución en `match_hints` del YAML.
-3. El sistema cargará el perfil automáticamente vía `IDeviceProfileRepository`.
-
-Ver [ADR-0005](ADR/0005-device-profile-contract.md).
+Ver [ADR-0005](ADR/0005-device-profile-contract.md) y el gate del contrato en
+[`ROADMAP.md`](ROADMAP.md).
 
 ## Flujo: optimización segura
 
@@ -116,13 +118,13 @@ excepción del dominio. Nunca queda en estado intermedio.
 ## Coordinación de asincronía
 
 - **D-Bus (BlueZ):** Gio/GDBus usa el `GMainLoop` de GLib. En la app Qt, se
-  puentea hacia el `QEventLoop` (mecanismo a definir en Fase 3/6).
+  puentea hacia el `QEventLoop` (mecanismo a definir en la Etapa 3).
 - **subprocess (PipeWire/WirePlumber):** llamadas síncronas y cortas; suficiente
   para inspección. No requiere event loop propio.
 - **EventBus (`core/events.py`):** pub/sub en proceso, síncrono. Permite que la
   infraestructura publique eventos (dispositivo conectado, códec cambiado) sin
   acoplarse a la UI.
 
-## Estado por fase
+## Estado por etapas
 
-Ver [`ROADMAP.md`](ROADMAP.md) para el detalle del progreso por fase.
+Ver [`ROADMAP.md`](ROADMAP.md) para el detalle del progreso por etapas.

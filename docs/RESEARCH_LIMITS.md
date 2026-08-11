@@ -3,7 +3,7 @@
 Este documento declara explícitamente las áreas donde la investigación técnica
 **no pudo verificarse completamente** contra fuentes oficiales. El proyecto
 sigue el principio de **nunca asumir** comportamientos no verificados: estos
-puntos se validan empíricamente en sus fases correspondientes antes de usarse
+puntos se validan empíricamente en sus etapas correspondientes antes de usarse
 para decisiones de optimización o para interactuar con hardware.
 
 ## 1. Bytes de códec A2DP vendor-specific
@@ -22,7 +22,8 @@ para decisiones de optimización o para interactuar con hardware.
 PipeWire/WirePlumber (no por BlueZ). Su byte numérico no está definido
 canónicamente en `doc/media-api.txt`. El enum `CodecType` los incluye como
 identificadores de **nombre** (coinciden con `bluez5.codecs` de WirePlumber 0.4),
-no como bytes. La identificación por byte se valida empíricamente en Fase 3/4.
+no como bytes. La identificación por byte se valida empíricamente en la Etapa 1
+(caracterización física) y se consume en la Etapa 2.
 
 Fuente: [media-api.txt](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/media-api.txt).
 
@@ -41,7 +42,7 @@ pipewire.org ni en la documentación de WirePlumber:
 
 **Implicación:** no se asume su existencia ni su formato. El parser de
 `pw-dump` (`pipewire/pw_dump_parser.py`,
-[contrato](../pipewire/pw-dump-parser-contract.md)) las **preserva verbatim**:
+[contrato](pipewire/pw-dump-parser-contract.md)) las **preserva verbatim**:
 las pasa como `str` sin validar, sin inferir códec ni transporte y **sin
 verificar** contra listas de códecs/transportes. La validación empírica del
 caso positivo sigue **pendiente** hasta inspeccionar `pw-dump` con un
@@ -112,8 +113,11 @@ PyGObject/Gio, que es parte del stack GNOME y sí está verificada).
 
 Los datos del perfil `redmi_buds_6_lite.yaml` (versión Bluetooth, códecs,
 capacidades) provienen de **fuentes públicas no oficiales**. Cada campo no
-verificado se marca con `verified: false`. Se validan empíricamente en Fase 7
-conectando un dispositivo real y observando BlueZ/PipeWire.
+verificado se marca con `verified: false`. El contrato y el YAML están
+**bloqueados**: no se validarán en campo hasta aprobar la propuesta tipada del
+contrato (ver el gate en [`ROADMAP.md`](ROADMAP.md)) y disponer de evidencia de
+la Etapa 1 (caracterización física), conectando un dispositivo real y observando
+BlueZ/PipeWire de forma pasiva.
 
 **Importante:** el proyecto **nunca** envía comandos al dispositivo para
 "probar" funciones. La validación es **pasiva** (lectura de estado estándar).

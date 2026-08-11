@@ -1,5 +1,12 @@
 # OpenBuds Manager - Documento Maestro del Proyecto
 
+> **Aviso — documento histórico:** este archivo recoge la concepción inicial del
+> proyecto y **no es la fuente de verdad operativa**. Para el trabajo actual
+> prevalecen [`../AGENTS.md`](../AGENTS.md), [`ROADMAP.md`](ROADMAP.md),
+> [`ARCHITECTURE.md`](ARCHITECTURE.md), [`RESEARCH_LIMITS.md`](RESEARCH_LIMITS.md)
+> y los [ADRs aceptados](ADR/). No usar las fases ni capacidades aquí descritas
+> para planificar el trabajo actual.
+
 ## Rol
 
 Actúa como un Arquitecto de Software Senior especializado en Linux Desktop, Python, Bluetooth, BlueZ, PipeWire, WirePlumber, DBus, ingeniería de software y aplicaciones Qt.

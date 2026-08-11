@@ -20,9 +20,10 @@ validación física de Redmi Buds 6 Lite siguen pendientes.
 El repositorio contiene la arquitectura por capas, los cimientos del dominio,
 la configuración TOML, logging, detección del entorno y una CLI base funcional.
 
-La Fase 3 implementa el acceso a BlueZ vía D-Bus (PyGObject/Gio) por
-incrementos. El **Incremento 1 — snapshot `GetManagedObjects`** ya está
-implementado y verificado (`bluez/dbus_protocol.py` → `GioDBusProtocol` +
+El **backend base de BlueZ** (acceso a BlueZ vía D-Bus, PyGObject/Gio) está
+publicado por incrementos; se consumirá en el backend de sesión (Etapa 2), y la
+validación física del dispositivo es de la Etapa 1. El **Incremento 1 — snapshot
+`GetManagedObjects`** ya está implementado y verificado (`bluez/dbus_protocol.py` → `GioDBusProtocol` +
 `BlueZDBusClient.snapshot`), y también el **mapeo de objetos D-Bus → modelos**
 (`bluez/object_mapper.py`, puro y sin GI), las **consultas snapshot del
 repositorio** (`bluez/bluez_repository.py`:
@@ -73,7 +74,7 @@ auriculares conectados): `doctor` exit 0 (Ubuntu 24.04, BlueZ 5.72, PipeWire
 cero dispositivos**: `openbuds devices` exit 0 con `No se encontraron
 dispositivos Bluetooth.` y `pw-dump` con **0 nodos Bluetooth** (sin property
 keys). **No** se afirma detección del Redmi Buds 6 Lite (no había hardware
-conectado). **Pendientes de la Fase 3:** la **validación empírica de
+conectado). **Pendientes del backend base BlueZ:** la **validación empírica de
 propiedades runtime inciertas** (bloqueada: sin auriculares conectados ni nodos
 Bluetooth); el **polling periódico de respaldo** para
 `Connected`/`Paired`/`Trusted`
@@ -153,10 +154,10 @@ Cubierto por **8 unit tests** con fakes (sin `pw-dump`/PipeWire/GI) y una
 local **0 nodos**, sin afirmación positiva de hardware). Ver
 [`docs/pipewire/repository-design.md`](docs/pipewire/repository-design.md).
 
-El incremento local de solo lectura de `WpctlAdapter` (`status` e `inspect`,
-con `set_profile`/`restart_service` en `NotImplementedError`) fue **validado y
-aprobado** por el usuario; la **publicación queda pendiente** de un commit/push
-autorizado. Solo lectura: las mutaciones permanecen deshabilitadas.
+El incremento de solo lectura de `WpctlAdapter` (`status` e `inspect`, con
+`set_profile`/`restart_service` en `NotImplementedError`) fue **validado,
+aprobado y publicado**. Solo lectura: las mutaciones permanecen
+deshabilitadas.
 
 Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -258,12 +259,12 @@ con 1 si el sistema o el runtime son inválidos.
 .venv/bin/openbuds doctor        # diagnostica sistema, runtime y hardware
 .venv/bin/openbuds config        # muestra la configuración efectiva
 .venv/bin/openbuds version       # muestra la versión sin cargar config
-.venv/bin/openbuds devices       # lista dispositivos Bluetooth (Fase 3): snapshot TSV
+.venv/bin/openbuds devices       # lista dispositivos Bluetooth (backend base publicado): snapshot TSV
 .venv/bin/openbuds devices --paired-only            # solo emparejados
 .venv/bin/openbuds devices --adapter hci0           # solo el adaptador hci0 (o /org/bluez/hci0)
-.venv/bin/openbuds health        # futuro: Health Check (Fase 5)
-.venv/bin/openbuds codec         # futuro: muestra el códec activo (Fase 3/4)
-.venv/bin/openbuds bench         # futuro: benchmark de enlace (Fase 5)
+.venv/bin/openbuds health        # futuro: Health Check (Etapa 4)
+.venv/bin/openbuds codec         # futuro: muestra el códec activo (Etapa 2, sujeto a evidencia de Etapa 1)
+.venv/bin/openbuds bench         # futuro: benchmark de enlace (posterior)
 ```
 
 `openbuds devices` lista el snapshot de los dispositivos **conocidos** por

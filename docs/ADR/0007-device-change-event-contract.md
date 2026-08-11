@@ -156,9 +156,8 @@ Ninguno depende de GI ni de capas externas (cumple
 ## Verificación (contrato, lifecycle de bajo nivel, dispatch y polling implementados)
 
 El **contrato del dominio** está **implementado y probado** sin GI ni bus del
-sistema (suite por defecto: **310 passed, 6 skipped**; suite completa en
-Python 3.12/Gio con `OPENBUDS_RUN_INTEGRATION=1`: **316 passed**, 2026-08-10;
-ruff/mypy en verde):
+sistema; los gates ordinarios y la integración opt-in pasaron al cierre del
+incremento (2026-08-10; ruff/mypy en verde):
 
 - `DeviceChangeKind` con valores únicos (`@unique`), cubierto en
   `tests/unit/test_enums.py`.

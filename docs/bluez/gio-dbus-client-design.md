@@ -4,7 +4,6 @@ Diseño de `openbuds.infrastructure.bluez.dbus_client` (`BlueZDBusClient`), el
 cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 (GDBus)** según [ADR-0001](../ADR/0001-decision-dbus-pygobject-gio.md).
 
-- **Fase:** 3 (Bluetooth)
 - **Tipo:** diseño de implementación (no es un ADR)
 - **Documento relacionado:** [Interfaces D-Bus de BlueZ](dbus-interfaces.md)
 - **Dependencias del dominio:** `BluetoothError` (`core/errors.py`),
@@ -55,10 +54,9 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   **lifecycle A/B del repositorio** (`subscribe_device_changes` +
 >   unsubscribe idempotente + snapshot A/B + bus usable, sin señales inducidas,
 >   sin afirmar recepción real y sin escrituras).
-> - Suite actual por defecto (Python 3.14, sin GI): **310 passed, 6 skipped**
->   (las 6 omisiones son las integraciones opt-in, desactivadas por defecto);
->   con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**: **316 passed**.
->   El **contrato de eventos del dominio** ([ADR-0007](../ADR/0007-device-change-event-contract.md))
+> - Los gates ordinarios y la integración opt-in pasaron al cierre del
+>   incremento (Python 3.12 / Gio; ruff/mypy en verde). El **contrato de
+>   eventos del dominio** ([ADR-0007](../ADR/0007-device-change-event-contract.md))
 >   está **implementado y probado**: `DeviceChangeKind` (`@unique`),
 >   `DeviceChangeEvent` (invariantes validadas en construcción) y los alias
 >   `DeviceChangeCallback`/`Unsubscribe`; `subscribe_device_changes` ya
@@ -72,14 +70,14 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   (`subscribe_device_changes`, registro de suscriptores, cache de diff y
 >   emisión de `DeviceChangeEvent` con el **diff puro de snapshots**
 >   `device_change_diff.py`; [signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch))
->   está **implementado y verificado**, por lo que el checkbox global del
->   roadmap queda `[x]`. La **detección de adaptadores y dispositivos** está
+>   está **implementado y verificado**, por lo que el backend base de BlueZ
+>   queda publicado; se consumirá en la Etapa 2. La **detección de adaptadores y
+>   dispositivos** está
 >   **completa** (implementación + verificación real; la detección del Redmi
 >   Buds 6 Lite real queda pendiente de hardware, no de software). La **CLI
 >   `devices`** ya está **implementada y verificada** sobre las consultas
 >   snapshot (solo snapshot, sin señales;
->   [devices-command.md](../cli/devices-command.md)); el checkbox del roadmap
->   para la CLI está marcado `[x]`.
+>   [devices-command.md](../cli/devices-command.md)).
 > - **`on_ready` implementado (2026-08-10):** la **API interna de bajo nivel**
 >   `subscribe(callback, on_ready=None)` (§2.5) ejecuta el init del repositorio
 >   (snapshot B, diff A→B, cache y primer dispatch) **en `on_ready`, en el
@@ -297,9 +295,10 @@ Consecuencias de diseño:
   siendo iterado** (`GLib.MainLoop.run()`, `GLib.MainContext.iteration()`, o
   el event loop de Qt si se integra como fuente).
 - En CLI (Incremento 2) se itera el loop el tiempo que dure la sesión de
-  monitoreo. Para Fase 3 basta un `GMainContext` **dedicado** o **iterado
+  monitoreo. Para la CLI de sesión (Etapa 2) basta el `GMainLoop`; para la GUI
+  (Etapa 3) se usará un `GMainContext` **dedicado** o **iterado
   explícitamente** por el hilo que llama a `subscribe`. La integración
-  GLib/Qt concreta queda **pendiente de investigar y validar para la Fase 6**:
+  GLib/Qt concreta queda **pendiente de investigar y validar para la Etapa 3**:
   no se asume ningún puente automático entre event loops.
 - El código de test que quiera *ver* señales debe hacer avanzar el context
   (p.ej. `GLib.MainContext.default().iteration(False)` con límites) — nunca
@@ -572,8 +571,9 @@ el init (snapshot B, diff A→B, cache y primer dispatch) corre en el worker
   `DeviceInfo` mapeado es desigual, sin eventos Battery/RSSI-only.
 - ✅ `unsubscribe` + `close()` idempotentes, sin cerrar la conexión compartida
   (§2.5).
-- ⏳ CLI de monitoreo (o vista de Logs/dashboard en Fase 6) que itere el
-  `GMainContext` para entregar señales.
+- ⏳ CLI de monitoreo `openbuds watch` (Etapa 2) que itere el `GMainContext`
+  para entregar señales; la vista de Logs/dashboard en la GUI corresponde a la
+  Etapa 3.
 - ✅ **Respaldo por polling periódico** de propiedades críticas según
   [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus):
   `on_poll`/`poll_interval_ms` en el nivel bajo, `GSource` de timeout monotónico
@@ -617,8 +617,8 @@ src/openbuds/infrastructure/bluez/
 > **implementado y verificado** y el contrato se conserva como documentación
 > viva.
 
-`bluez_repository.py` empezó como esqueleto en Fase 1; sus **consultas
-snapshot** están **implementadas y verificadas** (cliente inyectable,
+`bluez_repository.py` empezó como esqueleto en las primeras etapas; sus
+**consultas snapshot** están **implementadas y verificadas** (cliente inyectable,
 snapshot fresco por llamada; ver [repository-design.md](repository-design.md)) y
 la **suscripción a cambios del repositorio** (`subscribe_device_changes`, con
 cache de diff sobre el **diff puro de snapshots** y dispatch de
@@ -636,7 +636,7 @@ cache de diff sobre el **diff puro de snapshots** y dispatch de
 - Para el incremento de señales: un `GMainContext` iterando (dedicado o
   explícitamente iterado por el hilo que suscribe).
 - La integración GLib/Qt concreta queda **pendiente de investigar y validar
-  para la Fase 6**; no se asume ningún puente automático entre event loops.
+  para la Etapa 3**; no se asume ningún puente automático entre event loops.
 
 ---
 
@@ -655,10 +655,8 @@ cache de diff sobre el **diff puro de snapshots** y dispatch de
 - Los tests de integración se marcan (p.ej. `@pytest.mark.integration` /
   `@pytest.mark.slow`) y no forman parte del baseline por defecto, siguiendo
   el patrón del Makefile (`make test-quick` = solo unit).
-- Baseline actual por defecto (Python 3.14, sin GI/bus): **310 tests** en verde
-  + **6 skipped** (las 6 integraciones BlueZ opt-in desactivadas por defecto;
-  2026-08-10); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**:
-  **316 passed**. Ruff y mypy en verde. Las pruebas del mapper, del cliente, del
+- Los gates ordinarios y la integración opt-in pasaron al cierre del incremento
+  (2026-08-10; ruff/mypy en verde). Las pruebas del mapper, del cliente, del
   worker de señales y del lifecycle de bajo nivel, del **diff puro**, del
   **dispatch del repositorio**, del **polling de respaldo**, del contrato de
   eventos ([ADR-0007](../ADR/0007-device-change-event-contract.md)), de las
@@ -716,9 +714,9 @@ Referencias internas: [ADR-0001](../ADR/0001-decision-dbus-pygobject-gio.md),
 - **Códecs vendor (aptX/LDAC):** bytes no canonizados; nunca se asumen
   (RESEARCH_LIMITS §1).
 - **Integración GLib/Qt en la GUI:** estrategia **pendiente de investigar y
-  validar** en la Fase 6; no se asume ningún puente automático entre event
-  loops. En Fase 3 se usa un `GMainContext` dedicado o iterado explícitamente;
-  en CLI el `GMainLoop` es suficiente.
+  validar** en la Etapa 3; no se asume ningún puente automático entre event
+  loops. En la CLI de sesión (Etapa 2) el `GMainLoop` es suficiente; para la
+  GUI (Etapa 3) se usará un `GMainContext` dedicado o iterado explícitamente.
 - **Disponibilidad de BlueZ:** el snapshot no auto-arranca `bluetoothd`; si el
   daemon no está disponible, el environment detector lo detecta y el cliente
   reporta `BluetoothError` sin intentar arrancarlo.

@@ -8,13 +8,12 @@ inyectable con `snapshot()`, y **`subscribe_device_changes`** entrega
 (`device_change_diff.py`), sin cache persistente, sin lifecycle propio de
 escritura y sin mutación.
 
-- **Fase:** 3 (Bluetooth)
 - **Tipo:** diseño de implementación (Documentation First; **implementado y
   verificado**)
-- **Estado del checkbox roadmap:** el ítem global *"Implementación de
-  `IBluetoothRepository`"* ([ROADMAP §Fase 3](../ROADMAP.md)) está **marcado
-  `[x]`**: el contrato completo (consultas snapshot + `subscribe_device_changes`)
-  está implementado y verificado (ver [§6](#6-subscribe_device_changes--implementado-incremento-2)).
+- **Estado del roadmap:** el contrato completo (consultas snapshot +
+  `subscribe_device_changes`) está **implementado y verificado** como parte del
+  backend base de BlueZ publicado; se consumirá en la Etapa 2. La validación
+  física del dispositivo es de la Etapa 1 (ver [§6](#6-subscribe_device_changes--implementado-incremento-2)).
 - **Documentos relacionados:** [Interfaces D-Bus de BlueZ](dbus-interfaces.md),
   [Diseño del cliente GDBus](gio-dbus-client-design.md),
   [Contrato del mapper](object-mapper-contract.md), [ADR-0001](../ADR/0001-decision-dbus-pygobject-gio.md),
@@ -50,10 +49,11 @@ escritura y sin mutación.
 > (`tests/integration/test_bluez_repository.py`, `tests/integration/test_bluez_repository_signals.py`,
 > `OPENBUDS_RUN_INTEGRATION=1`) pasaron en **Python 3.12 / Gio** sobre BlueZ
 > real (solo lectura; el de señales solo **lifecycle A/B**, sin señales
-> inducidas ni escrituras). Suite total por defecto (Python 3.14): **310
-> passed, 6 skipped**; con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio:
-> **316 passed**. Ruff y mypy en verde. El checkbox global del roadmap queda
-> **`[x]`** (ver [§6](#6-subscribe_device_changes--implementado-incremento-2)).
+> inducidas ni escrituras). Los gates ordinarios y la integración opt-in
+> pasaron al cierre del incremento (2026-08-10); Ruff y mypy en verde. El
+> backend base de BlueZ queda publicado; se consumirá en la Etapa 2, con
+> validación física pendiente en la Etapa 1 (ver
+> [§6](#6-subscribe_device_changes--implementado-incremento-2)).
 >
 > **Alcance de lo "completo":** el contrato **`IBluetoothRepository`** (consultas
 > snapshot + `subscribe_device_changes`) está **completo**. La **resiliencia por
@@ -247,10 +247,10 @@ y en el **diff puro de snapshots** (`device_change_diff.py`). El contrato
 técnico completo (código real, invariantes y tests) está en
 [signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch).
 
-**Por eso el checkbox global del roadmap se marca completo:**
-[ROADMAP §Fase 3](../ROADMAP.md) — *"Implementación de `IBluetoothRepository`"* —
-queda **`[x]`**: el contrato `IBluetoothRepository` se cumple en su totalidad
-(consultas snapshot + suscripción con dispatch). La **resiliencia por polling**
+**Por eso el backend base de BlueZ se considera completo:** el contrato
+`IBluetoothRepository` se cumple en su totalidad (consultas snapshot +
+suscripción con dispatch) y queda **publicado; se consumirá en la Etapa 2**;
+la validación física del dispositivo queda para la Etapa 1. La **resiliencia por polling**
 de [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus) es
 **externa al contrato** y está **implementada y verificada** (extensión interna,
 sin cambiar la interfaz; [§12](#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10)
@@ -521,7 +521,7 @@ Internas:
   (señal primaria y **polling de respaldo implementados** —
   [§12](#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10)
   y [signal-lifecycle-design §12](signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)),
-  [ROADMAP](../ROADMAP.md) §Fase 3.
+  [ROADMAP](../ROADMAP.md).
 
 Oficiales (verificadas en [gio-dbus-client-design §8](gio-dbus-client-design.md#8-fuentes-oficiales-verificadas)
 y [object-mapper-contract §11](object-mapper-contract.md#11-fuentes-oficiales-verificadas)):
@@ -557,7 +557,8 @@ y [object-mapper-contract §11](object-mapper-contract.md#11-fuentes-oficiales-v
 8. `subscribe_device_changes` **implementado** (Incremento 2): init A→B en el
    worker vía `on_ready`, diff puro de snapshots, orden determinista, cache de
    señales, `Unsubscribe` idempotente con espera de in-flight y rollback de
-   errores; el checkbox global del roadmap queda **`[x]`**.
+   errores; el backend base de BlueZ queda publicado; se consumirá en la Etapa 2,
+   con validación física pendiente en la Etapa 1.
 9. **Reentrancia:** `subscribe` reentrante durante A→B sin replay ni deadlock;
    **self-unsubscribe solo tras poseer el `Unsubscribe`** (en señales futuras);
    unsubscribe externo espera in-flight (salvo self).

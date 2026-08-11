@@ -3,14 +3,16 @@
 Diseño del comando `openbuds devices`: lista los dispositivos Bluetooth
 **conocidos** por el sistema a partir del snapshot `GetManagedObjects` de BlueZ.
 
-- **Fase:** 3 (Bluetooth)
+- **Estado:** backend base publicado (BlueZ snapshot, solo lectura); se
+  consumirá en la Etapa 2. La validación física del dispositivo corresponde a
+  la **Etapa 1**.
 - **Tipo:** diseño de implementación (**Documentation First; implementado y
   verificado** — el código y los tests cumplen lo aquí especificado; se conserva
   como documentación viva)
-- **Estado del checkbox roadmap:** el ítem *"CLI `devices`"*
-  ([ROADMAP §Fase 3](../ROADMAP.md)) está **marcado `[x]`**: el incremento se
-  implementó y verificó, y el checklist del roadmap y el README se actualizaron
-  al cerrar este incremento.
+- **Estado del roadmap:** el comando se publicó sobre el backend base de BlueZ
+  (consultas snapshot), que se consumirá en la Etapa 2; el incremento se
+  implementó y verificó al cerrar, y el README se actualizó. La validación
+  física del dispositivo queda en la Etapa 1.
 - **Documentos relacionados:** [Diseño del repositorio BlueZ](../bluez/repository-design.md)
   (consultas snapshot sobre las que se construye este comando),
   [Contrato del mapper](../bluez/object-mapper-contract.md),
@@ -37,10 +39,9 @@ Diseño del comando `openbuds devices`: lista los dispositivos Bluetooth
 > `-p|--paired-only` y `-a|--adapter ADAPTER` con `type=` que normaliza `hciN`
 > → `/org/bluez/hciN` y valida `^hci\d+$` (§2). Imprime TSV en español con
 > cabecera, sanitización y privacidad (§3–§4). El TDD (§7) está **completado**
-> y la suite por defecto (Python 3.14) suma **276 passed, 6 skipped** (las 6
-> omisiones son integraciones opt-in desactivadas por defecto; 2026-08-10); con
-> `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio: **282 passed**. El smoke
-> opt-in (§8) pasó en **Python 3.12 / Gio** sobre BlueZ real: exit 0, sin
+> y los gates ordinarios, junto con la integración opt-in, pasaron al cierre del
+> incremento (2026-08-10). El smoke opt-in (§8) pasó en **Python 3.12 / Gio**
+> sobre BlueZ real: exit 0, sin
 > patrones MAC ni `dev_` en stdout/stderr y sin auto-arrancar `bluetoothd`
 > (solo lectura). El comando es **solo snapshot**: no discovery, no connect y
 > **sin señales** (no depende del dispatch del repositorio).
@@ -64,7 +65,7 @@ cli/main.py  (_cmd_devices)
   esta ruta) y `ScanDevicesUseCase`, y lo pasa al handler.
 - Los tests **no** importan `gi` ni tocan el bus: inyectan un fake o
   monkeypatchean la factory de construcción del repositorio (p. ej.
-  `main._build_repository`) antes de invocar `main`/el handler.
+  `main._build_scan_devices_use_case`) antes de invocar `main`/el handler.
 - Cumple [ADR-0004](../ADR/0004-clean-architecture-dependency-rule.md): la
   presentación depende de la aplicación, que depende solo del contrato del
   dominio.
@@ -231,8 +232,8 @@ El fake del repositorio implementa solo `list_devices` (y opcionalmente cuenta
 llamadas); si el CLI intentara usar señales fallaría por atributo ausente, lo
 que convierte el caso 14 en una garantía estructural. Los tests que ejercitan
 `main` (no solo el handler) inyectan o monkeypatchean la factory de
-construcción del repositorio (p. ej. `main._build_repository`) y nunca llegan
-a importar `gi`.
+construcción del repositorio (p. ej. `main._build_scan_devices_use_case`) y
+nunca llegan a importar `gi`.
 
 ### 7.3 Implementación de `main` (ajuste a `tests/unit/test_cli.py`)
 
@@ -300,6 +301,7 @@ tests/integration/test_cli_devices_smoke.py  # smoke opt-in  [implementado, veri
 7. **`BluetoothError`/`OpenBudsError` → exit 1** vía el `except` central de
    `main`; errores de uso (incl. `ADAPTER` inválido) → 2.
 8. **Sin señales ni main loop** en este incremento.
-9. Roadmap (checkbox CLI `devices` `[x]`), README y baseline (**276 passed, 6
-   skipped** por defecto; **282 passed** con integración en Python 3.12/Gio)
-   se actualizaron **al cerrar el incremento de implementación**.
+9. El comando se publicó sobre el backend base de BlueZ (snapshot, solo
+   lectura), que se consumirá en la Etapa 2; README y checklist se actualizaron
+   **al cerrar el incremento de implementación**. La validación física del
+   dispositivo es de la Etapa 1.

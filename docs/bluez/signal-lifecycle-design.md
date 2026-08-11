@@ -42,8 +42,8 @@
 >   deterministas **sin `sleep`** (tick manual) + **integración real opt-in de
 >   lifecycle create/destroy inmediato con `poll_interval_ms=60_000`** (sin
 >   tick real, sin hardware, sin señales inducidas) y **bus compartido usable
->   con snapshot posterior**. Gates 2026-08-10: **310 passed, 6 skipped** por
->   defecto; **316/316** con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio;
+>   con snapshot posterior**. Los gates ordinarios y la integración opt-in
+>   pasaron al cierre del incremento (2026-08-10, Python 3.12 / Gio);
 >   ruff/mypy en verde.
 >
 > **Corrección sobre el diseño previo (2026-08-10):** el *self-unsubscribe
@@ -59,7 +59,7 @@
 > cualquier discrepancia con las fuentes oficiales o con el spike se detiene y
 > se documenta (AGENTS.md §5).
 
-- **Fase:** 3 (Bluetooth) — Incremento 2 de señales y lifecycle
+- **Incremento:** 2 de señales y lifecycle (BlueZ)
 - **Tipo:** contrato de implementación (no es un ADR)
 - **Fecha del contrato:** 2026-08-09
 - **Documentos relacionados:** [ADR-0007](../ADR/0007-device-change-event-contract.md),
@@ -102,7 +102,7 @@ dispatch de `DeviceChangeEvent` en `BlueZRepository` con cache de diff.
 > verificadas**.
 
 **Fuera de alcance:** métodos mutadores (prohibidos por construcción), cierre de
-la conexión compartida, integración GLib/Qt (Fase 6) y mapeo de payload parcial.
+la conexión compartida, integración GLib/Qt (Etapa 3) y mapeo de payload parcial.
 El **polling de respaldo** está **implementado y verificado** en
 [§12](#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)
 ([RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)) como
@@ -489,7 +489,7 @@ en esa entrega (invariante 6, sin cambios).
 - El callback de usuario corre en el **hilo del worker** (contexto de señales;
   ADR-0007 §Semántica).
 - La **UI nunca se toca desde el worker**: se **marshalear** a Qt (señal/slot o
-  cola). Obligatorio en Fase 6.
+  cola). Obligatorio en la Etapa 3.
 - `subscribe`/`unsubscribe` desde **cualquier hilo**; se serializan al worker
   (§3).
 
@@ -613,9 +613,8 @@ Llamador (cualquier hilo)         Worker (Gio)
 > integration real **no** afirma recepción de señales reales de BlueZ (solo
 > lifecycle).
 
-- Baseline por defecto (Python 3.14, sin GI/bus): **310 passed, 6 skipped** (las
-  6 omisiones son las integraciones opt-in). Con `OPENBUDS_RUN_INTEGRATION=1` en
-  **Python 3.12 / Gio**: **316 passed**. Ruff y mypy en verde. Comando de commit:
+- Los gates ordinarios y la integración opt-in pasaron al cierre del incremento
+  (2026-08-10; ruff/mypy en verde). Comando de commit:
   `make lint && make typecheck && make test` (AGENTS.md §13).
 
 ---
@@ -640,7 +639,7 @@ Llamador (cualquier hilo)         Worker (Gio)
 
 ---
 
-## 10. Riesgos de la integración Qt (Fase 6)
+## 10. Riesgos de la integración Qt (Etapa 3)
 
 - **No existe puente automático GLib/Qt:** el worker itera su propio
   `GMainContext`; los callbacks no tocan Qt. Toda actualización de UI se
@@ -648,7 +647,7 @@ Llamador (cualquier hilo)         Worker (Gio)
   debe bloquearse por trabajo de usuario (el mapeo/diff es ligero y ocurre en
   el worker).
 - La estrategia concreta de integración GLib/Qt queda **pendiente de investigar
-  y validar en Fase 6** ([gio-dbus-client-design §6](gio-dbus-client-design.md#6-requisitos-de-entorno)).
+  y validar en la Etapa 3** ([gio-dbus-client-design §6](gio-dbus-client-design.md#6-requisitos-de-entorno)).
 - Concurrencia: el objeto del repositorio usado desde Qt debe ser seguro (los
   métodos de snapshot son independientes; el dispatch ocurre en el worker).
 
@@ -836,7 +835,7 @@ Consecuencias (**verificadas**):
 | 12 | Cero callbacks tras `unsubscribe` | serialización worker + `active`/in-flight del repositorio; self-unsubscribe reentrante seguro. |
 | 13 | Nunca se cierra el bus | close/rollback destruyen fuentes pero `connection.close()` no se invoca. |
 | 14 | Tests deterministas | fakes con tick manual (sin sleep); integración real solo lifecycle create/destroy con `poll_interval_ms=60_000` (sin tick real). |
-| 15 | Calidad | `make lint && make typecheck && make test` en verde (AGENTS.md §13): **310 passed, 6 skipped** por defecto; **316 passed** con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12/Gio. |
+| 15 | Calidad | `make lint && make typecheck && make test` en verde (AGENTS.md §13); los gates ordinarios y la integración opt-in pasaron al cierre del incremento. |
 
 ### 12.7 Pseudocódigo
 
@@ -929,8 +928,8 @@ def _handle_poll(self) -> None:
   exclusiva del lifecycle (`unsubscribe`/`close`/rollback).
 - **Contrato del dominio intacto:** es infraestructura interna; no cambia
   `IBluetoothRepository` ni [ADR-0007](../ADR/0007-device-change-event-contract.md).
-- **Fase 6 (Qt):** el poll corre en el worker (GLib), nunca en Qt; se marshaleará
-  igual que las señales (contrato de hilos, §5).
+- **Etapa 3 (Qt):** el poll corre en el worker (GLib), nunca en Qt; se
+  marshaleará igual que las señales (contrato de hilos, §5).
 
 ### 12.10 Fuentes oficiales verificadas
 

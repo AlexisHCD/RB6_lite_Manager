@@ -14,12 +14,10 @@
 > - Test de integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) verificado en
 >   **Python 3.12 / Gio** sobre un snapshot real de BlueZ (`GetManagedObjects`),
 >   sin métodos mutadores ni exposición de la MAC.
-> - Suite actual del proyecto por defecto (Python 3.14): **276 passed, 6
->   skipped** (las 6 omisiones son integraciones opt-in, desactivadas por
->   defecto); con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio: **282
->   passed** (2026-08-10).
+> - Los gates ordinarios y la integración opt-in pasaron al cierre del
+>   incremento (2026-08-10).
 
-- **Fase:** 3 (Bluetooth) — ítem **separado** del roadmap (ver §5 de
+- **Ítem del roadmap:** separado del roadmap (ver §5 de
   [gio-dbus-client-design.md](gio-dbus-client-design.md))
 - **Tipo:** contrato de implementación (no es un ADR)
 - **Fecha del contrato:** 2026-08-09
@@ -250,7 +248,7 @@ iconos nuevos; un icono desconocido no debe romper el mapeo).
 Este commit **no añade ningún mapeo de códec** (no existe `map_codec`, no se toca
 `MediaTransport1`). Los bytes vendor (aptX/LDAC) **no están canonizados** y
 nunca se asumen ([RESEARCH_LIMITS §1](../RESEARCH_LIMITS.md#1)); incluso SBC/AAC
-quedan fuera de este contrato (futuro ítem de Fase 3/4 vía
+quedan fuera de este contrato (futuro ítem de la Etapa 1 vía
 `MediaTransport1.Codec` + PipeWire).
 
 ---

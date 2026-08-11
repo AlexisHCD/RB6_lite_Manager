@@ -1,6 +1,6 @@
 # Diseño — `WpctlAdapter` (wpctl), Incremento 1: solo lectura
 
-> **Estado honesto:** implementación local de solo lectura **validada y aprobada localmente**; **publicación pendiente** (sin commit/push autorizado).
+> **Estado honesto:** incremento de solo lectura **validado, aprobado y publicado**.
 
 ## Propósito
 
@@ -56,5 +56,5 @@ y `@pytest.mark.integration`: `status()` → `str`; `inspect("@DEFAULT_AUDIO_SIN
 - No hay parser de la salida (claves, códecs, perfiles) en este incremento.
 - No perfiles/códec, no volumen, no reinicio ni configuración
   (`set_profile`/`restart_service` no implementados).
-- Verificado con WirePlumber 0.4.17 (Ubuntu 24.04); aprobado localmente,
-  publicación pendiente.
+- Verificado con WirePlumber 0.4.17 (Ubuntu 24.04); publicado como solo
+  lectura.

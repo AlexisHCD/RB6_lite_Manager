@@ -7,7 +7,8 @@
 > **parcialmente implementado** — este incremento cubre solo el listado;
 > `get_active_codec`/`get_default_audio_sink` **permanecen `NotImplementedError`**
 > (§10). Gates reales en §8.3.
-- **Fase:** 4 (Optimización) — repositorio base de inspección de audio PipeWire
+- **Etapa:** 2 (backend PipeWire de solo lectura) — repositorio base de
+  inspección de audio PipeWire
 - **Tipo:** diseño de implementación (no es un ADR)
 - **Fecha:** 2026-08-10
 - **Relacionados:** [ADR-0003 (inspección vía subprocess)](../ADR/0003-no-pipewire-python-binding.md), [ADR-0002 (WirePlumber 0.4)](../ADR/0002-wireplumber-0.4-lua-config-scope.md), [contrato del runner](pw-dump-runner-contract.md), [contrato del parser](pw-dump-parser-contract.md), [RESEARCH_LIMITS](../RESEARCH_LIMITS.md)
@@ -87,8 +88,9 @@ Gated por `OPENBUDS_RUN_INTEGRATION=1` (`@pytest.mark.integration`).
 5. Resultado local esperado (sin dispositivos, 2026-08-10): `[]` (0 nodos Bluetooth). **No** se afirma detección de Redmi Buds 6 Lite ni códec positivo ([RESEARCH_LIMITS §2](../RESEARCH_LIMITS.md#2-propiedades-runtime-de-pipewire)).
 6. Si `pw-dump` falta o PipeWire no responde, `dump()` lanza `PipeWireUnavailableError` y el test falla (diseño "la ejecución es la verdad", contrato del runner §11).
 ### 8.3 Gates del incremento (verificados 2026-08-10)
-- `make lint` y `make typecheck` en verde; `make test` → **367 passed, 9 skipped** (defecto); suite completa con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12.3** (`/tmp/openbuds-status-venv`) → **376/376 passed**.
-- **8 unit tests** (`tests/unit/test_pipewire_repository.py`: fakes deterministas, sin `pw-dump`/PipeWire/GI) + **1 integración real opt-in** (`tests/integration/test_pipewire_repository.py`).
+- `make lint` y `make typecheck` en verde; los gates ordinarios y la
+  integración opt-in pasaron al cierre del incremento.
+- **Unit tests** (`tests/unit/test_pipewire_repository.py`: fakes deterministas, sin `pw-dump`/PipeWire/GI) + **integración real opt-in** (`tests/integration/test_pipewire_repository.py`).
 - Commit atómico único: `feat(pipewire): implement PipeWireRepository.list_bluetooth_audio_nodes`.
 ## 9. Fuera de alcance (Incremento 1)
 - `get_active_codec` / `get_default_audio_sink` (**NotImplementedError**; §10).
@@ -97,7 +99,7 @@ Gated por `OPENBUDS_RUN_INTEGRATION=1` (`@pytest.mark.integration`).
 - Privacidad de presentación (MAC visible al usuario).
 - Cualquier escritura sobre PipeWire/WirePlumber/dispositivo.
 ## 10. Métodos diferidos — documentación honesta
-`get_active_codec(device_address) -> CodecInfo | None` y `get_default_audio_sink() -> str | None` **permanecen** con `NotImplementedError` en este incremento. No se implementan de forma parcial, **no se infiere códec** a partir de `bluez5.codec` (verbatim; semántica runtime no documentada formalmente) y no se afirma ningún códec. Se diseñarán en un incremento posterior con hardware real para la validación empírica del caso positivo (ADRs 0002/0003, RESEARCH_LIMITS §2).
+`get_active_codec(device_address) -> CodecInfo | None` y `get_default_audio_sink() -> str | None` **permanecen** con `NotImplementedError` en este incremento. No se implementan de forma parcial, **no se infiere códec** a partir de `bluez5.codec` (verbatim; semántica runtime no documentada formalmente) y no se afirma ningún códec. Se diseñarán en la Etapa 2 (backend de sesión); el caso positivo se validará empíricamente en la Etapa 1 (ADRs 0002/0003, RESEARCH_LIMITS §2).
 ## 11. Resumen de decisiones (registro del arquitecto)
 1. Incremento 1 cubre **solo** `list_bluetooth_audio_nodes`; el contrato global `IAudioRepository` y los demás métodos quedan **pendientes**.
 2. `DumpRunner` = Protocol estructural `dump() -> str`; `PwDumpRunner` ya es compatible (sin modificar runner ni parser).
@@ -108,4 +110,4 @@ Gated por `OPENBUDS_RUN_INTEGRATION=1` (`@pytest.mark.integration`).
 7. Sin MAC en logs/salida del repositorio (privacidad de presentación diferida).
 8. `get_active_codec` / `get_default_audio_sink` **NotImplemented**; sin inferencia de códec.
 9. Unit tests con fakes (llamadas exactas, forwarding por comportamiento, fresh, `[]`, parse error, identidad de error del runner, runner falsy preservado, default `PwDumpRunner`); integración real opt-in `list`→`list`, **sin assert de nodos ni payload**; resultado local 0 nodos, sin afirmación positiva de hardware.
-10. **Verificado (2026-08-10):** gates `make lint`/`make typecheck` en verde, `make test` → **367 passed, 9 skipped**; integración real completa **376/376** en Python 3.12.3 (`OPENBUDS_RUN_INTEGRATION=1`, `/tmp/openbuds-status-venv`). La implementación real es el retorno directo `parse_bluetooth_audio_nodes(self._runner.dump())` (§5) con ctor `runner if runner is not None else PwDumpRunner()` (§4). El contrato global `IAudioRepository` sigue **parcialmente implementado**.
+10. **Verificado (2026-08-10):** gates `make lint`/`make typecheck` en verde; los gates ordinarios y la integración opt-in pasaron al cierre del incremento. La implementación real es el retorno directo `parse_bluetooth_audio_nodes(self._runner.dump())` (§5) con ctor `runner if runner is not None else PwDumpRunner()` (§4). El contrato global `IAudioRepository` sigue **parcialmente implementado**.

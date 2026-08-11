@@ -9,9 +9,8 @@ ausentes ni se ejecutan acciones de hardware sin aprobación explícita.
 
 **Objetivo:** recuperar una base reproducible antes de añadir funciones.
 
-- [x] Revisar y cerrar el trabajo local de `WpctlAdapter`: validado y aprobado;
-  publicación pendiente de commit/push autorizado. Solo lectura, mutaciones
-  deshabilitadas.
+- [x] Cerrar `WpctlAdapter`: validado, aprobado y publicado. Solo lectura,
+  mutaciones deshabilitadas.
 - [x] Ruff no presenta el fallo anunciado al inicio de esta revisión; volver a
   ejecutar todos los gates al cerrar el incremento local.
 - [x] Recrear, en una tarea aprobada aparte, `.venv` con `/usr/bin/python3` y
@@ -19,7 +18,9 @@ ausentes ni se ejecutan acciones de hardware sin aprobación explícita.
 - [x] `openbuds doctor` distingue sistema soportado, runtime listo y hardware
   disponible; el runtime exige `base_prefix` `/usr` y PyGObject/Gio importables
   (Linuxbrew devuelve no listo). Verificado en Python 3.12.
-- [ ] Corregir rutas y afirmaciones obsoletas restantes.
+- [x] Corregir rutas y afirmaciones obsoletas restantes: documentación
+  normativa/técnica y metadatos fuente alineados con las etapas; `MASTER_DOC`
+  etiquetado como histórico.
 - [ ] Añadir `LICENSE` GPL-3.0-or-later.
 - [ ] Diseñar CI básica para unit tests, Ruff y mypy.
 - [ ] Mantener WirePlumber en modo de solo lectura.

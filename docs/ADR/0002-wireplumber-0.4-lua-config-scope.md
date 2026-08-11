@@ -6,9 +6,10 @@
 
 ## Contexto
 
-El módulo de optimización (Fase 4) necesita editar la configuración de
-WirePlumber para ajustar códecs, calidad SBC-XQ, perfiles Bluetooth, etc.
-WirePlumber es el *session manager* de PipeWire y decide el ruteo y las policies.
+La app podría, en una etapa futura de persistencia (Etapa 5), necesitar editar
+la configuración de WirePlumber por usuario si se demuestra necesidad real
+(p. ej. códecs o perfiles Bluetooth). WirePlumber es el *session manager* de
+PipeWire y decide el ruteo y las policies.
 
 ### Hallazgo crítico de versiones
 
@@ -92,5 +93,5 @@ Fuente: [Bluetooth configuration — WirePlumber 0.4](https://pipewire.pages.fre
 
 `environment_detector.detect()` resuelve el estilo de configuración desde la
 versión de WirePlumber (`< 0.5` → `lua-0.4`; `>= 0.5` → `conf-0.5`) y lo expone
-en `SystemInfo.wireplumber_config_style`. El módulo de optimización debe
-verificar este campo antes de generar cualquier override.
+en `SystemInfo.wireplumber_config_style`. Cualquier futuro módulo de
+configuración debe verificar este campo antes de generar cualquier override.

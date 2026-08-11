@@ -141,7 +141,7 @@ proyecto como lo haría un equipo profesional:
 1. Analiza.
 2. Investiga.
 3. Pregunta todas las dudas necesarias.
-4. Diseña la arquitectura (ya hecho en Fase 1).
+4. Diseña la arquitectura base (ya definida; sin fase antigua).
 5. Documenta las decisiones (ADRs).
 6. Implementa **un único módulo**.
 7. Prueba ese módulo.
@@ -200,7 +200,7 @@ Ver `docs/ARCHITECTURE.md` para el detalle y el diagrama.
 | [0002](docs/ADR/0002-wireplumber-0.4-lua-config-scope.md) | WirePlumber **0.4 Lua**, scope **`~/.config/wireplumber/`** | Ubuntu 24.04 = 0.4.17 (NO 0.5). Nunca `/usr/share/`, nunca root. |
 | [0003](docs/ADR/0003-no-pipewire-python-binding.md) | Sin binding Python de PipeWire → `pw-dump`/`wpctl` vía subprocess | No existe binding oficial. |
 | [0004](docs/ADR/0004-clean-architecture-dependency-rule.md) | Clean Architecture, regla de dependencias | `presentation → application → domain ← infrastructure`. |
-| [0005](docs/ADR/0005-device-profile-contract.md) | Perfiles de dispositivo en YAML | Añadir dispositivo = añadir YAML, sin tocar el núcleo. |
+| [0005](docs/ADR/0005-device-profile-contract.md) | Perfiles de dispositivo en YAML | Objetivo declarativo; contrato y YAML actuales incompatibles, rediseño tipado pendiente de aprobación. |
 | [0006](docs/ADR/0006-app-config-toml-xdg-atomic-write.md) | Configuración TOML con rutas XDG y escritura atómica | Configuración propia separada, rutas XDG válidas y guardado sin truncado. |
 | [0007](docs/ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo (`DeviceChangeEvent`) | `DeviceChangeKind`/`DeviceChangeEvent`/`Unsubscribe`; contrato del dominio probado; **Incremento 2 completo**: nivel bajo de señales/lifecycle y dispatch del repositorio (`subscribe_device_changes`) implementados y verificados (fakes + integración real de lifecycle A/B). |
 

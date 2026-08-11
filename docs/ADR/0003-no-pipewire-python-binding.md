@@ -45,8 +45,8 @@ Fuentes: [pw-dump(1)](https://docs.pipewire.org/page_man_pw-dump_1.html),
 
 1. **Fiabilidad:** las CLI son estables y documentadas oficialmente.
 2. **Sin dependencias nativas:** evita el riesgo de un binding no mantenido.
-3. **Suficiencia:** para **leer y optimizar** estado de audio Bluetooth, el
-   parsing de `pw-dump` aporta toda la información disponible.
+3. **Suficiencia:** para la **inspección estándar** del estado de audio
+   Bluetooth, el parsing de `pw-dump` aporta toda la información disponible.
 4. **Aislamiento:** los errores de parsing se contienen en
    `pipewire/pw_dump_parser.py`.
 
@@ -59,7 +59,7 @@ Fuentes: [pw-dump(1)](https://docs.pipewire.org/page_man_pw-dump_1.html),
 - **Limitación documentada:** los nombres de propiedades runtime
   `api.bluez5.transport` y `bluez5.codec` **no están documentados formalmente**
   en pipewire.org (sí aparecen en salidas reales de `pw-dump`). Se validarán
-  empíricamente en Fase 3/4. Ver [`RESEARCH_LIMITS.md`](../RESEARCH_LIMITS.md).
+  empíricamente en la Etapa 1. Ver [`RESEARCH_LIMITS.md`](../RESEARCH_LIMITS.md).
 
 ## Verificación local
 
@@ -72,8 +72,8 @@ PipeWire 1.0.5 presente y `pw-dump` accesible en el entorno de desarrollo.
 ## Estado de implementación (2026-08-10)
 
 - **Parser `pw-dump` implementado y verificado:** `pipewire/pw_dump_parser.py`
-  (`parse_bluetooth_audio_nodes`, función **pura**, sin subprocess) con **20
-  unit tests** (`tests/unit/test_pw_dump_parser.py`, sin `pw-dump`/PipeWire/GI)
+  (`parse_bluetooth_audio_nodes`, función **pura**, sin subprocess) con unit
+  tests (`tests/unit/test_pw_dump_parser.py`, sin `pw-dump`/PipeWire/GI)
   e **integración real opt-in** (`tests/integration/test_pw_dump_parser.py`,
   `pw-dump --no-colors`, gated por `OPENBUDS_RUN_INTEGRATION=1`; no exige nodos
   conectados; resultado local 0 nodos; sin MAC/payload). Contrato:
@@ -83,7 +83,7 @@ PipeWire 1.0.5 presente y `pw-dump` accesible en el entorno de desarrollo.
   `subprocess.run` sin `shell=True`, `timeout` default 5 s, errores →
   `PipeWireUnavailableError` con mensajes genéricos sin paths/stdout/stderr/MAC;
   ctor valida `binary` y `timeout_seconds` con `math.isfinite` — NaN/±inf
-  rechazados, divergencia aprobada) con **29 unit tests**
+  rechazados, divergencia aprobada) con unit tests
   (`tests/unit/test_pw_dump_runner.py`) e **integración real opt-in**
   (`tests/integration/test_pw_dump_runner.py`: `runner.dump()` →
   `parse_bluetooth_audio_nodes`, `--no-colors` implícito, **sin assert de
@@ -94,7 +94,7 @@ PipeWire 1.0.5 presente y `pw-dump` accesible en el entorno de desarrollo.
   (`PipeWireRepository.list_bluetooth_audio_nodes`: `runner.dump()` **fresco por
   llamada** + `parse_bluetooth_audio_nodes`, Protocol `DumpRunner` inyectable por
   ctor con `is None`, sin cache/logs/subprocess propio, errores **propagados sin
-  re-envolver**) con **8 unit tests** (`tests/unit/test_pipewire_repository.py`,
+  re-envolver**) con unit tests (`tests/unit/test_pipewire_repository.py`,
   fakes deterministas, sin `pw-dump`/PipeWire/GI) e **integración real opt-in**
   (`tests/integration/test_pipewire_repository.py`,
   `OPENBUDS_RUN_INTEGRATION=1`: solo `list`/dicts `str`, **sin assert de nodos
@@ -107,4 +107,4 @@ PipeWire 1.0.5 presente y `pw-dump` accesible en el entorno de desarrollo.
   vía subprocess) queda **ejecutada en la parte de lectura de `pw-dump`**
   (parser + runner + repositorio de composición); las **acciones de control de
   `wpctl`** (`set-default`, `set-profile`, `set-volume`) y los métodos de
-  códec/sink del repositorio se completan en ítems posteriores de la Fase 4.
+  códec/sink del repositorio se completan en ítems posteriores de la Etapa 2.

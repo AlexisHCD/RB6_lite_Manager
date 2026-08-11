@@ -4,15 +4,14 @@
 > metodología **Documentation First**; la implementación cumple exactamente lo
 > aquí especificado. `pipewire/pw_dump_parser.py` implementa
 > `parse_bluetooth_audio_nodes` (ADRs [0003](../ADR/0003-no-pipewire-python-binding.md)
-> y [0002](../ADR/0002-wireplumber-0.4-lua-config-scope.md)) con **20 unit tests
-> TDD** en `tests/unit/test_pw_dump_parser.py` y una **integración real opt-in**
+> y [0002](../ADR/0002-wireplumber-0.4-lua-config-scope.md)) con unit tests
+> TDD en `tests/unit/test_pw_dump_parser.py` y una **integración real opt-in**
 > `tests/integration/test_pw_dump_parser.py` (`pw-dump --no-colors`).
-> **Verificación 2026-08-10:** 330 passed / 7 skipped por defecto y **337/337**
-> con `OPENBUDS_RUN_INTEGRATION=1` (Python 3.12, `/tmp/openbuds-status-venv`);
-> Ruff y mypy en verde.
+> **Verificación 2026-08-10:** los gates ordinarios y la integración opt-in
+> pasaron al cierre del incremento (Python 3.12); Ruff y mypy en verde.
 
-- **Fase:** 4 (Optimización) — parser base de inspección de
-  audio PipeWire
+- **Etapa:** 2 (backend PipeWire de solo lectura) — parser base de
+  inspección de audio PipeWire
 - **Tipo:** contrato de implementación (no es un ADR)
 - **Fecha del contrato:** 2026-08-10
 - **Documentos relacionados:** [ADR-0003 (pw-dump vía subprocess)](../ADR/0003-no-pipewire-python-binding.md),
@@ -128,7 +127,7 @@ Un nodo es **de audio Bluetooth** si y solo si cumple **al menos una** de:
    `bluez_input.<addr>`).
 2. `device.api` (de `info.props`) es exactamente **`bluez5`**. La clave común
    `device.api` está documentada por PipeWire; el valor `bluez5` se trata como
-   marcador runtime de respaldo y se validará con hardware real.
+   marcador runtime de respaldo y se validará en la Etapa 1.
 
 Si cumple (1) **o** (2) → candidato; se incluye siempre que `media.class` y
 `id` superen la validación. Si no cumple ninguna → se ignora.
@@ -279,7 +278,7 @@ def parse_bluetooth_audio_nodes(payload: str) -> list[dict[str, str]]:
 
 ## 9. Criterios de aceptación (tests TDD)
 
-Archivo de tests: **`tests/unit/test_pw_dump_parser.py`** — **20 unit tests**
+Archivo de tests: **`tests/unit/test_pw_dump_parser.py`** — unit tests
 (casos 1-32 agrupados y parametrizados). Corren **sin**
 `pw-dump`, sin PipeWire y sin GI.
 
@@ -336,9 +335,8 @@ Archivo de tests: **`tests/unit/test_pw_dump_parser.py`** — **20 unit tests**
 | 32 | `object.id` en salida es `str` | todos los valores del dict son `str` (invariante `list[dict[str,str]]`) |
 
 **Verificación de calidad (2026-08-10):** `make lint` y `make typecheck`
-(Ruff y mypy en verde) y `make test` → **330 passed / 7 skipped** por defecto;
-con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12** (`/tmp/openbuds-status-venv`)
-→ **337/337**. Commit atómico
+(Ruff y mypy en verde); los gates ordinarios y la integración opt-in pasaron al
+cierre del incremento. Commit atómico
 `feat(pipewire): implement pure pw-dump bluetooth audio node parser`.
 
 ---
@@ -366,7 +364,7 @@ nodos Bluetooth (bluez_output/bluez_input o device.api=bluez5) → 0  ✅
 
 ### 10.2 Verificación de integración real (opt-in) y cierre
 
-- **20 unit tests TDD** (`tests/unit/test_pw_dump_parser.py`) pasan **sin**
+- **Unit tests TDD** (`tests/unit/test_pw_dump_parser.py`) pasan **sin**
   `pw-dump`, sin PipeWire y sin GI (casos 1-32 de §9).
 - **Integración real opt-in** `tests/integration/test_pw_dump_parser.py` (gated
   por `OPENBUDS_RUN_INTEGRATION=1`, `@pytest.mark.integration`): ejecuta
@@ -375,10 +373,8 @@ nodos Bluetooth (bluez_output/bluez_input o device.api=bluez5) → 0  ✅
   local es `[]` (0 nodos Bluetooth)**. **No captura ni expone MAC ni payload:**
   el payload no se loguea y la MAC solo se usa como condición de filtrado
   (`startswith`), nunca en logs ni en la salida.
-- **Gates al cierre (2026-08-10):** `make test` → **330 passed / 7 skipped**
-  por defecto; con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12**
-  (`/tmp/openbuds-status-venv`) → **337/337**. Ruff y mypy en verde
-  (`make lint`, `make typecheck`).
+- **Gates al cierre (2026-08-10):** los gates ordinarios y la integración
+  opt-in pasaron; Ruff y mypy en verde (`make lint`, `make typecheck`).
 - **Implicación de verificación:** al no haber nodos Bluetooth reales, la
   validación empírica del caso positivo (códec/transporte) sigue **pendiente**
   hasta disponer de un dispositivo conectado

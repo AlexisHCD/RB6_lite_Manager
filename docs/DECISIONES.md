@@ -19,7 +19,7 @@ Record) en [`ADR/`](ADR/).
 ## Cómo añadir un nuevo ADR
 
 1. Copia la plantilla inferior.
-2. Numera secuencialmente (`0006-...`).
+2. Numera secuencialmente (`0008-...`).
 3. Indica contexto, decisión, justificación y consecuencias.
 4. Actualiza esta tabla.
 
@@ -30,7 +30,7 @@ Record) en [`ADR/`](ADR/).
 
 - **Estado:** Propuesta / Aceptada / Obsoleta
 - **Fecha:** YYYY-MM-DD
-- **Fase:** N
+- **Etapa/Incremento:** N
 
 ## Contexto
 (¿Qué problema se intenta resolver? ¿Qué restricciones hay?)
@@ -51,8 +51,9 @@ Estas restricciones globales rigen todo el proyecto y se documentan aquí como
 referencia permanente:
 
 - **Nunca** modificar firmware, EEPROM ni NVRAM del dispositivo.
-- **Nunca** enviar comandos Bluetooth desconocidos o propietarios sin
-  comprensión total (Fase 9, análisis pasivo exclusivamente).
+- **Nunca** enviar comandos Bluetooth propietarios o desconocidos: están
+  prohibidos de forma absoluta; el análisis pasivo no habilita el envío de
+  comandos.
 - **Nunca** aplicar ingeniería inversa directamente sobre el dispositivo.
 - **Nunca** modificar hardware.
 - **Nunca** eliminar configuraciones existentes del sistema sin backup.
