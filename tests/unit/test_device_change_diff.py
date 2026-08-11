@@ -5,14 +5,14 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
-from openbuds.infrastructure.bluez.device_change_diff import (
-    diff_device_snapshots,
-)
 
 from openbuds.core.errors import BluetoothError
 from openbuds.domain.enums import DeviceChangeKind
 from openbuds.domain.models import DeviceChangeEvent, DeviceInfo
 from openbuds.infrastructure.bluez.dbus_protocol import ManagedObjects
+from openbuds.infrastructure.bluez.device_change_diff import (
+    diff_device_snapshots,
+)
 from openbuds.infrastructure.bluez.object_mapper import map_device
 
 DEVICE1 = "org.bluez.Device1"
