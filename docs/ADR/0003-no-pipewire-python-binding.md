@@ -78,8 +78,21 @@ PipeWire 1.0.5 presente y `pw-dump` accesible en el entorno de desarrollo.
   `pw-dump --no-colors`, gated por `OPENBUDS_RUN_INTEGRATION=1`; no exige nodos
   conectados; resultado local 0 nodos; sin MAC/payload). Contrato:
   [pw-dump-parser-contract](../pipewire/pw-dump-parser-contract.md).
-- **Pendiente (no afirmar este ADR completo):** el **runner** de
-  `pw-dump`/`wpctl` y el **repositorio** `IAudioRepository` aún **no** están
-  implementados. La decisión de este ADR (inspección vía subprocess) solo se
-  considera ejecutada en su totalidad cuando existan el runner y las acciones
-  de control de `wpctl`.
+- **Runner `pw-dump` implementado y verificado:** `pipewire/pw_dump_runner.py`
+  (`PwDumpRunner.dump()`, ejecución segura de `pw-dump --no-colors` vía
+  `subprocess.run` sin `shell=True`, `timeout` default 5 s, errores →
+  `PipeWireUnavailableError` con mensajes genéricos sin paths/stdout/stderr/MAC;
+  ctor valida `binary` y `timeout_seconds` con `math.isfinite` — NaN/±inf
+  rechazados, divergencia aprobada) con **29 unit tests**
+  (`tests/unit/test_pw_dump_runner.py`) e **integración real opt-in**
+  (`tests/integration/test_pw_dump_runner.py`: `runner.dump()` →
+  `parse_bluetooth_audio_nodes`, `--no-colors` implícito, **sin assert de
+  nodos**, sin payload/MAC). Contrato:
+  [pw-dump-runner-contract](../pipewire/pw-dump-runner-contract.md).
+- **Pendiente (no afirmar este ADR completo):** el **repositorio**
+  `IAudioRepository` (`pipewire/pipewire_repository.py`) y el **adaptador de
+  control `wpctl`** aún **no** están implementados. La decisión de este ADR
+  (inspección vía subprocess) queda **ejecutada en la parte de lectura de
+  `pw-dump`** (parser + runner); las **acciones de control de `wpctl`**
+  (`set-default`, `set-profile`, `set-volume`) y la repositorización se
+  completan en ítems posteriores de la Fase 4.

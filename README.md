@@ -113,6 +113,26 @@ caso positivo (códec/transporte reales); **no** se afirma el Redmi Buds 6 Lite
 detectado ni códec verificado. Ver
 [`docs/pipewire/pw-dump-parser-contract.md`](docs/pipewire/pw-dump-parser-contract.md).
 
+La **segunda pieza de la Fase 4 — el runner seguro `PwDumpRunner`**
+(`infrastructure/pipewire/pw_dump_runner.py`, ADR-0003) — está **implementada
+y verificada (2026-08-10)**: ejecuta `pw-dump --no-colors` de forma aislada y
+privada (`subprocess.run` con `capture_output`/`text`/`check=False`, `timeout`
+default 5 s, **nunca `shell=True`**, sin argumentos de usuario), traduce
+cualquier fallo (`OSError`/`TimeoutExpired`, `returncode != 0`, stdout no-`str`)
+a `PipeWireUnavailableError(AudioSubsystemError)` con mensajes genéricos sin
+paths, stdout/stderr ni MAC, y devuelve el payload JSON exacto como `str`
+(incluido `""`) para el parser puro. `binary` y `timeout_seconds` se validan en
+el constructor antes de ejecutar nada (`str` no vacío sin NUL; tipo exacto
+`int`/`float` no-`bool`, `> 0` y **finito** — NaN/±inf rechazados, divergencia
+aprobada); el `executor` es inyectable por Protocol (fakes en tests, default
+real `subprocess.run`). Sin `shutil.which` (TOCTOU) y sin logging de
+payload/stderr (privacidad). Cubierto por **29 unit tests** y una **integración
+real opt-in** (`OPENBUDS_RUN_INTEGRATION=1`) que encadena `runner.dump()` →
+`parse_bluetooth_audio_nodes` sin exigir nodos Bluetooth (resultado local **0
+nodos**). El siguiente ítem de la Fase 4, el **repositorio `IAudioRepository`
+(`pipewire/pipewire_repository.py`), sigue pendiente**. Ver
+[`docs/pipewire/pw-dump-runner-contract.md`](docs/pipewire/pw-dump-runner-contract.md).
+
 Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Requisitos del sistema
@@ -243,24 +263,25 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual por defecto (Python 3.14):** **330 tests** en verde +
-**7 skipped** (las 7 integraciones BlueZ/PipeWire opt-in desactivadas por
+**Baseline actual por defecto (Python 3.14):** **359 tests** en verde +
+**8 skipped** (las 8 integraciones BlueZ/PipeWire opt-in desactivadas por
 defecto; 2026-08-10); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**
-(`/tmp/openbuds-status-venv`): **337 passed**. Ruff y mypy en verde. El cliente
+(`/tmp/openbuds-status-venv`): **367 passed**. Ruff y mypy en verde. El cliente
 D-Bus (Incremento 1), el mapper de objetos, el **worker y lifecycle de señales
 de bajo nivel**, el **dispatch del repositorio** (Incremento 2 completo), el
 **polling de respaldo** (2026-08-10), el **diff puro de
 snapshots** (`device_change_diff.py`), el contrato de eventos de cambio de
 dispositivo ([ADR-0007](docs/ADR/0007-device-change-event-contract.md)), las
-consultas snapshot del repositorio, la CLI `devices` y el **parser puro de
-`pw-dump`** (Fase 4: función pura sin subprocess, 20 unit tests + integración
-real opt-in `pw-dump --no-colors`) ya están cubiertos por la suite
-(`tests/unit/test_device_change_diff.py`,
+consultas snapshot del repositorio, la CLI `devices`, el **parser puro de
+`pw-dump`** y el **runner seguro `PwDumpRunner`** (Fase 4) ya están cubiertos
+por la suite (`tests/unit/test_device_change_diff.py`,
 `tests/unit/test_bluez_repository_signals.py`,
 `tests/integration/test_bluez_repository_signals.py`,
 `tests/integration/test_bluez_signal_lifecycle.py`,
 `tests/unit/test_pw_dump_parser.py`,
-`tests/integration/test_pw_dump_parser.py`).
+`tests/integration/test_pw_dump_parser.py`,
+`tests/unit/test_pw_dump_runner.py`,
+`tests/integration/test_pw_dump_runner.py`).
 
 ## Arquitectura
 
