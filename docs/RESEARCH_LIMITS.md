@@ -28,7 +28,9 @@ Fuente: [media-api.txt](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/
 
 ## 2. Propiedades runtime de PipeWire
 
-**Estado:** no documentadas formalmente.
+**Estado:** no documentadas formalmente; **el parser de `pw-dump` las preserva
+verbatim sin validar ni inferir (2026-08-10)**; la **validación del caso
+positivo contra hardware real sigue pendiente**.
 
 Los siguientes nombres de propiedades aparecen en **salidas reales de `pw-dump`**
 (reportadas por la comunidad), pero **no están documentados** formalmente en
@@ -37,8 +39,13 @@ pipewire.org ni en la documentación de WirePlumber:
 - `api.bluez5.transport`
 - `bluez5.codec` (como propiedad de nodo en runtime)
 
-**Implicación:** no se asume su existencia ni su formato. Se validan
-empíricamente en Fase 3/4 inspeccionando `pw-dump` con un dispositivo conectado.
+**Implicación:** no se asume su existencia ni su formato. El parser de
+`pw-dump` (`pipewire/pw_dump_parser.py`,
+[contrato](../pipewire/pw-dump-parser-contract.md)) las **preserva verbatim**:
+las pasa como `str` sin validar, sin inferir códec ni transporte y **sin
+verificar** contra listas de códecs/transportes. La validación empírica del
+caso positivo sigue **pendiente** hasta inspeccionar `pw-dump` con un
+dispositivo conectado; **no** se afirma ningún códec real.
 
 Las propiedades **sí documentadas** y seguras de usar son (de
 [WirePlumber Bluetooth config 0.4](https://pipewire.pages.freedesktop.org/wireplumber/configuration/bluetooth.html)):

@@ -15,6 +15,7 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 
 ✅ **Fase 2 — Backend base (completada).** ✅ **Fase 3 — Bluetooth
 (implementación software completa; validación empírica del dispositivo pendiente).**
+🔜 **Fase 4 — Optimización (en curso).**
 
 El repositorio contiene la arquitectura por capas, los cimientos del dominio,
 la configuración TOML, logging, detección del entorno y una CLI base funcional.
@@ -91,6 +92,26 @@ paralelo**. Ver
 [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/cli/devices-command.md`](docs/cli/devices-command.md).
 La aplicación completa aún no está terminada: diagnóstico y la GUI se
 implementan en las fases siguientes.
+
+La **Fase 4 (Optimización) está en curso**. Su primera pieza — el **parser de
+`pw-dump`** (`infrastructure/pipewire/pw_dump_parser.py`, ADR-0003) — está
+**implementada y verificada (2026-08-10)**: función **pura**
+(`payload: str` de `pw-dump` → `list[dict[str, str]]`, sin subprocess, sin
+I/O), extrae nodos Bluetooth (`media.class` `Audio/Sink`/`Audio/Source`) por
+prefijo `bluez_output.`/`bluez_input.` o `device.api=bluez5`, normaliza valores
+escalares (`str` verbatim, `bool` lowercase, `int`/`float` `str`,
+`null`/`list`/`dict` ignorados), añade `object.id` canónico, ordena por `id`
+numérico y **preserva `bluez5.codec` / `api.bluez5.transport` verbatim sin
+validar ni inferir**
+([RESEARCH_LIMITS §2](docs/RESEARCH_LIMITS.md#2-propiedades-runtime-de-pipewire)).
+Los errores estructurales (`JSONDecodeError` o root no-lista) se envuelven en
+`PipeWireParseError(AudioSubsystemError)`. Está cubierto por **20 unit tests** y
+una **integración real opt-in** (`OPENBUDS_RUN_INTEGRATION=1`, `pw-dump
+--no-colors` que **no exige nodos conectados**; resultado local **0 nodos**; sin
+MAC ni payload en logs). **Límites:** sin auriculares conectados no se valida el
+caso positivo (códec/transporte reales); **no** se afirma el Redmi Buds 6 Lite
+detectado ni códec verificado. Ver
+[`docs/pipewire/pw-dump-parser-contract.md`](docs/pipewire/pw-dump-parser-contract.md).
 
 Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -222,20 +243,24 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual por defecto (Python 3.14):** **310 tests** en verde +
-**6 skipped** (las 6 integraciones BlueZ opt-in desactivadas por defecto;
-2026-08-10); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**:
-**316 passed**. Ruff y mypy en verde. El cliente D-Bus (Incremento 1), el
-mapper de objetos, el **worker y lifecycle de señales de bajo nivel**, el
-**dispatch del repositorio** (Incremento 2 completo), el **polling de
-respaldo** (2026-08-10), el **diff puro de
+**Baseline actual por defecto (Python 3.14):** **330 tests** en verde +
+**7 skipped** (las 7 integraciones BlueZ/PipeWire opt-in desactivadas por
+defecto; 2026-08-10); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**
+(`/tmp/openbuds-status-venv`): **337 passed**. Ruff y mypy en verde. El cliente
+D-Bus (Incremento 1), el mapper de objetos, el **worker y lifecycle de señales
+de bajo nivel**, el **dispatch del repositorio** (Incremento 2 completo), el
+**polling de respaldo** (2026-08-10), el **diff puro de
 snapshots** (`device_change_diff.py`), el contrato de eventos de cambio de
 dispositivo ([ADR-0007](docs/ADR/0007-device-change-event-contract.md)), las
-consultas snapshot del repositorio y la CLI `devices` ya están cubiertos por la
-suite (`tests/unit/test_device_change_diff.py`,
+consultas snapshot del repositorio, la CLI `devices` y el **parser puro de
+`pw-dump`** (Fase 4: función pura sin subprocess, 20 unit tests + integración
+real opt-in `pw-dump --no-colors`) ya están cubiertos por la suite
+(`tests/unit/test_device_change_diff.py`,
 `tests/unit/test_bluez_repository_signals.py`,
 `tests/integration/test_bluez_repository_signals.py`,
-`tests/integration/test_bluez_signal_lifecycle.py`).
+`tests/integration/test_bluez_signal_lifecycle.py`,
+`tests/unit/test_pw_dump_parser.py`,
+`tests/integration/test_pw_dump_parser.py`).
 
 ## Arquitectura
 

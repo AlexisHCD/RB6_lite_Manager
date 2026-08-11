@@ -38,6 +38,10 @@ class AudioSubsystemError(OpenBudsError):
     """Error de acceso al grafo de audio (PipeWire/WirePlumber)."""
 
 
+class PipeWireParseError(AudioSubsystemError):
+    """La salida JSON de PipeWire no cumple la estructura esperada."""
+
+
 class PipeWireUnavailableError(AudioSubsystemError):
     """El daemon PipeWire no está disponible o no responde."""
 

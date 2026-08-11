@@ -49,7 +49,7 @@ de comenzar la siguiente. El progreso se marca con checkbox.
 
 ## Fase 4 — Optimización
 
-- [ ] Parser de `pw-dump` → nodos Bluetooth (`pipewire/pw_dump_parser.py`)
+- [x] Parser de `pw-dump` → nodos Bluetooth (`pipewire/pw_dump_parser.py`) — **implementado y verificado (2026-08-10)**: función **pura** `parse_bluetooth_audio_nodes(payload: str) -> list[dict[str, str]]` sin subprocess (ADR-0003); root JSON no-lista o inválido → `PipeWireParseError(AudioSubsystemError)` (ya existe en `core/errors.py`); política «ignore, don't fail» (solo errores estructurales); filtrado por `media.class` `Audio/Sink`/`Audio/Source` y marcadores Bluetooth (`bluez_output.`/`bluez_input.` o `device.api=bluez5`); normalización escalar con `object.id` canónico y `bluez5.codec`/`api.bluez5.transport` verbatim sin validar/inferir. **20 unit tests** TDD (sin `pw-dump`/PipeWire/GI) + **integración real opt-in** `tests/integration/test_pw_dump_parser.py` (`pw-dump --no-colors`, gated `OPENBUDS_RUN_INTEGRATION=1`; **no exige nodos conectados**, resultado local **0 nodos**, sin MAC/payload). Contrato: [pw-dump-parser-contract](pipewire/pw-dump-parser-contract.md)
 - [ ] Implementación de `IAudioRepository` (`pipewire/pipewire_repository.py`)
 - [ ] Adaptador `wpctl` (`wireplumber/wpctl_adapter.py`)
 - [ ] Editor seguro de config Lua 0.4 (`wireplumber/config_editor.py`)

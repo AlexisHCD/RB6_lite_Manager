@@ -68,3 +68,18 @@ pw-dump --version  →  Compiled with libpipewire 1.0.5
 ```
 
 PipeWire 1.0.5 presente y `pw-dump` accesible en el entorno de desarrollo.
+
+## Estado de implementación (2026-08-10)
+
+- **Parser `pw-dump` implementado y verificado:** `pipewire/pw_dump_parser.py`
+  (`parse_bluetooth_audio_nodes`, función **pura**, sin subprocess) con **20
+  unit tests** (`tests/unit/test_pw_dump_parser.py`, sin `pw-dump`/PipeWire/GI)
+  e **integración real opt-in** (`tests/integration/test_pw_dump_parser.py`,
+  `pw-dump --no-colors`, gated por `OPENBUDS_RUN_INTEGRATION=1`; no exige nodos
+  conectados; resultado local 0 nodos; sin MAC/payload). Contrato:
+  [pw-dump-parser-contract](../pipewire/pw-dump-parser-contract.md).
+- **Pendiente (no afirmar este ADR completo):** el **runner** de
+  `pw-dump`/`wpctl` y el **repositorio** `IAudioRepository` aún **no** están
+  implementados. La decisión de este ADR (inspección vía subprocess) solo se
+  considera ejecutada en su totalidad cuando existan el runner y las acciones
+  de control de `wpctl`.
