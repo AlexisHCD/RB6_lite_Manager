@@ -55,9 +55,9 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   **lifecycle A/B del repositorio** (`subscribe_device_changes` +
 >   unsubscribe idempotente + snapshot A/B + bus usable, sin señales inducidas,
 >   sin afirmar recepción real y sin escrituras).
-> - Suite actual por defecto (Python 3.14, sin GI): **276 passed, 6 skipped**
+> - Suite actual por defecto (Python 3.14, sin GI): **310 passed, 6 skipped**
 >   (las 6 omisiones son las integraciones opt-in, desactivadas por defecto);
->   con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**: **282 passed**.
+>   con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**: **316 passed**.
 >   El **contrato de eventos del dominio** ([ADR-0007](../ADR/0007-device-change-event-contract.md))
 >   está **implementado y probado**: `DeviceChangeKind` (`@unique`),
 >   `DeviceChangeEvent` (invariantes validadas en construcción) y los alias
@@ -73,18 +73,31 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
 >   emisión de `DeviceChangeEvent` con el **diff puro de snapshots**
 >   `device_change_diff.py`; [signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch))
 >   está **implementado y verificado**, por lo que el checkbox global del
->   roadmap queda `[x]`. Sigue pendiente la **detección completa de
->   adaptadores/dispositivos**. La **CLI `devices`** ya está **implementada y
->   verificada** sobre las consultas snapshot (solo snapshot, sin señales;
+>   roadmap queda `[x]`. La **detección de adaptadores y dispositivos** está
+>   **completa** (implementación + verificación real; la detección del Redmi
+>   Buds 6 Lite real queda pendiente de hardware, no de software). La **CLI
+>   `devices`** ya está **implementada y verificada** sobre las consultas
+>   snapshot (solo snapshot, sin señales;
 >   [devices-command.md](../cli/devices-command.md)); el checkbox del roadmap
 >   para la CLI está marcado `[x]`.
 > - **`on_ready` implementado (2026-08-10):** la **API interna de bajo nivel**
 >   `subscribe(callback, on_ready=None)` (§2.5) ejecuta el init del repositorio
 >   (snapshot B, diff A→B, cache y primer dispatch) **en `on_ready`, en el
 >   worker, antes de que `subscribe` retorne**; contrato y código real en
->   [signal-lifecycle-design §2.2.1/§4.6](signal-lifecycle-design.md#46-api-on_ready-del-primer-registro).
+>   [signal-lifecycle-design §2.2.1/§4.6](signal-lifecycle-design.md#46-api_on_ready-del-primer-registro).
 >   Es infraestructura: **no cambia** `IBluetoothRepository` ni el contrato del
 >   dominio ([ADR-0007](../ADR/0007-device-change-event-contract.md)).
+> - **Polling de respaldo implementado (2026-08-10):** la **API interna de bajo
+>   nivel** `subscribe(callback, on_ready=None, on_poll=None,
+>   poll_interval_ms=None)` (§2.5) programa un `GSource` de timeout monotónico
+>   en el worker (tras `on_ready`, mismo `MainContext`); el repositorio lo usa
+>   como **respaldo** para `Connected`/`Paired`/`Trusted` con el mismo pipeline
+>   `_refresh_and_dispatch` que la señal. Es infraestructura: **no cambia**
+>   `IBluetoothRepository` ni el contrato del dominio
+>   ([ADR-0007](../ADR/0007-device-change-event-contract.md)). Contrato y código
+>   real en
+>   [signal-lifecycle-design §12](signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)
+>   y [repository-design §12](repository-design.md#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10).
 
 ---
 
@@ -233,7 +246,7 @@ Reglas de mapeo concretas para este proyecto (ver tablas de propiedades en
 
 - `Device1.RSSI` (int16) → `int`. Puede estar ausente → `None`.
 - `MediaTransport1.Codec` (byte) → `int`. SBC=0x00, AAC=0x02 son canonizados;
-  los vendor no se asumen (ver [RESEARCH_LIMITS](../RESEARCH_LIMITS.md#1)).
+  los vendor no se asumen (ver [RESEARCH_LIMITS](../RESEARCH_LIMITS.md#1-bytes-de-códec-a2dp-vendor-specific)).
 - `Device1.UUIDs` (`as`) → `tuple[str, ...]` al mapear al dominio.
 - `Adapter` (object path) → `str` (se usa como clave de relación).
 
@@ -308,7 +321,9 @@ El contrato del cliente expone un ciclo de vida explícito:
 - Constructor → conexión/snapshot; **sin `open()`**: la conexión se obtiene de
   `proxy.get_connection()` y el worker de señales arranca **perezosamente** en
   la primera suscripción ([signal-lifecycle-design §3](signal-lifecycle-design.md#3-worker-dedicado-de-señales)).
-- `subscribe(callback)` → devuelve `SubscriptionId`.
+- `subscribe(callback, on_ready=None, *, on_poll=None, poll_interval_ms=None)`
+  → devuelve `SubscriptionId` (`on_ready` y `on_poll`/`poll_interval_ms` son
+  extensiones internas implementadas, §2.5).
 - `unsubscribe(subscription_id)` → libera la suscripción.
 - `close()` → libera suscripciones y referencias propias (no cierra el bus);
   idempotente.
@@ -346,6 +361,22 @@ Detalles técnicos ([signal_unsubscribe](https://docs.gtk.org/gio/method.DBusCon
 > = contrato actual). Contrato y código real en
 > [signal-lifecycle-design §2.2.1](signal-lifecycle-design.md#221-on_ready-hook-de-init-en-el-worker)
 > y [§4.6](signal-lifecycle-design.md#46-api-on_ready-del-primer-registro).
+
+> **Extensión implementada (2026-08-10) — polling de respaldo:**
+> `subscribe(callback, on_ready=None, on_poll=None, poll_interval_ms=None)`.
+> `on_poll` (`Callable[[], None]`) corre en el hilo del worker en un `GSource` de
+> timeout (`GLib.timeout_source_new`) **retenido por la suscripción lógica**; el
+> intervalo debe ser **`type(...) is int` exacto y `> 0`** cuando hay `on_poll`,
+> y ambos `None` desactiva el polling. **Validación pura (`_validate_polling_options`)
+> antes de tocar el worker/GIO** y además defensiva en el worker; el `GSource`
+> usa **tiempo monotónico**, `set_callback` + `attach` al **mismo `MainContext`
+> del worker** tras `on_ready`, retorno `SOURCE_CONTINUE`, error de poll aislado
+> y logueado, ownership lógico, `destroy` idempotente en el hilo del worker y
+> rollback create/set/attach; el bus compartido **nunca** se cierra. Detalle
+> completo (contrato, acceptance, tests, código real, riesgos y fuentes) en
+> [signal-lifecycle-design §12](signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10).
+> Verificado 2026-08-10 (fakes + integración real de lifecycle create/destroy
+> con `poll_interval_ms=60_000`).
 
 ### 2.6 Traducción de `GLib.Error` → `BluetoothError`
 
@@ -402,6 +433,11 @@ class FakeDBusProtocol(BlueZProtocol):  # implementación de prueba (sin GI)
 > **Extensión implementada (2026-08-10):** la firma del protocolo ganó
 > `on_ready: Callable[[], None] | None = None` en `subscribe` (§2.5);
 > compatible hacia atrás.
+>
+> **Extensión implementada (2026-08-10) — polling de respaldo:** la firma ganó
+> además `on_poll: Callable[[], None] | None = None` y
+> `poll_interval_ms: int | None = None` (par indisoluble: ambos o ninguno; ver
+> [signal-lifecycle-design §12](signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)).
 
 `BlueZDBusClient` recibe el protocolo por **inyección** (`__init__`); por
 defecto construye `GioDBusProtocol` solo cuando se usa en producción, y los
@@ -449,7 +485,7 @@ class BlueZDBusClient:
     def get_battery(self, device_path: str) -> BatteryLevel | None
     def get_rssi(self, device_path: str) -> RSSIReading | None
 
-    def subscribe(self, cb: SignalCallback, on_ready: Callable[[], None] | None = None) -> int   # SignalEvent (metadata); delega en el protocolo (on_ready implementado, §2.5)
+    def subscribe(self, cb: SignalCallback, on_ready: Callable[[], None] | None = None, *, on_poll: Callable[[], None] | None = None, poll_interval_ms: int | None = None) -> int   # SignalEvent (metadata); delega en el protocolo (on_ready y on_poll implementados, §2.5)
     def unsubscribe(self, sub_id: int) -> None
 
     def close(self) -> None  # idempotente; libera suscripciones y referencias propias (no cierra el bus)
@@ -538,8 +574,14 @@ el init (snapshot B, diff A→B, cache y primer dispatch) corre en el worker
   (§2.5).
 - ⏳ CLI de monitoreo (o vista de Logs/dashboard en Fase 6) que itere el
   `GMainContext` para entregar señales.
-- ⏳ Respaldo por polling periódico de propiedades críticas según
-  [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4).
+- ✅ **Respaldo por polling periódico** de propiedades críticas según
+  [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus):
+  `on_poll`/`poll_interval_ms` en el nivel bajo, `GSource` de timeout monotónico
+  en el worker y `_handle_poll` compartiendo el **mismo pipeline
+  `_refresh_and_dispatch`** que `_handle_signal` — **implementado y verificado
+  (2026-08-10)** en
+  [signal-lifecycle-design §12](signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)
+  y [repository-design §12](repository-design.md#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10).
 
 **Criterios de aceptación (Incremento 2):**
 - ⏳ Conectar/desconectar un dispositivo (p.ej. `bluetoothctl power on` /
@@ -551,7 +593,8 @@ el init (snapshot B, diff A→B, cache y primer dispatch) corre en el worker
   callbacks posteriores al unsubscribe (verificado a nivel de worker/cliente y
   repositorio).
 - ✅ Tests unitarios de dispatch con señales fabricadas (sin GI)
-  (`tests/unit/test_bluez_repository_signals.py`).
+  (`tests/unit/test_bluez_repository_signals.py`), incluido el **polling**
+  (tick manual sin `sleep`).
 - ⏳ Se documenta empíricamente la fiabilidad de `PropertiesChanged` para
   `Device1.Connected` en el entorno objetivo.
 
@@ -561,7 +604,7 @@ el init (snapshot B, diff A→B, cache y primer dispatch) corre en el worker
 
 ```
 src/openbuds/infrastructure/bluez/
-├── dbus_protocol.py      # [INC 1 + INC 2 bajo nivel] GioDBusProtocol (única importación de gi; worker _SignalWorker, on_ready)
+├── dbus_protocol.py      # [INC 1 + INC 2 bajo nivel] GioDBusProtocol (única importación de gi; worker _SignalWorker, on_ready, on_poll)
 ├── object_mapper.py      # [implementado] dicts nativos → modelos (puro)
 ├── device_change_diff.py # [implementado] diff puro de snapshots Device1 → DeviceChangeEvent (puro)
 ├── dbus_client.py        # [INC 1 + INC 2 bajo nivel] BlueZDBusClient (snapshot + delegación subscribe/unsubscribe/close)
@@ -603,23 +646,23 @@ cache de diff sobre el **diff puro de snapshots** y dispatch de
 |-------|-------------|--------------------------|-----------|
 | Unit (mapper) | No | No | Traducción dicts → modelos, valores ausentes, tipos raros |
 | Unit (cliente) | No | No | Orquestación con `FakeDBusProtocol`, traducción de errores, lifecycle |
-| Unit (worker señales) | No | No | `_SignalWorker` con fakes deterministas: 3 filtros exactos, `SignalEvent`, orden de registro, error isolation, `on_ready`, unsubscribe/close, rollback, reentrancia |
+| Unit (worker señales) | No | No | `_SignalWorker` con fakes deterministas: 3 filtros exactos, `SignalEvent`, orden de registro, error isolation, `on_ready`, `on_poll` (tick manual, `SOURCE_CONTINUE`, ownership, rollback create/set/attach), unsubscribe/close, rollback, reentrancia |
 | Unit (diff puro) | No | No | `diff_device_snapshots`: orden `REMOVED→ADDED→UPDATED`, igualdad mapeada, sin eventos Battery/RSSI-only, errores sin parciales |
-| Unit (dispatch repo) | No | No | ✅ Implementado (`tests/unit/test_bluez_repository_signals.py`; [signal-lifecycle-design §4.6/§4.7](signal-lifecycle-design.md#46-api-on_ready-del-primer-registro)): init vía `on_ready` en worker, diff cache→nuevo, orden determinista, reentrancia de `Unsubscribe`, sin eventos Battery/RSSI-only, sin cierre del cliente |
-| Integración (marcados) | Sí | Sí | `GetManagedObjects` real + lifecycle real de señales (subscribe/unsubscribe/close/snapshot) + lifecycle A/B del repositorio (`tests/integration/test_bluez_repository_signals.py`); **sin** afirmar recepción de señales reales, **sin** escrituras |
+| Unit (dispatch repo) | No | No | ✅ Implementado (`tests/unit/test_bluez_repository_signals.py`; [signal-lifecycle-design §4.6/§4.7](signal-lifecycle-design.md#46-api-on_ready-del-primer-registro)): init vía `on_ready` en worker, diff cache→nuevo, orden determinista, reentrancia de `Unsubscribe`, sin eventos Battery/RSSI-only, sin cierre del cliente; **polling**: default/inyectado/validado, un solo timer, poll == señal, captura `Connected`/`Paired`/`Trusted` |
+| Integración (marcados) | Sí | Sí | `GetManagedObjects` real + lifecycle real de señales (subscribe/unsubscribe/close/snapshot, incluida la **creación/destrucción inmediata del `GSource` de polling** con `poll_interval_ms=60_000`) + lifecycle A/B del repositorio (`tests/integration/test_bluez_repository_signals.py`); **sin** afirmar recepción de señales reales, **sin** escrituras |
 | E2E / manual | Sí | Sí | `openbuds devices`; monitoreo con conexión/desconexión real (⏳ requiere validación empírica de señales reales) |
 
 - Los tests de integración se marcan (p.ej. `@pytest.mark.integration` /
   `@pytest.mark.slow`) y no forman parte del baseline por defecto, siguiendo
   el patrón del Makefile (`make test-quick` = solo unit).
-- Baseline actual por defecto (Python 3.14, sin GI/bus): **276 tests** en verde
+- Baseline actual por defecto (Python 3.14, sin GI/bus): **310 tests** en verde
   + **6 skipped** (las 6 integraciones BlueZ opt-in desactivadas por defecto;
   2026-08-10); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**:
-  **282 passed**. Ruff y mypy en verde. Las pruebas del mapper, del cliente, del
+  **316 passed**. Ruff y mypy en verde. Las pruebas del mapper, del cliente, del
   worker de señales y del lifecycle de bajo nivel, del **diff puro**, del
-  **dispatch del repositorio**, del contrato de eventos
-  ([ADR-0007](../ADR/0007-device-change-event-contract.md)), de las consultas
-  del repositorio y de la CLI `devices` forman parte del suite.
+  **dispatch del repositorio**, del **polling de respaldo**, del contrato de
+  eventos ([ADR-0007](../ADR/0007-device-change-event-contract.md)), de las
+  consultas del repositorio y de la CLI `devices` forman parte del suite.
 - Verificación manual complementaria (solo lectura):
   `busctl tree org.bluez`, `busctl introspect org.bluez /`, `dbus-send
   --system --dest=org.bluez --print-reply / org.freedesktop.DBus.ObjectManager.GetManagedObjects`.
@@ -649,6 +692,12 @@ Verificadas (contenido consultado) el 2026-08-09:
 | PyGObject (proyecto oficial) | https://pygobject.gnome.org/ |
 | BlueZ — documentación D-Bus (adapter, device, battery, media) | https://bluez.readthedocs.io/en/latest/ |
 
+> **Fuentes del diseño de polling (implementado el 2026-08-10), verificadas el
+> 2026-08-10:** `GLib.timeout_source_new` (tiempo monotónico; requiere `attach`),
+> `GSource.attach` (id > 0), `GSource.destroy` (idempotente/thread-safe) y
+> `GSource.set_callback` — listadas en
+> [signal-lifecycle-design §12.10](signal-lifecycle-design.md#1210-fuentes-oficiales-verificadas).
+
 Referencias internas: [ADR-0001](../ADR/0001-decision-dbus-pygobject-gio.md),
 [Interfaces D-Bus de BlueZ](dbus-interfaces.md),
 [RESEARCH_LIMITS](../RESEARCH_LIMITS.md).
@@ -657,8 +706,11 @@ Referencias internas: [ADR-0001](../ADR/0001-decision-dbus-pygobject-gio.md),
 
 ## 9. Riesgos y límites conocidos
 
-- **Fiabilidad de `PropertiesChanged`:** puede no llegar en ciertos flujos;
-  se respalda con polling periódico (RESEARCH_LIMITS §4).
+- **Fiabilidad de `PropertiesChanged`:** puede no llegar en ciertos flujos; se
+  respalda con **polling periódico** — **implementado y verificado (2026-08-10)**
+  en
+  [signal-lifecycle-design §12](signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)
+  ([RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)).
 - **`Battery1` no es universal:** se trata como opcional
   (RESEARCH_LIMITS §3).
 - **Códecs vendor (aptX/LDAC):** bytes no canonizados; nunca se asumen

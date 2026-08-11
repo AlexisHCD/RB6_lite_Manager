@@ -33,6 +33,7 @@ from openbuds.infrastructure.bluez.object_mapper import (
 )
 
 SignalCallback = Callable[[SignalEvent], None]
+POLL_INTERVAL_DEFAULT_MS = 5000
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -44,9 +45,14 @@ class SnapshotClient(Protocol):
         ...
 
     def subscribe(
-        self, callback: SignalCallback, on_ready: Callable[[], None] | None = None
+        self,
+        callback: SignalCallback,
+        on_ready: Callable[[], None] | None = None,
+        *,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
     ) -> int:
-        """Registra una callback de señales."""
+        """Registra una callback de señales y, opcionalmente, polling."""
         ...
 
     def unsubscribe(self, subscription_id: int) -> None:
@@ -65,8 +71,15 @@ class _Subscriber:
 class BlueZRepository(IBluetoothRepository):
     """Repositorio de solo lectura basado en snapshots frescos de BlueZ."""
 
-    def __init__(self, client: SnapshotClient | None = None) -> None:
+    def __init__(
+        self,
+        client: SnapshotClient | None = None,
+        poll_interval_ms: int = POLL_INTERVAL_DEFAULT_MS,
+    ) -> None:
+        if type(poll_interval_ms) is not int or poll_interval_ms <= 0:
+            raise ValueError("poll_interval_ms debe ser un entero positivo")
         self._client = client if client is not None else BlueZDBusClient()
+        self._poll_interval_ms = poll_interval_ms
         self._condition = threading.Condition(threading.RLock())
         self._subscribers: dict[int, _Subscriber] = {}
         self._next_subscriber_id = 1
@@ -144,6 +157,8 @@ class BlueZRepository(IBluetoothRepository):
             low_subscription_id = self._client.subscribe(
                 self._handle_signal,
                 on_ready=lambda: self._finish_initialization(snapshot_a),
+                on_poll=self._handle_poll,
+                poll_interval_ms=self._poll_interval_ms,
             )
         except Exception:
             self._abort_initialization()
@@ -231,7 +246,13 @@ class BlueZRepository(IBluetoothRepository):
             self._initializing_thread_id = None
             self._condition.notify_all()
 
+    def _handle_poll(self) -> None:
+        self._refresh_and_dispatch()
+
     def _handle_signal(self, _signal: SignalEvent) -> None:
+        self._refresh_and_dispatch()
+
+    def _refresh_and_dispatch(self) -> None:
         with self._condition:
             if not self._subscribers or self._cache is None:
                 return
@@ -240,7 +261,7 @@ class BlueZRepository(IBluetoothRepository):
             current = self._client.snapshot()
             events = diff_device_snapshots(previous, current)
         except Exception:
-            _LOGGER.exception("BlueZ signal snapshot refresh failed")
+            _LOGGER.exception("BlueZ snapshot refresh failed")
             return
         with self._condition:
             if not self._subscribers or self._cache is not previous:

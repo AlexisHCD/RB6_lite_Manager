@@ -13,7 +13,8 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 
 ## Estado del proyecto
 
-✅ **Fase 2 — Backend base (completada).** 🚧 **Fase 3 — Bluetooth (en curso).**
+✅ **Fase 2 — Backend base (completada).** ✅ **Fase 3 — Bluetooth
+(implementación software completa; validación empírica del dispositivo pendiente).**
 
 El repositorio contiene la arquitectura por capas, los cimientos del dominio,
 la configuración TOML, logging, detección del entorno y una CLI base funcional.
@@ -42,13 +43,21 @@ Gio**. El **Incremento 2 — señales y lifecycle** está **completo**:
   de callbacks, suscriptores múltiples/tardíos/reentrantes, `Unsubscribe`
   idempotente con espera de in-flight, concurrencia de init y rollback de
   errores), sobre el **diff puro de snapshots**
-  (`bluez/device_change_diff.py`).
+  (`bluez/device_change_diff.py`), y
+- el **polling de respaldo** (extensión interna compatible
+  `on_poll`/`poll_interval_ms`: validación pura `type int > 0` antes del
+  worker/GIO, `GSource` de timeout monotónico en el worker tras `on_ready`,
+  `SOURCE_CONTINUE`, un solo timer por repositorio con intervalo inyectable
+  default 5000 ms, y `_handle_poll` compartiendo el **mismo pipeline
+  `_refresh_and_dispatch`** que `_handle_signal` para capturar
+  `Connected`/`Paired`/`Trusted` si `PropertiesChanged` no llega).
 
 La validez proviene de fakes deterministas (sin GI), del spike genérico de
-D-Bus y de la **integración real** en Python 3.12 / Gio: solo **lifecycle
-A/B** (subscribe/unsubscribe/close + snapshot A/B + bus usable); **no** se
-inducen señales, **no** se afirma recepción real de eventos y **no** hay
-escrituras de hardware. Ver
+D-Bus y de la **integración real** en Python 3.12 / Gio: **lifecycle
+A/B** (subscribe/unsubscribe/close + snapshot A/B + bus usable) y el
+**polling de respaldo** (creación/destrucción inmediata del `GSource` con
+`poll_interval_ms=60_000`, sin tick real); **no** se inducen señales, **no**
+se afirma recepción real de eventos y **no** hay escrituras de hardware. Ver
 [`docs/bluez/signal-lifecycle-design.md`](docs/bluez/signal-lifecycle-design.md)
 y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md). El
 **contrato completo de `IBluetoothRepository`** queda así **cerrado** (checkbox
@@ -65,11 +74,21 @@ dispositivos Bluetooth.` y `pw-dump` con **0 nodos Bluetooth** (sin property
 keys). **No** se afirma detección del Redmi Buds 6 Lite (no había hardware
 conectado). **Pendientes de la Fase 3:** la **validación empírica de
 propiedades runtime inciertas** (bloqueada: sin auriculares conectados ni nodos
-Bluetooth) y el **polling periódico de respaldo** para
+Bluetooth); el **polling periódico de respaldo** para
 `Connected`/`Paired`/`Trusted`
-([RESEARCH_LIMITS §4](docs/RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)),
-**no implementado** y necesario antes de cerrar la Fase 3 (ver
-[`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/cli/devices-command.md`](docs/cli/devices-command.md)).
+([RESEARCH_LIMITS §4](docs/RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus))
+está **implementado y verificado (2026-08-10)** como extensión interna
+compatible `on_poll`/`poll_interval_ms` (default 5000 ms inyectable y validado),
+con `GSource` de timeout monotónico en el worker y **un solo timer por
+repositorio**; la señal primaria y el poll comparten el **pipeline común
+señal/poll** (`_refresh_and_dispatch`). El diseño y el código real están en
+[`docs/bluez/signal-lifecycle-design.md`](docs/bluez/signal-lifecycle-design.md)
+(§12) y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md)
+(§12). La **implementación software de la Fase 3 está completa**; la
+**validación empírica del Redmi Buds 6 Lite sigue `[ ]`** (bloqueada por
+hardware no conectado y PipeWire con 0 nodos) y la **Fase 4 puede continuar en
+paralelo**. Ver
+[`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/cli/devices-command.md`](docs/cli/devices-command.md).
 La aplicación completa aún no está terminada: diagnóstico y la GUI se
 implementan en las fases siguientes.
 
@@ -203,18 +222,20 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual por defecto (Python 3.14):** **276 tests** en verde +
+**Baseline actual por defecto (Python 3.14):** **310 tests** en verde +
 **6 skipped** (las 6 integraciones BlueZ opt-in desactivadas por defecto;
 2026-08-10); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**:
-**282 passed**. Ruff y mypy en verde. El cliente D-Bus (Incremento 1), el
-mapper de objetos, el **worker y lifecycle de señales de bajo nivel** y el
-**dispatch del repositorio** (Incremento 2 completo), el **diff puro de
+**316 passed**. Ruff y mypy en verde. El cliente D-Bus (Incremento 1), el
+mapper de objetos, el **worker y lifecycle de señales de bajo nivel**, el
+**dispatch del repositorio** (Incremento 2 completo), el **polling de
+respaldo** (2026-08-10), el **diff puro de
 snapshots** (`device_change_diff.py`), el contrato de eventos de cambio de
 dispositivo ([ADR-0007](docs/ADR/0007-device-change-event-contract.md)), las
 consultas snapshot del repositorio y la CLI `devices` ya están cubiertos por la
 suite (`tests/unit/test_device_change_diff.py`,
 `tests/unit/test_bluez_repository_signals.py`,
-`tests/integration/test_bluez_repository_signals.py`).
+`tests/integration/test_bluez_repository_signals.py`,
+`tests/integration/test_bluez_signal_lifecycle.py`).
 
 ## Arquitectura
 

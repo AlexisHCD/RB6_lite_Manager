@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import TracebackType
 from typing import Literal, cast
 
@@ -39,9 +40,21 @@ class BlueZDBusClient:
         """Devuelve el snapshot obtenido por el proveedor configurado."""
         return self._provider.get_managed_objects()
 
-    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
+    def subscribe(
+        self,
+        callback: SignalCallback,
+        on_ready: ReadyCallback | None = None,
+        *,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
+    ) -> int:
         """Registra una callback en el proveedor configurado."""
-        return cast(SignalProvider, self._provider).subscribe(callback, on_ready=on_ready)
+        return cast(SignalProvider, self._provider).subscribe(
+            callback,
+            on_ready=on_ready,
+            on_poll=on_poll,
+            poll_interval_ms=poll_interval_ms,
+        )
 
     def unsubscribe(self, subscription_id: int) -> None:
         """Cancela una suscripción en el proveedor configurado."""

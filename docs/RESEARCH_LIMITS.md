@@ -66,22 +66,26 @@ Fuente: [battery-api.txt](https://git.kernel.org/pub/scm/bluetooth/bluez.git/tre
 
 ## 4. Fiabilidad de señales D-Bus
 
-**Estado:** señal primaria **implementada**; respaldo por **polling
-pendiente**.
+**Estado:** señal primaria y **respaldo por polling implementados y verificados
+(2026-08-10)**; la **validación empírica contra hardware real sigue pendiente**.
 
 En ciertas situaciones, la señal `PropertiesChanged` de BlueZ puede no llegar.
-Como respaldo, se recomienda **polling periódico** de propiedades críticas
+Como respaldo, se implementó **polling periódico** de propiedades críticas
 (`Connected`, `Paired`, `Trusted`) además de la suscripción a señales.
 
 **Implicación:** el repositorio Bluetooth implementa la **señal primaria**
 (`BlueZRepository.subscribe_device_changes`: refresh completo por señal + diff
-de snapshots; ver [repository-design §6](bluez/repository-design.md#6-subscribe_device_changes--implementado-incremento-2)).
-El **polling periódico de respaldo sigue pendiente de implementar** (deuda
-explícita de la Fase 3; [ROADMAP](ROADMAP.md)); no debe afirmarse que ambos
-mecanismos ya están en producción. **Hoy no hay dispositivo ni nodos Bluetooth
-para validar** ninguna de las dos vías contra hardware real: sin auriculares
-conectados, `pw-dump` reporta **0 objetos Bluetooth** (sin property keys) y el
-snapshot de BlueZ tiene 0 dispositivos.
+de snapshots; ver [repository-design §6](bluez/repository-design.md#6-subscribe_device_changes--implementado-incremento-2))
+**y el respaldo por polling** (extensión interna compatible
+`on_poll`/`poll_interval_ms`, `GSource` de timeout monotónico en el worker, un
+solo timer por repositorio y pipeline común señal/poll;
+[signal-lifecycle-design §12](bluez/signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)
+y [repository-design §12](bluez/repository-design.md#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10)).
+La **incertidumbre de hardware permanece**: hoy no hay dispositivo ni nodos
+Bluetooth **para validar** ninguna de las dos vías contra hardware real — sin
+auriculares conectados, `pw-dump` reporta **0 objetos Bluetooth** (sin property
+keys) y el snapshot de BlueZ tiene 0 dispositivos. No se afirma que el poll vea
+`Connected` real si BlueZ tampoco lo refleja en el snapshot.
 
 Fuente: discusiones de la comunidad; el mecanismo base está en la
 [DBus specification](https://dbus.freedesktop.org/doc/dbus-specification.html).

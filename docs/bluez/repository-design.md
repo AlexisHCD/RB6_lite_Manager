@@ -29,7 +29,7 @@ escritura y sin mutación.
 > ⚠️ **Regla de oro (AGENTS.md §5):** este diseño no asume comportamiento de
 > BlueZ no verificado. El árbol de objetos y las interfaces se toman tal como
 > los entrega `GetManagedObjects`; la disponibilidad de `Battery1` es opcional
-> ([RESEARCH_LIMITS §3](../RESEARCH_LIMITS.md#3)).
+> ([RESEARCH_LIMITS §3](../RESEARCH_LIMITS.md#3-disponibilidad-de-batería)).
 
 > **Estado de implementación (2026-08-10):** este incremento está
 > **implementado y verificado**. Las consultas snapshot de `BlueZRepository`
@@ -50,19 +50,21 @@ escritura y sin mutación.
 > (`tests/integration/test_bluez_repository.py`, `tests/integration/test_bluez_repository_signals.py`,
 > `OPENBUDS_RUN_INTEGRATION=1`) pasaron en **Python 3.12 / Gio** sobre BlueZ
 > real (solo lectura; el de señales solo **lifecycle A/B**, sin señales
-> inducidas ni escrituras). Suite total por defecto (Python 3.14): **276
+> inducidas ni escrituras). Suite total por defecto (Python 3.14): **310
 > passed, 6 skipped**; con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio:
-> **282 passed**. Ruff y mypy en verde. El checkbox global del roadmap queda
+> **316 passed**. Ruff y mypy en verde. El checkbox global del roadmap queda
 > **`[x]`** (ver [§6](#6-subscribe_device_changes--implementado-incremento-2)).
 >
 > **Alcance de lo "completo":** el contrato **`IBluetoothRepository`** (consultas
 > snapshot + `subscribe_device_changes`) está **completo**. La **resiliencia por
-> polling** recomendada en [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4) es
-> **externa al contrato y sigue pendiente** de implementar (deuda de la Fase 3;
-> [ROADMAP](../ROADMAP.md)): se implementaría fuera de `IBluetoothRepository`,
-> **sin cambiar la interfaz**. Hoy no hay auriculares conectados ni nodos
-> Bluetooth (`pw-dump` con 0 objetos) para validar el flujo real contra
-> hardware.
+> polling** recomendada en [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)
+> está **implementada y verificada (2026-08-10)** como extensión **interna
+> compatible** (no cambia `IBluetoothRepository`; [ROADMAP](../ROADMAP.md)
+> marcado `[x]`). El diseño (Documentation First) está en
+> [§12](#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10)
+> y en [signal-lifecycle-design §12](signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10).
+> Hoy no hay auriculares conectados ni nodos Bluetooth (`pw-dump` con 0 objetos)
+> para validar el flujo real contra hardware.
 
 ---
 
@@ -108,8 +110,11 @@ class BlueZRepository(IBluetoothRepository):
   inyecta un `FakeSnapshotClient` con snapshots guionados.
 - **El Protocol vive en `bluez_repository.py`** (contrato interno de
   infraestructura, no del dominio). Para el **Incremento 2** este Protocol se
-  amplió con `subscribe(callback, on_ready=None)` / `unsubscribe(subscription_id)`
-  (stream bajo nivel de `SignalEvent`), sin alterar las consultas snapshot; ver
+  amplió con `subscribe(callback, on_ready=None, on_poll=None,
+  poll_interval_ms=None)` / `unsubscribe(subscription_id)`
+  (stream bajo nivel de `SignalEvent`; `on_poll`/`poll_interval_ms` son la
+  extensión interna del polling de respaldo, §12), sin alterar las consultas
+  snapshot; ver
   [signal-lifecycle-design §4](signal-lifecycle-design.md#4-repositorio-registro-cache-y-dispatch).
 
 ---
@@ -246,8 +251,10 @@ técnico completo (código real, invariantes y tests) está en
 [ROADMAP §Fase 3](../ROADMAP.md) — *"Implementación de `IBluetoothRepository`"* —
 queda **`[x]`**: el contrato `IBluetoothRepository` se cumple en su totalidad
 (consultas snapshot + suscripción con dispatch). La **resiliencia por polling**
-de [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4) queda **fuera del contrato y
-pendiente** (externo, sin cambiar la interfaz; [ROADMAP](../ROADMAP.md)).
+de [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus) es
+**externa al contrato** y está **implementada y verificada** (extensión interna,
+sin cambiar la interfaz; [§12](#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10)
+y [ROADMAP](../ROADMAP.md)).
 
 ### 6.1 Implementación del dispatch (`subscribe_device_changes`)
 
@@ -325,6 +332,8 @@ def subscribe_device_changes(self, callback: DeviceChangeCallback) -> Unsubscrib
         low_subscription_id = self._client.subscribe(
             self._handle_signal,
             on_ready=lambda: self._finish_initialization(snapshot_a),  # worker, antes del retorno
+            on_poll=self._handle_poll,                   # polling de respaldo (§12)
+            poll_interval_ms=self._poll_interval_ms,
         )
     except Exception:
         self._abort_initialization()                     # revoca cache/init y notifica
@@ -507,8 +516,11 @@ Internas:
   `dbus_client.py` + [gio-dbus-client-design.md](gio-dbus-client-design.md),
   `dbus_protocol.py`, [dbus-interfaces.md](dbus-interfaces.md),
   [ADR-0007](../ADR/0007-device-change-event-contract.md),
-  [RESEARCH_LIMITS §3](../RESEARCH_LIMITS.md#3) (batería opcional) y §4
-  (señal primaria implementada; **polling de respaldo pendiente**),
+  [RESEARCH_LIMITS §3](../RESEARCH_LIMITS.md#3-disponibilidad-de-batería) (batería
+  opcional) y [§4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)
+  (señal primaria y **polling de respaldo implementados** —
+  [§12](#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10)
+  y [signal-lifecycle-design §12](signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)),
   [ROADMAP](../ROADMAP.md) §Fase 3.
 
 Oficiales (verificadas en [gio-dbus-client-design §8](gio-dbus-client-design.md#8-fuentes-oficiales-verificadas)
@@ -527,7 +539,8 @@ y [object-mapper-contract §11](object-mapper-contract.md#11-fuentes-oficiales-v
 
 1. **Cliente estructural inyectable con `snapshot()`** (Protocol
    `SnapshotClient`), ampliado en el Incremento 2 con `subscribe(callback,
-   on_ready=None)` / `unsubscribe(subscription_id)`; default `BlueZDBusClient()`;
+   on_ready=None, on_poll=None, poll_interval_ms=None)` /
+   `unsubscribe(subscription_id)`; default `BlueZDBusClient()`;
    tests con fake, sin GI/bus.
 2. **Snapshot fresco por llamada, sin cache** a nivel de consultas; la única
    cache es la de señales del dispatch (`subscribe_device_changes`).
@@ -551,3 +564,113 @@ y [object-mapper-contract §11](object-mapper-contract.md#11-fuentes-oficiales-v
 10. **Diff puro** (`device_change_diff.py`): `REMOVED→ADDED→UPDATED` por
     `object_path`; `UPDATED` solo si el `DeviceInfo` mapeado es desigual; sin
     eventos Battery/RSSI-only; errores del mapper sin eventos parciales.
+11. **Polling de respaldo** ([§12](#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10)):
+    **implementado y verificado (2026-08-10).** Extensión interna
+    compatible hacia atrás de `subscribe` (`on_poll`/`poll_interval_ms`, default
+    `POLL_INTERVAL_DEFAULT_MS = 5000` inyectable y validado en el constructor);
+    **un solo timer por
+    repositorio** (primer suscriptor); `_handle_poll` comparte el **mismo
+    pipeline** snapshot/diff/cache/dispatch que `_handle_signal` (`_refresh_and_dispatch`);
+    **no cambia** `IBluetoothRepository` ni el contrato del dominio.
+
+---
+
+## 12. Polling de respaldo del repositorio (implementado y verificado 2026-08-10)
+
+> **Estado:** **implementado y verificado (2026-08-10).** Documentación First
+> aprobada del respaldo por polling del repositorio, ahora **código real** en
+> `bluez_repository.py` (`subscribe_device_changes` pasa `on_poll`/
+> `poll_interval_ms`; `_handle_poll` → `_refresh_and_dispatch`). El detalle de
+> bajo nivel (timer en el worker, ownership de la fuente, acceptance, pruebas y
+> fuentes) está en
+> [signal-lifecycle-design §12](signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10);
+> aquí se documenta **la parte específica del repositorio**.
+
+### 12.1 Reglas del repositorio (implementadas)
+
+1. **Un solo timer por repositorio.** Solo el **primer** subscribe de bajo nivel
+   pasa `on_poll=self._handle_poll` y `poll_interval_ms`; los **suscriptores
+   tardíos NO crean timers extra** (una única suscripción de bajo nivel y un
+   único `GSource` por repositorio; el poll hace fan-out a todos los suscriptores
+   registrados, igual que una señal).
+2. **Intervalo inyectable y validado.** Constante `POLL_INTERVAL_DEFAULT_MS = 5000`
+   (default) e **inyección en el constructor** `BlueZRepository(client=None,
+   poll_interval_ms=...)`, con **validación estricta** (`type(...) is int` exacto
+   y `> 0` ⇒ `ValueError` antes de usar el cliente) para que los tests disparen
+   ticks sin depender del tiempo real.
+3. **Pipeline común (DRY).** `_handle_poll` usa **exactamente el mismo pipeline**
+   que `_handle_signal` ante un `SignalEvent`: snapshot fresco completo → diff
+   `cache → nuevo` → actualizar cache → dispatch en orden, fuera del lock. Se
+   **refactoriza el código común** en un único método interno
+   (`_refresh_and_dispatch`); señal y poll **nunca** tienen dos caminos
+   divergentes.
+4. **Captura de `Connected`/`Paired`/`Trusted`.** Si `PropertiesChanged` no
+   llegó, el poll detecta cualquier cambio observable de `DeviceInfo` (incluido
+   `Connected`) y emite los mismos `DeviceChangeEvent` que la señal
+   ([ADR-0007](../ADR/0007-device-change-event-contract.md)). Un poll sin cambios
+   emite **cero eventos** (diff vacío).
+5. **`unsubscribe` a cero callbacks.** Hereda la serialización del worker (cero
+   ticks tras el retorno) y la semántica `active`/in-flight del repositorio
+   (§4.6): el **self-unsubscribe** desde un evento futuro (señal o poll) destruye
+   la fuente de forma **reentrante** con seguridad (`destroy()` idempotente,
+   serializado al worker, sin esperar al propio hilo).
+6. **Sin cierre de cliente.** El repositorio **nunca** llama `close()` (regla 9
+   de §6.1); la destrucción de la fuente es responsabilidad del bajo nivel
+   (`unsubscribe`/`close`).
+7. **Contrato del dominio intacto.** Es infraestructura interna; **no cambia**
+   `IBluetoothRepository`, `DeviceChangeCallback` ni `Unsubscribe`.
+
+### 12.2 Código real (equivalente al diseño aprobado)
+
+```python
+# __init__: intervalo inyectable y validado (type int exacto > 0)
+def __init__(self, client: SnapshotClient | None = None,
+             poll_interval_ms: int = POLL_INTERVAL_DEFAULT_MS) -> None:
+    if type(poll_interval_ms) is not int or poll_interval_ms <= 0:
+        raise ValueError("poll_interval_ms debe ser un entero positivo")
+    self._client = client if client is not None else BlueZDBusClient()
+    self._poll_interval_ms = poll_interval_ms
+
+# primer suscriptor: único subscribe de bajo nivel, con polling
+sub_id = self._client.subscribe(
+    self._handle_signal,
+    on_ready=lambda: self._finish_initialization(snapshot_a),
+    on_poll=self._handle_poll,
+    poll_interval_ms=self._poll_interval_ms,
+)
+
+def _handle_signal(self, event: SignalEvent) -> None:
+    self._refresh_and_dispatch()      # MISMO pipeline que el poll (refactor común)
+
+def _handle_poll(self) -> None:
+    self._refresh_and_dispatch()      # snapshot completo + diff + cache + dispatch
+```
+
+### 12.3 Casos de prueba implementados (fakes deterministas sin GI/bus)
+
+| # | Caso | Verificación esperada (real) |
+|---|------|------------------------------|
+| 1 | Primer suscriptor con polling | `on_poll=self._handle_poll` y `poll_interval_ms` pasados al bajo nivel (verificado en el fake cliente). |
+| 2 | Un solo timer | el segundo/tardíos suscriptores no vuelven a llamar `subscribe` ni crean fuentes; fan-out del poll a todos. |
+| 3 | Poll == señal | `_handle_poll` dispara el mismo snapshot/diff/cache/dispatch que `_handle_signal` (assert del pipeline compartido). |
+| 4 | Poll sin cambios | snapshot idéntico → **cero eventos** (diff vacío). |
+| 5 | Poll captura `Connected`/`Paired`/`Trusted` | si la señal se perdió, un cambio de `Connected`/`Paired`/`Trusted` entre cache y poll genera `UPDATED`. |
+| 6 | Intervalo inyectable y default | `poll_interval_ms` del constructor (p. ej. `1234`) llega exacto al fake cliente; default `5000`; inválido (`0`, `-1`, `"1234"`, `True`) → `ValueError` antes de usar el cliente. |
+| 7 | `unsubscribe` a cero callbacks | tras el retorno del `Unsubscribe`, los ticks del poll no entregan callbacks (serialización + `active`/in-flight). |
+| 8 | Self-unsubscribe reentrante | desde un callback de señal/poll: destruye la fuente con seguridad, sin deadlock ni eventos futuros. |
+| 9 | El repo nunca cierra el cliente | `client.close_calls == 0` incluso con polling activo. |
+| 10 | Poll falla (snapshot/mapper) | cache preservada, cero eventos en esa entrega; el siguiente poll diffs contra la cache preservada. |
+| 11 | Último unsubscribe cancela el poll | fuente destruida y nuevo ciclo crea un `subscribe` y cache nuevos. |
+| 12 | Integración real (opt-in) | **solo lifecycle create/destroy**: subscribe con polling → unsubscribe/close reales; **no** se espera 5 s ni se afirma ningún tick real. |
+
+### 12.4 Riesgos y límites
+
+- Coste de un `GetManagedObjects` completo por tick mientras haya suscriptores;
+  5000 ms por defecto es conservador y ajustable.
+- **Validación empírica pendiente (hardware):** hoy 0 dispositivos conectados; no
+  se asume que el poll vea `Connected` real si BlueZ tampoco lo refleja en el
+  snapshot.
+- Es redundancia de la señal, no sustituto: el primer poll tras una señal sin
+  cambios emite cero eventos.
+- Detalle de riesgo bajo nivel (fuente nunca se auto-destruye, rollback de
+  create/set/attach) en [signal-lifecycle-design §12.9](signal-lifecycle-design.md#129-riesgos-y-límites).

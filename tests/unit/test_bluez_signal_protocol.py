@@ -96,6 +96,8 @@ class FakeWorker:
         self.start_calls = 0
         self.subscribe_calls: list[Callable[[SignalEvent], None]] = []
         self.on_ready_calls: list[Callable[[], None] | None] = []
+        self.on_poll_calls: list[Callable[[], None] | None] = []
+        self.intervals: list[int | None] = []
         self.unsubscribe_calls: list[int] = []
         self.close_calls = 0
         self._closed = False
@@ -115,9 +117,14 @@ class FakeWorker:
         self,
         callback: Callable[[SignalEvent], None],
         on_ready: Callable[[], None] | None = None,
+        *,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
     ) -> int:
         self.subscribe_calls.append(callback)
         self.on_ready_calls.append(on_ready)
+        self.on_poll_calls.append(on_poll)
+        self.intervals.append(poll_interval_ms)
         if self.subscribe_error is not None:
             raise self.subscribe_error
         subscription_id = self._next_id
@@ -236,6 +243,53 @@ def test_subscribe_forwards_on_ready_to_worker_and_fake_executes_it(
 
     assert calls == ["ready"]
     assert worker.on_ready_calls[0] is not None
+
+
+def test_protocol_forwards_poll_callback_and_exact_interval_to_worker(
+    gio_and_proxy: tuple[FakeGio, FakeProxy],
+) -> None:
+    gio, _proxy = gio_and_proxy
+    worker = FakeWorker()
+    protocol = make_protocol(gio, WorkerFactory([worker]))
+
+    def on_poll() -> None:
+        pass
+
+    assert protocol.subscribe(lambda _event: None, on_poll=on_poll, poll_interval_ms=137) == 1
+
+    assert worker.on_poll_calls == [on_poll]
+    assert worker.intervals == [137]
+
+
+def test_protocol_rejects_invalid_polling_before_creating_worker(
+    gio_and_proxy: tuple[FakeGio, FakeProxy],
+) -> None:
+    gio, _proxy = gio_and_proxy
+    factory = WorkerFactory([FakeWorker()])
+    protocol = make_protocol(gio, factory)
+
+    with pytest.raises(ValueError, match="juntos"):
+        protocol.subscribe(lambda _event: None, on_poll=lambda: None)
+
+    assert factory.calls == []
+
+
+def test_invalid_polling_does_not_close_existing_worker_or_subscriptions(
+    gio_and_proxy: tuple[FakeGio, FakeProxy],
+) -> None:
+    gio, _proxy = gio_and_proxy
+    worker = FakeWorker()
+    factory = WorkerFactory([worker])
+    protocol = make_protocol(gio, factory)
+    first_id = protocol.subscribe(lambda _event: None)
+
+    with pytest.raises(ValueError, match="juntos"):
+        protocol.subscribe(lambda _event: None, poll_interval_ms=100)
+
+    second_id = protocol.subscribe(lambda _event: None)
+    assert (first_id, second_id) == (1, 2)
+    assert worker.close_calls == 0
+    assert len(factory.calls) == 1
 
 
 def test_on_ready_failure_cleans_worker_reference_and_next_subscribe_creates_new_worker(

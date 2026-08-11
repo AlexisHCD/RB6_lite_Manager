@@ -153,11 +153,11 @@ Ninguno depende de GI ni de capas externas (cumple
   sin tocar otras capas. No hubo consumidores activos con la firma antigua
   (`DeviceChangeCallback` de dos parámetros).
 
-## Verificación (contrato, lifecycle de bajo nivel y dispatch implementados)
+## Verificación (contrato, lifecycle de bajo nivel, dispatch y polling implementados)
 
 El **contrato del dominio** está **implementado y probado** sin GI ni bus del
-sistema (suite por defecto: **276 passed, 6 skipped**; suite completa en
-Python 3.12/Gio con `OPENBUDS_RUN_INTEGRATION=1`: **282 passed**, 2026-08-10;
+sistema (suite por defecto: **310 passed, 6 skipped**; suite completa en
+Python 3.12/Gio con `OPENBUDS_RUN_INTEGRATION=1`: **316 passed**, 2026-08-10;
 ruff/mypy en verde):
 
 - `DeviceChangeKind` con valores únicos (`@unique`), cubierto en
@@ -197,8 +197,25 @@ repositorio**:
   unsubscribe (idempotente) + snapshot A/B + `list_devices`; el bus compartido
   sigue usable. **No** se inducen señales, **no** se afirma recepción real de
   eventos ni escrituras de hardware.
+- **Polling de respaldo implementado (2026-08-10):** `_handle_poll` emite los
+  mismos `DeviceChangeEvent` que la señal (mismo `_refresh_and_dispatch`),
+  capturando `Connected`/`Paired`/`Trusted` si `PropertiesChanged` no llegó;
+  cobertura en `tests/unit/test_bluez_repository_signals.py` (tick manual, sin
+  `sleep`) e integración real de **lifecycle create/destroy** con
+  `poll_interval_ms=60_000` (`tests/integration/test_bluez_signal_lifecycle.py`,
+  sin tick real). No altera el contrato del dominio (nota abajo).
 - **Sin cierre de bus/cliente:** el repositorio nunca llama `close()` ni
   cierra la conexión D-Bus compartida (verificado en tests).
+
+> **Nota (2026-08-10):** el **respaldo por polling** para `Connected`/`Paired`/
+> `Trusted` (recomendado en [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus))
+> está **implementado y verificado (2026-08-10)**. Es **infraestructura
+> interna** (extensión compatible de `subscribe` con `on_poll`/`poll_interval_ms`
+> y un `GSource` de timeout en el worker; código real en
+> [signal-lifecycle-design §12](../bluez/signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)):
+> **no cambia** `DeviceChangeCallback`, `Unsubscribe` ni ninguna invariante del
+> dominio definida en este ADR — el poll emite los mismos `DeviceChangeEvent`
+> que la señal primaria (mismo pipeline snapshot→diff→cache→dispatch).
 
 ## Fuentes oficiales
 

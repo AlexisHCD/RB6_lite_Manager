@@ -24,6 +24,27 @@
 >   fakes deterministas (`tests/unit/test_bluez_repository_signals.py`,
 >   `tests/unit/test_device_change_diff.py`) + integración real opt-in de
 >   **lifecycle A/B** (`tests/integration/test_bluez_repository_signals.py`).
+> - ✅ **Polling de respaldo** (§12) **implementado y verificado (2026-08-10)**:
+>   `on_poll`/`poll_interval_ms` en el nivel bajo
+>   (`_validate_polling_options`: **validación pura antes de tocar el worker/
+>   GIO** y además defensiva en el worker; `type(...) is int` exacto y `> 0`),
+>   `GSource` de timeout **monotónico** con `set_callback` y `attach` al **mismo
+>   `MainContext` del worker** **después** de `on_ready`, retorno
+>   `SOURCE_CONTINUE` (la fuente nunca se auto-cancela), **error de poll aislado
+>   y logueado**, **ownership lógico** por suscripción, `destroy()` **idempotente
+>   en el hilo del worker** y **rollback create/set/attach**; el bus compartido
+>   **nunca** se cierra. En el repositorio: **default
+>   `POLL_INTERVAL_DEFAULT_MS = 5000` inyectable y validado en el constructor**,
+>   **primer** `subscribe` bajo nivel único con `on_poll` (tardíos sin timers
+>   extra), `_handle_signal` y `_handle_poll` comparten el **mismo pipeline
+>   `_refresh_and_dispatch`** (detecta `Connected`/`Paired`/`Trusted`) y las
+>   mismas garantías de cache/error/dispatch/unsubscribe. Validez: fakes
+>   deterministas **sin `sleep`** (tick manual) + **integración real opt-in de
+>   lifecycle create/destroy inmediato con `poll_interval_ms=60_000`** (sin
+>   tick real, sin hardware, sin señales inducidas) y **bus compartido usable
+>   con snapshot posterior**. Gates 2026-08-10: **310 passed, 6 skipped** por
+>   defecto; **316/316** con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12 / Gio;
+>   ruff/mypy en verde.
 >
 > **Corrección sobre el diseño previo (2026-08-10):** el *self-unsubscribe
 > durante A→B* mediante el callable retornado es **imposible**: el
@@ -81,8 +102,11 @@ dispatch de `DeviceChangeEvent` en `BlueZRepository` con cache de diff.
 > verificadas**.
 
 **Fuera de alcance:** métodos mutadores (prohibidos por construcción), cierre de
-la conexión compartida, polling de respaldo (RESEARCH_LIMITS §4 — ítem
-separado), integración GLib/Qt (Fase 6), mapeo de payload parcial.
+la conexión compartida, integración GLib/Qt (Fase 6) y mapeo de payload parcial.
+El **polling de respaldo** está **implementado y verificado** en
+[§12](#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)
+([RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)) como
+extensión interna compatible; **no** forma parte del contrato del dominio.
 
 ---
 
@@ -529,7 +553,10 @@ Llamador (cualquier hilo)         Worker (Gio)
 > opt-in de lifecycle (worker A/B + repositorio A/B, Python 3.12/Gio). La 13
 > describe el self-unsubscribe válido (desde un callback de señal, tras poseer
 > el `Unsubscribe`); durante A→B no aplica porque el callable aún no existe
-> (§4.6).
+> (§4.6). El **polling de respaldo** ([§12](#12-polling-de-respaldo-implementado-y-verificado-2026-08-10))
+> está **implementado y verificado** y reutiliza estas invariantes (mismo
+> pipeline `_refresh_and_dispatch`, cache, `active`/in-flight y serialización
+> del worker).
 
 1. Cero callbacks de usuario después de que `unsubscribe` retorne; `Unsubscribe`
    y `close()` **idempotentes**.
@@ -575,10 +602,10 @@ Llamador (cualquier hilo)         Worker (Gio)
 | Nivel | Archivo | GI | Bus | Estado | Qué valida |
 |-------|---------|----|-----|--------|------------|
 | Unit worker (fakes deterministas) | `tests/unit/test_bluez_signal_worker.py` | No | No | ✅ implementado | `_SignalWorker`: hilo daemon + contexto/loop dedicados, arranque sincronizado y timeout/failure, los 3 filtros exactos en el hilo del worker, `SignalEvent` con metadata correcta, callbacks en orden de registro y en el hilo del worker, **aislamiento de errores** (un callback que lanza no bloquea al siguiente), unsubscribe no-último conserva el worker y último libera los 3 IDs GIO (en el hilo del worker), close idempotente (antes/después de parar), rollback atómico del registro parcial, startup timeout/failure, unsubscribe desde el propio callback (sin deadlock), subscribe reentrante diferido a la siguiente señal |
-| Unit protocolo | `tests/unit/test_bluez_signal_protocol.py` | No | No | ✅ implementado | `GioDBusProtocol`: factory de worker **perezosa** (snapshot/close no la tocan), arranque único y delegación de IDs, restart limpio tras última baja, close idempotente **sin cerrar proxy/conexión**, suscripción tras close falla de inmediato, contexto manager, rechazo de suscripción concurrente con close (sin huérfanos), factory falsy usable; **`on_ready`** opcional (propagación al worker, rollback si lanza) |
+| Unit protocolo | `tests/unit/test_bluez_signal_protocol.py` | No | No | ✅ implementado | `GioDBusProtocol`: factory de worker **perezosa** (snapshot/close no la tocan), arranque único y delegación de IDs, restart limpio tras última baja, close idempotente **sin cerrar proxy/conexión**, suscripción tras close falla de inmediato, contexto manager, rechazo de suscripción concurrente con close (sin huérfanos), factory falsy usable; **`on_ready`** opcional (propagación al worker, rollback si lanza); **`on_poll`/`poll_interval_ms`** reenviados con el intervalo exacto al worker y **`ValueError` antes de crear el worker** si el par es inválido |
 | Unit diff puro | `tests/unit/test_device_change_diff.py` | No | No | ✅ implementado | `diff_device_snapshots`: snapshots iguales → `()`; `REMOVED`/`ADDED`/`UPDATED` con `current`/`previous` correctos; orden agrupado `REMOVED→ADDED→UPDATED` por `object_path`; `UPDATED` solo si `DeviceInfo` mapeado es desigual; **sin eventos** por cambios solo de `Battery1`/`RSSI`/`TxPower`/props no mapeadas; alta/baja de `Device1` detectada aunque la ruta conserve otra interfaz; errores del mapper propagados sin eventos parciales; snapshots no mutados |
-| Unit dispatch repo | `tests/unit/test_bluez_repository_signals.py` | No | No | ✅ implementado | init vía `on_ready` en worker (snapshot A→B, diff, cache y primer dispatch **antes** del retorno de `subscribe`; `on_ready` en hilo worker con `on_ready_in_worker_thread`); diff A→B sin replay de preexistente; init fallido (snapshot B / subscribe bajo nivel: rollback + estado revocado + `BluetoothError`, cero eventos, retry como primer suscriptor); segundo concurrente espera init (y error si falló); suscriptor tardío sin replay (un único subscribe bajo nivel con fan-out en orden); reentrante desde callback sin deadlock ni replay; **self-unsubscribe** desde callback de señal sin deadlock ni eventos futuros; unsubscribe externo espera in-flight (cero callbacks tras retorno) e idempotente; reentrancia `subscribe`/`unsubscribe` desde callback sin deadlock del lock; refresh fallido (snapshot/mapper) preserva cache sin emitir; doble registro del mismo callback independiente; orden determinista y `UPDATED` solo si `DeviceInfo` desigual; **sin eventos Battery/RSSI-only**; **el repo nunca cierra el cliente** |
-| Integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) | `tests/integration/test_bluez_signal_lifecycle.py` | Sí | Sí | ✅ lifecycle (no recepción real) | **solo** subscribe/unsubscribe/close/snapshot reales: 25 ciclos + snapshot fresco; bus compartido usable; sin cierre de conexión; **nunca provoca BlueZ ni induce señales** |
+| Unit dispatch repo | `tests/unit/test_bluez_repository_signals.py` | No | No | ✅ implementado | init vía `on_ready` en worker (snapshot A→B, diff, cache y primer dispatch **antes** del retorno de `subscribe`; `on_ready` en hilo worker con `on_ready_in_worker_thread`); diff A→B sin replay de preexistente; init fallido (snapshot B / subscribe bajo nivel: rollback + estado revocado + `BluetoothError`, cero eventos, retry como primer suscriptor); segundo concurrente espera init (y error si falló); suscriptor tardío sin replay (un único subscribe bajo nivel con fan-out en orden); reentrante desde callback sin deadlock ni replay; **self-unsubscribe** desde callback de señal sin deadlock ni eventos futuros; unsubscribe externo espera in-flight (cero callbacks tras retorno) e idempotente; reentrancia `subscribe`/`unsubscribe` desde callback sin deadlock del lock; refresh fallido (snapshot/mapper) preserva cache sin emitir; doble registro del mismo callback independiente; orden determinista y `UPDATED` solo si `DeviceInfo` desigual; **sin eventos Battery/RSSI-only**; **el repo nunca cierra el cliente**; **polling**: default 5000 ms en el primer subscribe de bajo nivel, intervalo inyectado exacto, inválido rechazado antes de usar el cliente, tardíos sin timers extra, poll captura `Connected`/`Paired`/`Trusted`, poll == señal (mismo `_refresh_and_dispatch`), cache/error/self-unsubscribe/external-unsubscribe idénticos a señal, último unsubscribe cancela el poll y el nuevo ciclo crea fuente nueva |
+| Integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) | `tests/integration/test_bluez_signal_lifecycle.py` | Sí | Sí | ✅ lifecycle + polling (no recepción real) | **solo** subscribe/unsubscribe/close/snapshot reales: 25 ciclos + snapshot fresco; **creación/destrucción inmediata del `GSource` de polling con `poll_interval_ms=60_000`** (no tick real, no espera el intervalo); bus compartido usable; sin cierre de conexión; **nunca provoca BlueZ ni induce señales** |
 | Integración opt-in (`OPENBUDS_RUN_INTEGRATION=1`) | `tests/integration/test_bluez_repository_signals.py` | Sí | Sí | ✅ lifecycle A/B (no recepción real) | `subscribe_device_changes` real + unsubscribe idempotente + snapshot A/B (eventos con invariantes del dominio) + `list_devices` post-cierre; bus compartido usable; **sin** señales inducidas, **sin** afirmar recepción real, **sin** escrituras de hardware |
 
 > **Nota de alcance de la validación:** la **entrega de señales** está validada
@@ -586,9 +613,9 @@ Llamador (cualquier hilo)         Worker (Gio)
 > integration real **no** afirma recepción de señales reales de BlueZ (solo
 > lifecycle).
 
-- Baseline por defecto (Python 3.14, sin GI/bus): **276 passed, 6 skipped** (las
+- Baseline por defecto (Python 3.14, sin GI/bus): **310 passed, 6 skipped** (las
   6 omisiones son las integraciones opt-in). Con `OPENBUDS_RUN_INTEGRATION=1` en
-  **Python 3.12 / Gio**: **282 passed**. Ruff y mypy en verde. Comando de commit:
+  **Python 3.12 / Gio**: **316 passed**. Ruff y mypy en verde. Comando de commit:
   `make lint && make typecheck && make test` (AGENTS.md §13).
 
 ---
@@ -642,4 +669,277 @@ Llamador (cualquier hilo)         Worker (Gio)
 Referencias internas: [ADR-0007](../ADR/0007-device-change-event-contract.md),
 [gio-dbus-client-design §2.4/§2.5/§3/§4](gio-dbus-client-design.md),
 [repository-design §2/§5/§6](repository-design.md),
-[RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4).
+[RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus).
+
+> Las fuentes de `GLib.timeout_source_new`/`GSource` (tiempo monotónico, attach,
+> destroy, set_callback, `SOURCE_CONTINUE`) del **polling de respaldo
+> implementado** están verificadas en [§12.10](#1210-fuentes-oficiales-verificadas).
+
+---
+
+## 12. Polling de respaldo: implementado y verificado (2026-08-10)
+
+> **Estado:** **implementado y verificado (2026-08-10).** Este §12 se redactó con
+> metodología **Documentation First aprobada** y ahora describe el **código real
+> implementado** en `dbus_protocol.py`, `dbus_client.py` y `bluez_repository.py`.
+> Es un **respaldo por polling** periódico que mitiga la posible pérdida de
+> `PropertiesChanged`
+> ([RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)).
+> Los contratos implementados de §2–§4 y las invariantes 1–15 de §7 **no
+> cambian**: esta extensión es **compatible hacia atrás** y **no modifica**
+> `IBluetoothRepository` ni el contrato del dominio
+> ([ADR-0007](../ADR/0007-device-change-event-contract.md)). Validez: fakes
+> deterministas (tick manual, sin `sleep`) + integración real opt-in de
+> **lifecycle create/destroy inmediato** (sin tick real).
+
+### 12.1 Objetivo
+
+La señal primaria (refresh completo por señal + diff de snapshots) puede fallar
+si `PropertiesChanged` no llega (casos documentados en
+[RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)). El
+polling de respaldo es una **red de seguridad redundante**: un timer periódico
+dispara el **mismo pipeline snapshot → diff → cache → dispatch** que la señal, de
+modo que un cambio en `Connected`/`Paired`/`Trusted` perdido por la señal queda
+capturado en el siguiente tick. Es **redundancia, no reemplazo**: el primer poll
+tras una señal sin cambios emite **cero eventos** (el diff es vacío).
+
+### 12.2 Extensión compatible de la API de bajo nivel
+
+El `subscribe` de bajo nivel (§2.2) **ganó** dos parámetros opcionales
+(extensión **compatible hacia atrás**; la firma actual
+`subscribe(callback, on_ready=None)` sigue siendo válida):
+
+```python
+class GioDBusProtocol(BlueZProtocol):
+    def subscribe(
+        self,
+        signal_callback: SignalCallback,
+        on_ready: Callable[[], None] | None = None,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
+    ) -> int: ...  # id lógico
+```
+
+Contrato del par `on_poll`/`poll_interval_ms` (**implementado** en
+`_validate_polling_options`, validación pura antes de tocar el worker/GIO y
+además defensiva en el worker):
+
+- `on_poll` (`Callable[[], None] | None`): callback periódico que corre **en el
+  hilo del worker** (§3).
+- Si `on_poll` está presente, `poll_interval_ms` es **obligatorio y `> 0`**
+  (milisegundos). Si `on_poll` es `None`, `poll_interval_ms` debe ser `None`.
+  Cualquier otra combinación → `ValueError` **antes** de tocar GIO.
+- La comprobación de `poll_interval_ms` exige **`type(...) is int`** exacto
+  (`0`, negativos, `float` y `bool` se rechazan).
+- `on_poll=None` **y** `poll_interval_ms=None` ⇒ **sin polling** (comportamiento
+  actual idéntico).
+- La extensión se propaga por la misma cadena interna que `on_ready` (§2.2.1):
+  `_SignalWorker.subscribe`, `SignalProvider.subscribe`, `BlueZDBusClient.subscribe`
+  y el `SnapshotClient` del repositorio, con la misma firma ampliada.
+
+### 12.3 Timer en el worker (`_SignalWorker`)
+
+**Implementado en `_SignalWorker._subscribe`** (tras `on_ready`, dentro de la
+misma operación de `subscribe` encolada en el `MainContext` del worker,
+**después** de que `on_ready` termine —el init del repositorio corre primero— y
+**antes** de que `subscribe` retorne):
+
+1. `source = GLib.timeout_source_new(poll_interval_ms)` — intervalo en ms; el
+   `GSource` de timeout usa **tiempo monotónico** y se rearma automáticamente
+   mientras el callback retorne `G_SOURCE_CONTINUE`
+   ([§12.10](#1210-fuentes-oficiales-verificadas)).
+2. `source.set_callback(wrapper)` — `wrapper()` llama a `on_poll()`, captura y
+   **loguea cualquier excepción** (aislamiento, §3) y retorna siempre
+   `GLib.SOURCE_CONTINUE` (la fuente **nunca se auto-cancela**).
+3. `source.attach(ctx)` — se adjunta al **`GLib.MainContext` dedicado del
+   worker** (el mismo que itera el `MainLoop`, §3). `attach` devuelve un id
+   `guint > 0`; si devuelve `0`, la fuente no quedó adjunta ⇒ error.
+
+Consecuencias (**verificadas**):
+
+- El poll corre **en el hilo del worker**, **serializado** con las señales y con
+  las operaciones `subscribe`/`unsubscribe` en el mismo `MainContext` (mismo
+  modelo que `on_ready`, §2.2.1).
+- El primer tick ocurre `poll_interval_ms` después del registro: **no es
+  inmediato**; el init del repositorio ya ha corrido en `on_ready`.
+- **Error de poll:** se loguea y se continúa (retorna `SOURCE_CONTINUE`); un
+  `on_poll` que lanza **no** destruye la fuente ni el worker.
+
+### 12.4 Ciclo de vida de la fuente (ownership)
+
+**Implementado** (ownership **lógico** por suscripción, `_SubscriptionState.poll_source`):
+
+- La fuente se **retiene por suscripción lógica** (`subscription_id → GSource`),
+  igual que los IDs GIO.
+- **`unsubscribe(sub_id)`:** destruye la fuente **exactamente una vez**
+  (`source.destroy()`) **antes** de liberar el callback lógico / IDs GIO / worker.
+  Sin polling no hay fuente que destruir.
+- **`close()` / rollback:** destruyen **todas** las fuentes retenidas; **nunca**
+  se llama `connection.close()` (el bus es compartido, §2.5 / invariante 2).
+- **Crear/set/attach falla** (§12.3): rollback completo — destruir la fuente recién
+  creada, liberar el callback lógico y los IDs GIO ya registrados, worker limpio
+  si era la última suscripción — y `BluetoothError` al llamador (**sin fuentes
+  huérfanas**).
+- `GSource.destroy` es **idempotente** y **thread-safe** según la doc oficial
+  ([§12.10](#1210-fuentes-oficiales-verificadas)); aun así el `unsubscribe` se
+  serializa al worker como hoy (§3) y el destroy corre **en el hilo del worker**.
+
+### 12.5 Lado repositorio (`BlueZRepository`)
+
+**Implementado en `bluez_repository.py`:**
+
+- El **primer** subscribe de bajo nivel pasa `on_poll=self._handle_poll` y
+  `poll_interval_ms`; el repositorio usa la constante
+  **`POLL_INTERVAL_DEFAULT_MS = 5000`** (default) e **inyecta el intervalo en el
+  constructor** (`BlueZRepository(client=None, poll_interval_ms=...)`, con
+  **validación en el constructor**: `type(...) is int` exacto y `> 0` ⇒
+  `ValueError` antes de usar el cliente) para que los tests no dependan del
+  tiempo real.
+- `_handle_poll` usa **exactamente el mismo pipeline** que `_handle_signal` ante
+  un `SignalEvent`: ambos llaman al **mismo método interno
+  `_refresh_and_dispatch`** (snapshot fresco completo → diff `cache → nuevo` →
+  actualizar cache → dispatch en orden, fuera del lock). Señal y poll comparten
+  **una sola implementación** (DRY), nunca dos caminos divergentes.
+- El poll captura `Connected`/`Paired`/`Trusted` si `PropertiesChanged` se
+  perdió: al ser un snapshot completo con diff, cualquier cambio observable de
+  `DeviceInfo` (incluido `Connected`) produce los mismos eventos que la señal.
+- **Un solo timer por repositorio:** los **suscriptores tardíos NO crean timers
+  extra** — hay una única suscripción de bajo nivel y un único `GSource`; el poll
+  hace fan-out a todos los suscriptores registrados (igual que una señal).
+- **`unsubscribe` a cero callbacks:** hereda la serialización del worker (cero
+  ticks tras el retorno) + la semántica `active`/in-flight del repositorio
+  (§4.6). El **self-unsubscribe** desde un evento futuro (señal o poll) destruye
+  la fuente de forma **reentrante** con seguridad (`destroy()` idempotente,
+  serializado en el worker, sin esperar al propio hilo).
+- `close()` del repositorio no aplica: el repositorio **nunca** cierra el cliente
+  (invariante 2 / §4.7); la destrucción de la fuente es responsabilidad del bajo
+  nivel (`unsubscribe`/`close`).
+
+### 12.6 Criterios de aceptación
+
+> **Estado (2026-08-10): todos los criterios verificados** por fakes deterministas
+> (sin GI/bus) y la integración real opt-in de lifecycle create/destroy.
+
+| # | Criterio | Verificación esperada |
+|---|----------|----------------------|
+| 1 | Compatibilidad de firma | `subscribe(cb)` y `subscribe(cb, on_ready=...)` siguen funcionando; el default sin polling es idéntico al comportamiento actual. |
+| 2 | Validación del par `on_poll`/`poll_interval_ms` | `on_poll` exige `poll_interval_ms > 0` y `type(...) is int` exacto; ambos presentes o ambos `None`; combinación inválida → `ValueError` antes de tocar GIO. |
+| 3 | Orden en el worker | filtros GIO → callback lógico → `on_ready` → `timeout_source_new`/`set_callback`/`attach` → retorno de `subscribe`. |
+| 4 | Poll en el hilo del worker y serializado | fake `GSource` valida attach al contexto del worker + ticks manuales (sin sleep) en el hilo del worker. |
+| 5 | Retorno `SOURCE_CONTINUE` | cada tick verificado contra la fuente fake; la fuente nunca se auto-cancela. |
+| 6 | Error de poll aislado | `on_poll` lanza → log, se continúa, fuente viva, sin eventos corruptos ni destrucción. |
+| 7 | Ownership de la fuente | `unsubscribe` destruye la fuente exactamente una vez antes de remover; `close`/rollback destruyen todas. |
+| 8 | Fallo create/set/attach | rollback lógico/GIO completo + `BluetoothError`; cero fuentes huérfanas. |
+| 9 | Sin polling | `on_poll=None` → ningún `GSource`; `attach` nunca se llama. |
+| 10 | Un solo timer por repositorio | el primer suscriptor crea la única suscripción de bajo nivel; los tardíos no añaden fuentes. |
+| 11 | Pipeline común | `_handle_poll` == `_handle_signal` (mismo `_refresh_and_dispatch`); captura `Connected`/`Paired`/`Trusted`. |
+| 12 | Cero callbacks tras `unsubscribe` | serialización worker + `active`/in-flight del repositorio; self-unsubscribe reentrante seguro. |
+| 13 | Nunca se cierra el bus | close/rollback destruyen fuentes pero `connection.close()` no se invoca. |
+| 14 | Tests deterministas | fakes con tick manual (sin sleep); integración real solo lifecycle create/destroy con `poll_interval_ms=60_000` (sin tick real). |
+| 15 | Calidad | `make lint && make typecheck && make test` en verde (AGENTS.md §13): **310 passed, 6 skipped** por defecto; **316 passed** con `OPENBUDS_RUN_INTEGRATION=1` en Python 3.12/Gio. |
+
+### 12.7 Pseudocódigo
+
+> **Estado (2026-08-10):** los tres fragmentos corresponden al **código real
+> implementado** en `dbus_protocol.py` (`_SignalWorker._subscribe`,
+> `_unsubscribe`, `_stop_on_worker`, `_destroy_poll_source`) y en
+> `bluez_repository.py` (`subscribe_device_changes`, `_handle_signal`,
+> `_handle_poll`, `_refresh_and_dispatch`); el dict `_poll_sources` real es el
+> campo `poll_source` de `_SubscriptionState` retenido por `subscription_id`.
+
+**Worker — dentro de la operación de `subscribe`, tras `on_ready`:**
+
+```python
+if on_poll is not None:
+    source = GLib.timeout_source_new(poll_interval_ms)  # monotonic
+    def wrapper() -> int:
+        try:
+            on_poll()
+        except Exception:
+            log.exception("poll failed; continuing")
+        return GLib.SOURCE_CONTINUE                      # nunca se auto-cancela
+    source.set_callback(wrapper)
+    gid = source.attach(self._ctx)                       # contexto dedicado del worker
+    if gid == 0:
+        # rollback: destruir source + callback lógico + IDs GIO -> BluetoothError
+        raise BluetoothError("failed to attach poll source")
+    self._poll_sources[subscription_id] = source
+```
+
+**`unsubscribe(sub_id)` (serializado al worker) y `close()`/rollback:**
+
+```python
+source = self._poll_sources.pop(subscription_id, None)
+if source is not None:
+    source.destroy()                                     # exactamente una vez; idempotente/thread-safe
+# ... continúa la liberación actual (callback lógico, IDs GIO, worker si última)
+
+# close() / rollback:
+for source in self._poll_sources.values():
+    source.destroy()
+self._poll_sources.clear()
+# NUNCA connection.close(): el bus es compartido (invariante 2)
+```
+
+**Repositorio — primer suscriptor (único subscribe de bajo nivel):**
+
+```python
+sub_id = self._client.subscribe(
+    self._handle_signal,
+    on_ready=lambda: self._finish_initialization(snapshot_a),
+    on_poll=self._handle_poll,
+    poll_interval_ms=self._poll_interval_ms,   # default POLL_INTERVAL_DEFAULT_MS = 5000; inyectable en __init__
+)
+
+def _handle_signal(self, event: SignalEvent) -> None:
+    self._refresh_and_dispatch()               # MISMO pipeline que el poll (refactor común)
+
+def _handle_poll(self) -> None:
+    self._refresh_and_dispatch()               # snapshot completo + diff + cache + dispatch
+```
+
+### 12.8 Estrategia de pruebas
+
+> **Estado (2026-08-10): implementado y en verde.** Los archivos listados ya
+> existen y contienen los tests de polling.
+
+| Nivel | Archivo | GI | Bus | Qué valida |
+|-------|---------|----|-----|------------|
+| Unit worker | `tests/unit/test_bluez_signal_worker.py` | No | No | fake `GSource`: creación tras `on_ready`, `set_callback` recibe el wrapper, `attach` al contexto del worker con id > 0, **ticks manuales disparados sin sleep**, retorno `SOURCE_CONTINUE` en cada tick, error de poll aislado y continuado, `destroy` exactamente una vez, destrucción en `close`/rollback, fallo create/set/attach → rollback lógico/GIO + `BluetoothError`, sin polling → sin `attach`, validación estricta del par (`ValueError`). |
+| Unit protocolo | `tests/unit/test_bluez_signal_protocol.py` | No | No | firma compatible; validación del par `on_poll`/`poll_interval_ms` (`ValueError` antes de crear el worker); propagación exacta del intervalo al worker; no cierra el worker existente en inválido. |
+| Unit repositorio | `tests/unit/test_bluez_repository_signals.py` | No | No | default 5000 ms en el primer subscribe; intervalo inyectado exacto; inválido rechazado antes de usar el cliente; un solo subscribe/timer por repositorio; tardíos sin timers extra; `_handle_poll` == `_handle_signal` (mismo `_refresh_and_dispatch`); captura de `Connected`/`Paired`/`Trusted` vía diff si se perdió la señal; cero eventos si el snapshot no cambió; cache preservada si el poll falla; self-unsubscribe/external-unsubscribe idénticos a señal; último unsubscribe cancela el poll y el nuevo ciclo crea fuente nueva. |
+| Integración opt-in | `tests/integration/test_bluez_signal_lifecycle.py` | Sí | Sí | **solo lifecycle create/destroy** reales: subscribe con `on_poll`/`poll_interval_ms=60_000` → unsubscribe/close inmediatos; **no** se espera el intervalo y **no** se afirma ningún tick real; bus compartido usable con snapshot posterior. |
+
+> **Nota determinismo:** los fakes **disparan el tick manualmente** contra la
+> fuente fake — **nunca** `sleep`. La integración real **no espera el intervalo**
+> ni afirma que el timer real haya disparado (evita acoplar los tests al tiempo).
+
+### 12.9 Riesgos y límites
+
+- **Redundancia, no reemplazo:** el polling no corrige una señal perdida *a
+  tiempo*; solo la compensa en el siguiente tick. El primer poll tras una señal
+  sin cambios emite cero eventos (diff vacío).
+- **Coste por tick:** un `GetManagedObjects` completo por intervalo mientras
+  haya suscriptores. 5000 ms es conservador y ajustable por inyección; intervalos
+  cortos aumentan la carga del bus.
+- **Validación empírica pendiente:** no se asume que el poll vea `Connected` real
+  si BlueZ tampoco lo refleja en el snapshot; hoy no hay dispositivos conectados
+  (0 objetos, [RESEARCH_LIMITS §4](../RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus)).
+- **La fuente nunca se auto-destruye** (`SOURCE_CONTINUE`): la destrucción es
+  exclusiva del lifecycle (`unsubscribe`/`close`/rollback).
+- **Contrato del dominio intacto:** es infraestructura interna; no cambia
+  `IBluetoothRepository` ni [ADR-0007](../ADR/0007-device-change-event-contract.md).
+- **Fase 6 (Qt):** el poll corre en el worker (GLib), nunca en Qt; se marshaleará
+  igual que las señales (contrato de hilos, §5).
+
+### 12.10 Fuentes oficiales verificadas
+
+Verificadas el 2026-08-10 para este diseño (implementado el mismo día):
+
+| Tema | URL |
+|------|-----|
+| `GLib.timeout_source_new` (intervalo ms; tiempo monotónico; rearmado con `SOURCE_CONTINUE`; **requiere `attach`**) | https://docs.gtk.org/glib/func.timeout_source_new.html |
+| `GSource.attach` (adjunta a un `GMainContext`; devuelve id > 0) | https://docs.gtk.org/glib/method.Source.attach.html |
+| `GSource.destroy` (idempotente, thread-safe) | https://docs.gtk.org/glib/method.Source.destroy.html |
+| `GSource.set_callback` | https://docs.gtk.org/glib/method.Source.set_callback.html |
+| `G_SOURCE_CONTINUE` (mantener la fuente activa) | https://docs.gtk.org/glib/const.SOURCE_CONTINUE.html |

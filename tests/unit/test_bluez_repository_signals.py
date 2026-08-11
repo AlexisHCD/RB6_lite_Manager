@@ -40,6 +40,16 @@ class FakeSignalClient:
         self.snapshot_calls = 0
         self.low_callbacks: list[Callable[[SignalEvent], None]] = []
         self.active_low_callbacks: dict[int, Callable[[SignalEvent], None]] = {}
+        self.subscribe_history: dict[
+            int,
+            tuple[
+                Callable[[SignalEvent], None],
+                Callable[[], None] | None,
+                Callable[[], None] | None,
+                int | None,
+            ],
+        ] = {}
+        self.active_poll_callbacks: dict[int, Callable[[], None]] = {}
         self.subscribe_ids: list[int] = []
         self.unsubscribe_ids: list[int] = []
         self.close_calls = 0
@@ -56,6 +66,9 @@ class FakeSignalClient:
         self,
         callback: Callable[[SignalEvent], None],
         on_ready: Callable[[], None] | None = None,
+        *,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
     ) -> int:
         if self.subscribe_error is not None:
             raise self.subscribe_error
@@ -63,6 +76,14 @@ class FakeSignalClient:
         self._next_id += 1
         self.low_callbacks.append(callback)
         self.active_low_callbacks[subscription_id] = callback
+        self.subscribe_history[subscription_id] = (
+            callback,
+            on_ready,
+            on_poll,
+            poll_interval_ms,
+        )
+        if on_poll is not None:
+            self.active_poll_callbacks[subscription_id] = on_poll
         self.subscribe_ids.append(subscription_id)
         try:
             if on_ready is not None:
@@ -109,6 +130,7 @@ class FakeSignalClient:
     def unsubscribe(self, subscription_id: int) -> None:
         self.unsubscribe_ids.append(subscription_id)
         self.active_low_callbacks.pop(subscription_id, None)
+        self.active_poll_callbacks.pop(subscription_id, None)
 
     def emit(self) -> None:
         event = SignalEvent(
@@ -119,6 +141,11 @@ class FakeSignalClient:
         for callback in tuple(self.active_low_callbacks.values()):
             callback(event)
 
+    def fire_poll(self) -> None:
+        """Run active polling callbacks synchronously for deterministic tests."""
+        for callback in tuple(self.active_poll_callbacks.values()):
+            callback()
+
     def close(self) -> None:
         self.close_calls += 1
 
@@ -128,7 +155,13 @@ IFACE = "org.bluez.Device1"
 
 
 def snapshot(
-    *, name: str = "buds", connected: bool = False, battery: int | None = None
+    *,
+    name: str = "buds",
+    connected: bool = False,
+    paired: bool = False,
+    trusted: bool = False,
+    battery: int | None = None,
+    rssi: int | None = None,
 ) -> ManagedObjects:
     interfaces: dict[str, dict[str, object]] = {
         IFACE: {
@@ -136,8 +169,12 @@ def snapshot(
             "Adapter": "/org/bluez/hci0",
             "Name": name,
             "Connected": connected,
+            "Paired": paired,
+            "Trusted": trusted,
         }
     }
+    if rssi is not None:
+        interfaces[IFACE]["RSSI"] = rssi
     if battery is not None:
         interfaces["org.bluez.Battery1"] = {"Percentage": battery}
     return {DEVICE: interfaces}
@@ -518,3 +555,237 @@ def test_repository_never_closes_client() -> None:
     unsubscribe()
 
     assert client.close_calls == 0
+
+
+def test_first_low_subscription_receives_default_poll_options() -> None:
+    client = FakeSignalClient([snapshot(), snapshot()])
+    repository = BlueZRepository(client)
+
+    repository.subscribe_device_changes(lambda _: None)
+
+    _, _, on_poll, interval = client.subscribe_history[client.subscribe_ids[0]]
+    assert callable(on_poll)
+    assert interval == 5000
+
+
+def test_injected_poll_interval_is_forwarded_exactly() -> None:
+    client = FakeSignalClient([snapshot(), snapshot()])
+    repository = BlueZRepository(client, poll_interval_ms=1234)
+
+    repository.subscribe_device_changes(lambda _: None)
+
+    _, _, on_poll, interval = client.subscribe_history[client.subscribe_ids[0]]
+    assert callable(on_poll)
+    assert interval == 1234
+
+
+@pytest.mark.parametrize("poll_interval_ms", [0, -1, "1234", True])
+def test_invalid_poll_interval_is_rejected_before_client_use(
+    poll_interval_ms: object,
+) -> None:
+    client = FakeSignalClient([snapshot()])
+
+    with pytest.raises(ValueError):
+        BlueZRepository(client, poll_interval_ms=poll_interval_ms)  # type: ignore[arg-type]
+
+    assert client.snapshot_calls == 0
+    assert client.subscribe_ids == []
+
+
+def test_late_subscriber_does_not_create_another_poll_timer() -> None:
+    client = FakeSignalClient([snapshot(), snapshot()])
+    repository = BlueZRepository(client)
+
+    repository.subscribe_device_changes(lambda _: None)
+    repository.subscribe_device_changes(lambda _: None)
+
+    assert client.subscribe_ids == [1]
+    assert list(client.active_poll_callbacks) == [1]
+    assert len(client.subscribe_history) == 1
+
+
+def test_poll_dispatches_connected_paired_and_trusted_changes() -> None:
+    initial = snapshot()
+    changed = snapshot(connected=True, paired=True, trusted=True)
+    client = FakeSignalClient([initial, initial, changed])
+    events: list[DeviceChangeEvent] = []
+    repository = BlueZRepository(client)
+    repository.subscribe_device_changes(events.append)
+
+    client.fire_poll()
+
+    assert kinds(events) == [DeviceChangeKind.UPDATED]
+    event = events[0]
+    assert event.current is not None and event.previous is not None
+    assert event.current.connected is True
+    assert event.current.paired is True
+    assert event.current.trusted is True
+    assert event.previous.connected is False
+    assert event.previous.paired is False
+    assert event.previous.trusted is False
+
+
+def test_signal_and_poll_share_cache_without_duplicate_events() -> None:
+    initial = snapshot()
+    changed_b = snapshot(name="b")
+    changed_c = snapshot(name="c")
+    client = FakeSignalClient([initial, initial, changed_b, changed_b, changed_c, changed_c])
+    events: list[DeviceChangeEvent] = []
+    repository = BlueZRepository(client)
+    repository.subscribe_device_changes(events.append)
+
+    client.fire_poll()
+    client.emit()
+    client.emit()
+    client.fire_poll()
+
+    assert [event.current.name for event in events if event.current is not None] == ["b", "c"]
+
+
+def test_poll_snapshot_error_preserves_cache_for_next_success() -> None:
+    initial = snapshot()
+    changed = snapshot(name="b")
+    client = FakeSignalClient([initial, initial, BluetoothError("poll"), changed])
+    events: list[DeviceChangeEvent] = []
+    repository = BlueZRepository(client)
+    repository.subscribe_device_changes(events.append)
+
+    client.fire_poll()
+    assert events == []
+    client.fire_poll()
+
+    assert len(events) == 1
+    assert events[0].previous is not None and events[0].previous.name == "buds"
+    assert events[0].current is not None and events[0].current.name == "b"
+
+
+def test_poll_mapper_error_preserves_cache_without_partial_events() -> None:
+    invalid: ManagedObjects = {DEVICE: {IFACE: {"Address": "bad"}}}
+    client = FakeSignalClient([snapshot(), snapshot(), invalid, snapshot(name="d")])
+    events: list[DeviceChangeEvent] = []
+    repository = BlueZRepository(client)
+    repository.subscribe_device_changes(events.append)
+
+    client.fire_poll()
+    assert events == []
+    client.fire_poll()
+
+    assert len(events) == 1
+    assert events[0].previous is not None and events[0].previous.name == "buds"
+
+
+def test_poll_battery_and_rssi_only_changes_do_not_dispatch_user_event() -> None:
+    initial = snapshot(battery=10, rssi=-50)
+    changed = snapshot(battery=20, rssi=-40)
+    client = FakeSignalClient([initial, initial, changed])
+    events: list[DeviceChangeEvent] = []
+    repository = BlueZRepository(client)
+    repository.subscribe_device_changes(events.append)
+
+    client.fire_poll()
+
+    assert events == []
+
+
+def test_poll_callback_error_does_not_block_next_subscriber() -> None:
+    client = FakeSignalClient([snapshot(), snapshot(), snapshot(name="b")])
+    received: list[DeviceChangeEvent] = []
+    repository = BlueZRepository(client)
+    repository.subscribe_device_changes(lambda _event: (_ for _ in ()).throw(RuntimeError("user")))
+    repository.subscribe_device_changes(received.append)
+
+    client.fire_poll()
+
+    assert len(received) == 1
+
+
+def test_self_unsubscribe_from_poll_callback_stops_future_polls() -> None:
+    client = FakeSignalClient([snapshot(), snapshot(), snapshot(name="b")])
+    repository = BlueZRepository(client)
+    events: list[DeviceChangeEvent] = []
+    holder: list[Callable[[], None]] = []
+
+    def callback(event: DeviceChangeEvent) -> None:
+        events.append(event)
+        holder[0]()
+
+    holder.append(repository.subscribe_device_changes(callback))
+    client.fire_poll()
+    client.fire_poll()
+
+    assert len(events) == 1
+    assert client.unsubscribe_ids == [1]
+    assert client.snapshot_calls == 3
+    assert client.active_poll_callbacks == {}
+
+
+def test_external_unsubscribe_waits_for_blocked_poll_callback() -> None:
+    client = FakeSignalClient([snapshot(), snapshot(), snapshot(name="b")])
+    entered = threading.Event()
+    release = threading.Event()
+    events: list[DeviceChangeEvent] = []
+
+    def callback(event: DeviceChangeEvent) -> None:
+        events.append(event)
+        entered.set()
+        assert release.wait(1)
+
+    repository = BlueZRepository(client)
+    unsubscribe = repository.subscribe_device_changes(callback)
+    poll_thread = threading.Thread(target=client.fire_poll)
+    poll_thread.start()
+    assert entered.wait(1)
+    unsubscribe_thread = threading.Thread(target=unsubscribe)
+    unsubscribe_thread.start()
+    assert unsubscribe_thread.is_alive()
+    release.set()
+    poll_thread.join(1)
+    unsubscribe_thread.join(1)
+    client.fire_poll()
+
+    assert not unsubscribe_thread.is_alive()
+    assert len(events) == 1
+    assert client.snapshot_calls == 3
+    assert client.unsubscribe_ids == [1]
+
+
+def test_last_unsubscribe_cancels_poll_and_new_cycle_gets_new_cache() -> None:
+    first = snapshot(name="first")
+    second = snapshot(name="second")
+    changed = snapshot(name="changed")
+    client = FakeSignalClient([first, first, second, second, changed])
+    events: list[DeviceChangeEvent] = []
+    repository = BlueZRepository(client)
+
+    unsubscribe = repository.subscribe_device_changes(events.append)
+    unsubscribe()
+    unsubscribe()
+    assert client.active_poll_callbacks == {}
+
+    repository.subscribe_device_changes(events.append)
+    assert client.subscribe_ids == [1, 2]
+    assert list(client.active_poll_callbacks) == [2]
+    client.fire_poll()
+
+    assert len(events) == 1
+    assert events[0].previous is not None and events[0].previous.name == "second"
+    assert client.unsubscribe_ids == [1]
+
+
+def test_signal_and_poll_use_the_same_dispatch_behavior() -> None:
+    initial = snapshot()
+    changed = snapshot(name="changed")
+    poll_client = FakeSignalClient([initial, initial, changed])
+    signal_client = FakeSignalClient([initial, initial, changed])
+    poll_events: list[DeviceChangeEvent] = []
+    signal_events: list[DeviceChangeEvent] = []
+    poll_repository = BlueZRepository(poll_client)
+    signal_repository = BlueZRepository(signal_client)
+    poll_repository.subscribe_device_changes(poll_events.append)
+    signal_repository.subscribe_device_changes(signal_events.append)
+
+    poll_client.fire_poll()
+    signal_client.emit()
+
+    assert len(poll_events) == 1
+    assert signal_events == poll_events

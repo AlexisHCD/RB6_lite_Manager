@@ -174,6 +174,8 @@ class FakeProvider:
         self.calls = 0
         self.subscribe_callbacks: list[Callable[[SignalEvent], None]] = []
         self.subscribe_on_ready: list[Callable[[], None] | None] = []
+        self.subscribe_on_poll: list[Callable[[], None] | None] = []
+        self.subscribe_intervals: list[int | None] = []
         self.unsubscribe_ids: list[int] = []
         self.close_calls = 0
 
@@ -185,9 +187,14 @@ class FakeProvider:
         self,
         callback: Callable[[SignalEvent], None],
         on_ready: Callable[[], None] | None = None,
+        *,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
     ) -> int:
         self.subscribe_callbacks.append(callback)
         self.subscribe_on_ready.append(on_ready)
+        self.subscribe_on_poll.append(on_poll)
+        self.subscribe_intervals.append(poll_interval_ms)
         if on_ready is not None:
             on_ready()
         return 17
@@ -269,6 +276,40 @@ def test_client_forwards_on_ready_exactly_to_provider() -> None:
 
     assert provider.subscribe_callbacks == [callback]
     assert provider.subscribe_on_ready == [on_ready]
+
+
+def test_client_forwards_exact_optional_polling_arguments_to_provider() -> None:
+    provider = FakeProvider(SNAPSHOT)
+    client = BlueZDBusClient(provider=provider)
+
+    def on_poll() -> None:
+        pass
+
+    def on_ready() -> None:
+        pass
+
+    assert (
+        client.subscribe(
+            lambda _event: None,
+            on_ready=on_ready,
+            on_poll=on_poll,
+            poll_interval_ms=271,
+        )
+        == 17
+    )
+
+    assert provider.subscribe_on_ready == [on_ready]
+    assert provider.subscribe_on_poll == [on_poll]
+    assert provider.subscribe_intervals == [271]
+
+
+def test_client_preserves_backward_none_polling_arguments() -> None:
+    provider = FakeProvider(SNAPSHOT)
+    client = BlueZDBusClient(provider=provider)
+
+    assert client.subscribe(lambda _event: None) == 17
+    assert provider.subscribe_on_poll == [None]
+    assert provider.subscribe_intervals == [None]
 
 
 def test_client_close_is_delegated_idempotently_by_real_client_contract() -> None:

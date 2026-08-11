@@ -20,6 +20,17 @@ _EXPECTED_SIGNATURE = "(a{oa{sa{sv}}})"
 _LOGGER = logging.getLogger(__name__)
 
 
+def _validate_polling_options(
+    on_poll: Callable[[], None] | None,
+    poll_interval_ms: int | None,
+) -> None:
+    """Validate the optional polling callback and interval pair."""
+    if (on_poll is None) != (poll_interval_ms is None):
+        raise ValueError("on_poll y poll_interval_ms deben proporcionarse juntos")
+    if on_poll is not None and (type(poll_interval_ms) is not int or poll_interval_ms <= 0):
+        raise ValueError("poll_interval_ms debe ser un entero positivo")
+
+
 @dataclass(frozen=True, slots=True)
 class SignalEvent:
     """Evento de señal D-Bus normalizado para las capas superiores."""
@@ -29,6 +40,12 @@ class SignalEvent:
     object_path: str
 
 
+@dataclass(slots=True)
+class _SubscriptionState:
+    callback: SignalCallback
+    poll_source: Any = None
+
+
 class SignalWorker(Protocol):
     """Operaciones que el protocolo necesita del worker de señales."""
 
@@ -36,7 +53,14 @@ class SignalWorker(Protocol):
         """Inicia el worker."""
         ...
 
-    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
+    def subscribe(
+        self,
+        callback: SignalCallback,
+        on_ready: ReadyCallback | None = None,
+        *,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
+    ) -> int:
         """Registra una callback."""
         ...
 
@@ -78,7 +102,7 @@ class _SignalWorker:
         self._worker_ident: int | None = None
         self._ready = threading.Event()
         self._startup_error: BaseException | None = None
-        self._subscriptions: dict[int, SignalCallback] = {}
+        self._subscriptions: dict[int, _SubscriptionState] = {}
         self._bus_subscription_ids: list[int] = []
         self._next_subscription_id = 1
         self._closed = False
@@ -105,11 +129,24 @@ class _SignalWorker:
                 "No se pudo iniciar el worker de señales de BlueZ"
             ) from self._startup_error
 
-    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
+    def subscribe(
+        self,
+        callback: SignalCallback,
+        on_ready: ReadyCallback | None = None,
+        *,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
+    ) -> int:
         """Register a logical callback and return its monotonic identifier."""
+        _validate_polling_options(on_poll, poll_interval_ms)
         if self.is_closed:
             raise BluetoothError("El worker de señales de BlueZ está cerrado")
-        return cast(int, self._call_worker(lambda: self._subscribe(callback, on_ready)))
+        return cast(
+            int,
+            self._call_worker(
+                lambda: self._subscribe(callback, on_ready, on_poll, poll_interval_ms)
+            ),
+        )
 
     def unsubscribe(self, subscription_id: int) -> None:
         """Remove a logical callback, stopping the worker when it is the last one."""
@@ -194,12 +231,19 @@ class _SignalWorker:
             raise failure[0]
         return result[0] if result else None
 
-    def _subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
+    def _subscribe(
+        self,
+        callback: SignalCallback,
+        on_ready: ReadyCallback | None = None,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
+    ) -> int:
         if not self._subscriptions:
             self._register_bus_signals()
         subscription_id = self._next_subscription_id
         self._next_subscription_id += 1
-        self._subscriptions[subscription_id] = callback
+        state = _SubscriptionState(callback)
+        self._subscriptions[subscription_id] = state
         if on_ready is not None:
             try:
                 on_ready()
@@ -208,6 +252,33 @@ class _SignalWorker:
                 if not self._subscriptions:
                     self._stop_on_worker()
                 raise
+        if on_poll is not None and poll_interval_ms is not None:
+            source: Any = None
+            try:
+                source = self._glib.timeout_source_new(poll_interval_ms)
+
+                def poll_wrapper(*_args: Any) -> Any:
+                    try:
+                        on_poll()
+                    except Exception:
+                        _LOGGER.exception("Error en callback de polling de BlueZ")
+                    return self._glib.SOURCE_CONTINUE
+
+                source.set_callback(poll_wrapper)
+                source_id = source.attach(self._context)
+                if not isinstance(source_id, int) or source_id <= 0:
+                    raise RuntimeError("GLib devolvió un identificador de source inválido")
+                state.poll_source = source
+            except Exception as exc:
+                if source is not None:
+                    try:
+                        source.destroy()
+                    except Exception:
+                        _LOGGER.exception("No se pudo destruir un source de polling fallido")
+                self._subscriptions.pop(subscription_id, None)
+                if not self._subscriptions:
+                    self._stop_on_worker()
+                raise BluetoothError("No se pudo configurar el polling de BlueZ") from exc
         return subscription_id
 
     def _register_bus_signals(self) -> None:
@@ -246,16 +317,17 @@ class _SignalWorker:
         if not isinstance(signal_name, str) or (interface_name, signal_name) not in self._SIGNALS:
             return
         event = SignalEvent(interface_name, signal_name, object_path)
-        for callback in tuple(self._subscriptions.values()):
+        for state in tuple(self._subscriptions.values()):
             try:
-                callback(event)
+                state.callback(event)
             except Exception:
                 _LOGGER.exception("Error en callback de señal BlueZ")
 
     def _unsubscribe(self, subscription_id: int) -> bool:
         if subscription_id not in self._subscriptions:
             return False
-        self._subscriptions.pop(subscription_id)
+        state = self._subscriptions.pop(subscription_id)
+        self._destroy_poll_source(state)
         if not self._subscriptions:
             self._stop_on_worker()
             return True
@@ -264,6 +336,9 @@ class _SignalWorker:
     def _stop_on_worker(self) -> None:
         with self._closed_lock:
             self._closed = True
+        for state in tuple(self._subscriptions.values()):
+            self._destroy_poll_source(state)
+        self._subscriptions.clear()
         if self._connection is not None:
             for subscription_id in self._bus_subscription_ids:
                 try:
@@ -273,6 +348,16 @@ class _SignalWorker:
             self._bus_subscription_ids.clear()
         if self._loop is not None:
             self._loop.quit()
+
+    def _destroy_poll_source(self, state: _SubscriptionState) -> None:
+        source = state.poll_source
+        state.poll_source = None
+        if source is None:
+            return
+        try:
+            source.destroy()
+        except Exception:
+            _LOGGER.exception("No se pudo destruir un source de polling de BlueZ")
 
     def _join(self) -> None:
         if self._thread is not None:
@@ -292,7 +377,14 @@ class SnapshotProvider(Protocol):
 class SignalProvider(Protocol):
     """Fuente interna capaz de gestionar suscripciones a señales."""
 
-    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
+    def subscribe(
+        self,
+        callback: SignalCallback,
+        on_ready: ReadyCallback | None = None,
+        *,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
+    ) -> int:
         """Registra una callback y devuelve su identificador."""
         ...
 
@@ -377,8 +469,16 @@ class GioDBusProtocol:
         except self._glib.Error as exc:
             raise BluetoothError(f"No se pudo construir el proxy de BlueZ: {exc}") from exc
 
-    def subscribe(self, callback: SignalCallback, on_ready: ReadyCallback | None = None) -> int:
+    def subscribe(
+        self,
+        callback: SignalCallback,
+        on_ready: ReadyCallback | None = None,
+        *,
+        on_poll: Callable[[], None] | None = None,
+        poll_interval_ms: int | None = None,
+    ) -> int:
         """Registra una callback, creando el worker de señales si es necesario."""
+        _validate_polling_options(on_poll, poll_interval_ms)
         while True:
             starting: threading.Event | None
             with self._state_lock:
@@ -447,7 +547,12 @@ class GioDBusProtocol:
             raise BluetoothError("El protocolo D-Bus de BlueZ está cerrado")
 
         try:
-            subscription_id = worker.subscribe(callback, on_ready=on_ready)
+            subscription_id = worker.subscribe(
+                callback,
+                on_ready=on_ready,
+                on_poll=on_poll,
+                poll_interval_ms=poll_interval_ms,
+            )
         except BluetoothError:
             self._discard_failed_worker(worker)
             raise
