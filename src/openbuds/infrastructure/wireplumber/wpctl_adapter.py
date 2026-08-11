@@ -1,45 +1,91 @@
-"""Adaptador de la CLI ``wpctl`` (WirePlumber).
-
-Encapsula las invocaciones subprocess a ``wpctl`` para inspección y control de
-ruteo/perfiles. Solo lectura + acciones de control (set-default, set-profile).
-
-Estado: Fase 1 — esqueleto. Implementación en Fase 4.
-
-Comandos relevantes (verificados en man pages / wpctl --help):
-  - ``wpctl status``            -> resumen de audio/video (dispositivos, defaults).
-  - ``wpctl inspect <id>``      -> propiedades detalladas de un objeto.
-  - ``wpctl set-default <id>``  -> fija el dispositivo por defecto.
-  - ``wpctl set-profile <id> <idx>`` -> cambia el perfil (a2dp-sink, headset-head-unit).
-  - ``wpctl set-volume <id> <vol>``  -> ajusta volumen.
-
-Recarga de configuración: tras editar archivos, reiniciar el servicio de usuario
-``systemctl --user restart wireplumber`` (NO hay wpctl reload genérico).
-"""
+"""Adaptador de solo lectura para la CLI ``wpctl`` (Incremento 1)."""
 
 from __future__ import annotations
 
+import math
+import subprocess
+from typing import Any, Protocol
+
+from openbuds.core.errors import WirePlumberUnavailableError
+
+
+class WpctlResult(Protocol):
+    """Resultado mínimo requerido por el executor de ``wpctl``."""
+
+    returncode: int
+    stdout: Any
+    stderr: Any
+
+
+class Executor(Protocol):
+    """Callable compatible con ``subprocess.run``."""
+
+    def __call__(self, argv: list[str], **kwargs: Any) -> WpctlResult:
+        """Ejecuta ``wpctl`` y devuelve un resultado compatible."""
+        ...
+
 
 class WpctlAdapter:
-    """Envoltorio subprocess sobre ``wpctl``.
+    """Ejecuta consultas seguras y frescas contra ``wpctl``.
 
-    Estado: Fase 1 — sin implementación.
+    Incremento 1 es estrictamente de solo lectura. Las operaciones mutadoras
+    permanecen sin implementar hasta disponer de backup y rollback.
     """
 
-    def status(self) -> str:
-        """Devuelve la salida de ``wpctl status``."""
-        raise NotImplementedError("Fase 4 (Optimización).")
+    def __init__(
+        self,
+        binary: str = "wpctl",
+        timeout_seconds: int | float = 5.0,
+        executor: Executor | None = None,
+    ) -> None:
+        if type(binary) is not str or not binary or "\x00" in binary:
+            raise ValueError("invalid wpctl configuration")
+        if (
+            type(timeout_seconds) not in (int, float)
+            or timeout_seconds <= 0
+            or not math.isfinite(timeout_seconds)
+        ):
+            raise ValueError("invalid wpctl configuration")
 
-    def inspect(self, node_id: int) -> str:
-        """Devuelve la salida de ``wpctl inspect <node_id>``."""
-        raise NotImplementedError("Fase 4 (Optimización).")
+        self._binary = binary
+        self._timeout_seconds = timeout_seconds
+        self._executor = executor if executor is not None else subprocess.run
+
+    def _run(self, args: list[str]) -> str:
+        """Ejecuta una consulta y devuelve stdout sin modificarlo."""
+        try:
+            result = self._executor(
+                [self._binary, *args],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=self._timeout_seconds,
+            )
+        except (subprocess.TimeoutExpired, OSError) as error:
+            raise WirePlumberUnavailableError("wpctl is unavailable") from error
+
+        if result.returncode != 0 or type(result.stdout) is not str:
+            raise WirePlumberUnavailableError("wpctl is unavailable")
+        return result.stdout
+
+    def status(self) -> str:
+        """Devuelve exactamente la salida de ``wpctl status``."""
+        return self._run(["status"])
+
+    def inspect(self, object_id: int | str) -> str:
+        """Devuelve exactamente la salida de ``wpctl inspect`` para un objeto."""
+        if type(object_id) is int and object_id >= 0:
+            target = str(object_id)
+        elif type(object_id) is str and object_id == "@DEFAULT_AUDIO_SINK@":
+            target = object_id
+        else:
+            raise ValueError("invalid wpctl inspect target")
+        return self._run(["inspect", target])
 
     def set_profile(self, device_id: int, profile_index: int) -> None:
-        """Ejecuta ``wpctl set-profile <device_id> <profile_index>``."""
-        raise NotImplementedError("Fase 4 (Optimización).")
+        """No implementado: el Incremento 1 no permite mutaciones."""
+        raise NotImplementedError("WpctlAdapter Incremento 1 is read-only")
 
     def restart_service(self) -> None:
-        """Reinicia el servicio de usuario WirePlumber para releer configuración.
-
-        Ejecuta ``systemctl --user restart wireplumber``.
-        """
-        raise NotImplementedError("Fase 4 (Optimización).")
+        """No implementado: el Incremento 1 no permite mutaciones."""
+        raise NotImplementedError("WpctlAdapter Incremento 1 is read-only")
