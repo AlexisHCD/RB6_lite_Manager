@@ -25,7 +25,8 @@ class SystemInfo:
         has_bluetooth_adapter: Si se detectó al menos un adaptador Bluetooth.
         system_bus_available: Si el bus D-Bus del sistema está accesible.
         user_config_writable: Si el usuario puede escribir en su configuración.
-        is_supported: Si el entorno cumple los requisitos mínimos del proyecto.
+        is_supported: Si el sistema y el stack cumplen los requisitos mínimos;
+            no indica disponibilidad de hardware.
     """
 
     os_id: str

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import Mock
 
 from openbuds.domain.models import SystemInfo
@@ -162,19 +164,51 @@ def test_permiso_de_configuracion_usa_ancestro_existente(tmp_path: Path, monkeyp
 
 def test_soporte_exige_todos_los_minimos() -> None:
     info = _supported_info()
-    assert detector._is_supported(info)
+    assert detector._is_system_supported(info)
     for field in (
+        "os_id",
         "os_version",
         "bluez_version",
         "pipewire_version",
         "wireplumber_version",
         "wireplumber_config_style",
-        "has_bluetooth_adapter",
         "system_bus_available",
-        "user_config_writable",
     ):
         value = "unknown" if isinstance(getattr(info, field), str) else False
-        assert not detector._is_supported(replace(info, **{field: value}))
+        assert not detector._is_system_supported(replace(info, **{field: value}))
+
+
+def test_soporte_no_depende_de_hardware_ni_configuracion() -> None:
+    info = _supported_info(has_bluetooth_adapter=False, user_config_writable=False)
+
+    assert detector._is_system_supported(info)
+
+
+def test_runtime_no_listo_con_base_prefix_linuxbrew_sin_importar_gio(monkeypatch) -> None:
+    monkeypatch.setattr(detector.sys, "base_prefix", "/home/linuxbrew/.linuxbrew")
+
+    assert not detector.is_runtime_ready()
+
+
+def test_runtime_listo_con_imports_fake(monkeypatch) -> None:
+    fake_gi = ModuleType("gi")
+    fake_repository = ModuleType("gi.repository")
+    require_version = Mock()
+    fake_repository.__dict__.update({"Gio": object(), "GLib": object()})
+    fake_gi.__dict__.update({"repository": fake_repository, "require_version": require_version})
+    monkeypatch.setattr(detector.sys, "base_prefix", "/usr")
+    monkeypatch.setitem(sys.modules, "gi", fake_gi)
+    monkeypatch.setitem(sys.modules, "gi.repository", fake_repository)
+
+    assert detector.is_runtime_ready()
+    require_version.assert_called_once_with("Gio", "2.0")
+
+
+def test_runtime_no_listo_con_import_gi_fallido(monkeypatch) -> None:
+    monkeypatch.setattr(detector.sys, "base_prefix", "/usr")
+    monkeypatch.setitem(sys.modules, "gi", None)
+
+    assert not detector.is_runtime_ready()
 
 
 def test_doctor_muestra_bus_permisos_y_devuelve_estado(monkeypatch, capsys) -> None:
@@ -185,6 +219,7 @@ def test_doctor_muestra_bus_permisos_y_devuelve_estado(monkeypatch, capsys) -> N
 
     monkeypatch.setattr(logging_setup, "setup_logging", lambda level: None)
     monkeypatch.setattr(detector, "detect", lambda: info)
+    monkeypatch.setattr(detector, "is_runtime_ready", lambda: True)
 
     assert cli.main(["doctor"]) == 0
     output = capsys.readouterr().out
@@ -198,5 +233,6 @@ def test_doctor_devuelve_uno_si_el_entorno_no_esta_soportado(monkeypatch) -> Non
 
     monkeypatch.setattr(logging_setup, "setup_logging", lambda level: None)
     monkeypatch.setattr(detector, "detect", lambda: _supported_info(is_supported=False))
+    monkeypatch.setattr(detector, "is_runtime_ready", lambda: True)
 
     assert cli.main(["doctor"]) == 1

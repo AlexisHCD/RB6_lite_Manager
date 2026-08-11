@@ -238,14 +238,24 @@ make check-runtime
 .venv/bin/openbuds doctor
 ```
 
-Muestra las versiones detectadas del stack y si el entorno está soportado.
+Muestra las versiones detectadas del stack y tres categorías de diagnóstico:
+
+- **Sistema soportado** — SO y stack (Ubuntu 24.04, BlueZ, PipeWire, WirePlumber
+  Lua 0.4 y bus D-Bus del sistema).
+- **Runtime aplicación** — el intérprete es `/usr/bin/python3` y puede importar
+  PyGObject/Gio/GLib (un venv creado desde Linuxbrew/Homebrew no lo cumple).
+- **Hardware Bluetooth** — adaptador disponible; es informativo.
+
+La ausencia de adaptador **no** implica un sistema no soportado: `doctor` sale
+con 0 cuando sistema y runtime están listos aunque no haya hardware; solo sale
+con 1 si el sistema o el runtime son inválidos.
 
 ## Uso
 
 ### CLI
 
 ```bash
-.venv/bin/openbuds doctor        # detecta y muestra el entorno del sistema
+.venv/bin/openbuds doctor        # diagnostica sistema, runtime y hardware
 .venv/bin/openbuds config        # muestra la configuración efectiva
 .venv/bin/openbuds version       # muestra la versión sin cargar config
 .venv/bin/openbuds devices       # lista dispositivos Bluetooth (Fase 3): snapshot TSV

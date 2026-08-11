@@ -31,8 +31,9 @@ class CliContext:
 
 
 def _cmd_doctor(_context: CliContext) -> int:
-    """Detecta el entorno y devuelve 0 si está soportado."""
+    """Diagnostica compatibilidad del sistema, runtime y hardware disponible."""
     info = environment_detector.detect()
+    runtime_ready = environment_detector.is_runtime_ready()
     print(f"SO:              {info.os_id} {info.os_version}")
     print(f"Kernel:          {info.kernel_version}")
     print(f"BlueZ:           {info.bluez_version}")
@@ -41,9 +42,10 @@ def _cmd_doctor(_context: CliContext) -> int:
     print(f"D-Bus/systemd:   {info.dbus_version}")
     print(f"Bus del sistema:  {'sí' if info.system_bus_available else 'no'}")
     print(f"Configuración usuario: {'sí' if info.user_config_writable else 'no'}")
-    print(f"Adaptador BT:    {'sí' if info.has_bluetooth_adapter else 'no detectado'}")
-    print(f"Entorno soportado: {'SÍ' if info.is_supported else 'NO'}")
-    return 0 if info.is_supported else 1
+    print(f"Sistema soportado: {'SÍ' if info.is_supported else 'NO'}")
+    print(f"Runtime aplicación: {'LISTO' if runtime_ready else 'NO LISTO'}")
+    print(f"Hardware Bluetooth: {'disponible' if info.has_bluetooth_adapter else 'no disponible'}")
+    return 0 if info.is_supported and runtime_ready else 1
 
 
 def _cmd_config(context: CliContext) -> int:
@@ -150,7 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="OpenBuds Manager — administrador de auriculares Bluetooth para Linux.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("doctor", help="Detecta y muestra el entorno del sistema (Fase 2).")
+    sub.add_parser("doctor", help="Diagnostica sistema, runtime y hardware Bluetooth.")
     sub.add_parser("config", help="Muestra la configuración efectiva (Fase 2).")
     sub.add_parser("version", help="Muestra la versión de OpenBuds Manager.")
     devices = sub.add_parser("devices", help="Lista dispositivos Bluetooth (Fase 3).")

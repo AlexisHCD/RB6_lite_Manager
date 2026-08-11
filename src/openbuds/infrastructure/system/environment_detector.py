@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -114,8 +115,8 @@ def _is_user_config_writable(config_path: Path | None = None) -> bool:
     return os.access(candidate, os.W_OK | os.X_OK)
 
 
-def _is_supported(info: SystemInfo) -> bool:
-    """Evalúa cada requisito operativo mínimo del entorno soportado."""
+def _is_system_supported(info: SystemInfo) -> bool:
+    """Evalúa los requisitos de compatibilidad del sistema y del stack."""
     return all(
         (
             info.os_id == "ubuntu" and info.os_version.startswith("24.04"),
@@ -124,10 +125,24 @@ def _is_supported(info: SystemInfo) -> bool:
             info.wireplumber_version != "unknown",
             info.wireplumber_config_style == "lua-0.4",
             info.system_bus_available,
-            info.user_config_writable,
-            info.has_bluetooth_adapter,
         )
     )
+
+
+def is_runtime_ready() -> bool:
+    """Indica si el intérprete puede usar el runtime Gio del sistema."""
+    try:
+        if Path(sys.base_prefix).resolve() != Path("/usr"):
+            return False
+        import gi
+
+        gi.require_version("Gio", "2.0")
+        from gi.repository import Gio, GLib
+
+        _ = Gio, GLib
+    except (ImportError, ValueError, OSError):
+        return False
+    return True
 
 
 def detect() -> SystemInfo:
@@ -177,4 +192,4 @@ def detect() -> SystemInfo:
         user_config_writable=user_config_writable,
         is_supported=False,
     )
-    return replace(info, is_supported=_is_supported(info))
+    return replace(info, is_supported=_is_system_supported(info))

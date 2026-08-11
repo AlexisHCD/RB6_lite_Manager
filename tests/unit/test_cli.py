@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
@@ -74,10 +75,40 @@ def test_doctor_bootstraps_once_and_returns_detector_status(
     monkeypatch.setattr(cli, "load_config", lambda: calls.append("load") or default_config())
     monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: calls.append("logging"))
     monkeypatch.setattr(cli.environment_detector, "detect", lambda: _system_info(supported))
+    monkeypatch.setattr(cli.environment_detector, "is_runtime_ready", lambda: True)
 
     assert cli.main(["doctor"]) == expected
     assert calls == ["load", "logging"]
-    assert "Entorno soportado:" in capsys.readouterr().out
+    assert "Sistema soportado:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("supported", "runtime_ready", "has_adapter", "expected"),
+    [(True, True, True, 0), (True, True, False, 0), (True, False, True, 1), (False, True, True, 1)],
+)
+def test_doctor_exit_depends_on_system_and_runtime_not_hardware(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    supported: bool,
+    runtime_ready: bool,
+    has_adapter: bool,
+    expected: int,
+) -> None:
+    info = replace(_system_info(supported), has_bluetooth_adapter=has_adapter)
+    detect = Mock(return_value=info)
+    runtime = Mock(return_value=runtime_ready)
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    monkeypatch.setattr(cli.environment_detector, "detect", detect)
+    monkeypatch.setattr(cli.environment_detector, "is_runtime_ready", runtime)
+
+    assert cli.main(["doctor"]) == expected
+    output = capsys.readouterr().out
+    assert "Sistema soportado: " in output
+    assert "Runtime aplicación: " in output
+    assert "Hardware Bluetooth: " in output
+    detect.assert_called_once_with()
+    runtime.assert_called_once_with()
 
 
 def test_config_error_from_load_is_reported(

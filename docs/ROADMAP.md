@@ -16,8 +16,9 @@ ausentes ni se ejecutan acciones de hardware sin aprobación explícita.
   ejecutar todos los gates al cerrar el incremento local.
 - [x] Recrear, en una tarea aprobada aparte, `.venv` con `/usr/bin/python3` y
   `--system-site-packages`; validar PyGObject/Gio. No usar Linuxbrew para BlueZ.
-- [ ] Hacer que `openbuds doctor` distinga sistema soportado, runtime listo y
-  hardware disponible, incluido un venv que no pueda importar Gio.
+- [x] `openbuds doctor` distingue sistema soportado, runtime listo y hardware
+  disponible; el runtime exige `base_prefix` `/usr` y PyGObject/Gio importables
+  (Linuxbrew devuelve no listo). Verificado en Python 3.12.
 - [ ] Corregir rutas y afirmaciones obsoletas restantes.
 - [ ] Añadir `LICENSE` GPL-3.0-or-later.
 - [ ] Diseñar CI básica para unit tests, Ruff y mypy.
