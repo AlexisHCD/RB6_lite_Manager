@@ -89,10 +89,22 @@ PipeWire 1.0.5 presente y `pw-dump` accesible en el entorno de desarrollo.
   `parse_bluetooth_audio_nodes`, `--no-colors` implícito, **sin assert de
   nodos**, sin payload/MAC). Contrato:
   [pw-dump-runner-contract](../pipewire/pw-dump-runner-contract.md).
-- **Pendiente (no afirmar este ADR completo):** el **repositorio**
-  `IAudioRepository` (`pipewire/pipewire_repository.py`) y el **adaptador de
-  control `wpctl`** aún **no** están implementados. La decisión de este ADR
-  (inspección vía subprocess) queda **ejecutada en la parte de lectura de
-  `pw-dump`** (parser + runner); las **acciones de control de `wpctl`**
-  (`set-default`, `set-profile`, `set-volume`) y la repositorización se
-  completan en ítems posteriores de la Fase 4.
+- **Repositorio PipeWire — Incremento 1 (composición del listado) implementado y
+  verificado:** `pipewire/pipewire_repository.py`
+  (`PipeWireRepository.list_bluetooth_audio_nodes`: `runner.dump()` **fresco por
+  llamada** + `parse_bluetooth_audio_nodes`, Protocol `DumpRunner` inyectable por
+  ctor con `is None`, sin cache/logs/subprocess propio, errores **propagados sin
+  re-envolver**) con **8 unit tests** (`tests/unit/test_pipewire_repository.py`,
+  fakes deterministas, sin `pw-dump`/PipeWire/GI) e **integración real opt-in**
+  (`tests/integration/test_pipewire_repository.py`,
+  `OPENBUDS_RUN_INTEGRATION=1`: solo `list`/dicts `str`, **sin assert de nodos
+  ni payload/MAC**). El contrato global `IAudioRepository` queda
+  **parcialmente implementado**: `get_active_codec`/`get_default_audio_sink`
+  siguen `NotImplementedError` (no se infiere códec). Contrato:
+  [repository-design](../pipewire/repository-design.md).
+- **Pendiente (no afirmar este ADR completo):** el **adaptador de control
+  `wpctl`** aún **no** está implementado. La decisión de este ADR (inspección
+  vía subprocess) queda **ejecutada en la parte de lectura de `pw-dump`**
+  (parser + runner + repositorio de composición); las **acciones de control de
+  `wpctl`** (`set-default`, `set-profile`, `set-volume`) y los métodos de
+  códec/sink del repositorio se completan en ítems posteriores de la Fase 4.

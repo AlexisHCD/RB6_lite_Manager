@@ -129,9 +129,30 @@ real `subprocess.run`). Sin `shutil.which` (TOCTOU) y sin logging de
 payload/stderr (privacidad). Cubierto por **29 unit tests** y una **integración
 real opt-in** (`OPENBUDS_RUN_INTEGRATION=1`) que encadena `runner.dump()` →
 `parse_bluetooth_audio_nodes` sin exigir nodos Bluetooth (resultado local **0
-nodos**). El siguiente ítem de la Fase 4, el **repositorio `IAudioRepository`
-(`pipewire/pipewire_repository.py`), sigue pendiente**. Ver
+nodos**). Ver
 [`docs/pipewire/pw-dump-runner-contract.md`](docs/pipewire/pw-dump-runner-contract.md).
+
+La **tercera pieza de la Fase 4 — el repositorio `PipeWireRepository`**
+(`infrastructure/pipewire/pipewire_repository.py`, ADR-0003) — está
+**implementada y verificada (2026-08-10)** en su **Incremento 1**
+(`list_bluetooth_audio_nodes`): es una **capa de composición** que ejecuta
+`runner.dump()` **fresco en cada llamada** (sin cache, logs, subprocess propio
+ni mutación) y entrega el payload al parser puro, devolviendo directamente su
+`list[dict[str, str]]`. Usa el Protocol estructural `DumpRunner` (`dump() ->
+str`) inyectable por constructor con condición **`is None`** (`None` →
+`PwDumpRunner()`; un runner **falsy** inyectado se preserva). Los errores se
+**propagan sin re-envolver** (`PipeWireUnavailableError` del runner,
+`PipeWireParseError` del parser; misma instancia). El contrato global
+`IAudioRepository` sigue **parcialmente implementado**:
+`get_active_codec`/`get_default_audio_sink` **permanecen `NotImplementedError`**
+— **no** se infiere ni afirma códec
+([RESEARCH_LIMITS §2](docs/RESEARCH_LIMITS.md#2-propiedades-runtime-de-pipewire)).
+Cubierto por **8 unit tests** con fakes (sin `pw-dump`/PipeWire/GI) y una
+**integración real opt-in** (`tests/integration/test_pipewire_repository.py`,
+`OPENBUDS_RUN_INTEGRATION=1`: solo `isinstance(result, list)` y elementos
+`dict` con valores `str`, **sin assert de nodos ni payload/MAC**; resultado
+local **0 nodos**, sin afirmación positiva de hardware). Ver
+[`docs/pipewire/repository-design.md`](docs/pipewire/repository-design.md).
 
 Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
@@ -263,25 +284,29 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
-**Baseline actual por defecto (Python 3.14):** **359 tests** en verde +
-**8 skipped** (las 8 integraciones BlueZ/PipeWire opt-in desactivadas por
+**Baseline actual por defecto (Python 3.14):** **367 tests** en verde +
+**9 skipped** (las 9 integraciones BlueZ/PipeWire opt-in desactivadas por
 defecto; 2026-08-10); con `OPENBUDS_RUN_INTEGRATION=1` en **Python 3.12 / Gio**
-(`/tmp/openbuds-status-venv`): **367 passed**. Ruff y mypy en verde. El cliente
+(`/tmp/openbuds-status-venv`): **376 passed**. Ruff y mypy en verde. El cliente
 D-Bus (Incremento 1), el mapper de objetos, el **worker y lifecycle de señales
 de bajo nivel**, el **dispatch del repositorio** (Incremento 2 completo), el
 **polling de respaldo** (2026-08-10), el **diff puro de
 snapshots** (`device_change_diff.py`), el contrato de eventos de cambio de
 dispositivo ([ADR-0007](docs/ADR/0007-device-change-event-contract.md)), las
 consultas snapshot del repositorio, la CLI `devices`, el **parser puro de
-`pw-dump`** y el **runner seguro `PwDumpRunner`** (Fase 4) ya están cubiertos
-por la suite (`tests/unit/test_device_change_diff.py`,
+`pw-dump`**, el **runner seguro `PwDumpRunner`** y el **repositorio
+`PipeWireRepository`** (Fase 4; Incremento 1: `list_bluetooth_audio_nodes`
+implementado, codec/default sink pendientes) ya están cubiertos por la suite
+(`tests/unit/test_device_change_diff.py`,
 `tests/unit/test_bluez_repository_signals.py`,
 `tests/integration/test_bluez_repository_signals.py`,
 `tests/integration/test_bluez_signal_lifecycle.py`,
 `tests/unit/test_pw_dump_parser.py`,
 `tests/integration/test_pw_dump_parser.py`,
 `tests/unit/test_pw_dump_runner.py`,
-`tests/integration/test_pw_dump_runner.py`).
+`tests/integration/test_pw_dump_runner.py`,
+`tests/unit/test_pipewire_repository.py`,
+`tests/integration/test_pipewire_repository.py`).
 
 ## Arquitectura
 
