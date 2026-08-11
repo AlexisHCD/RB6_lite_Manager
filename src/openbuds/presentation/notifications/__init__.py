@@ -1,6 +1,6 @@
 """Notificaciones de escritorio.
 
-Estado: Fase 1 — esqueleto. Implementación en Fase 6.
+Estado: Etapa 0 — esqueleto; notificaciones previstas después del MVP de la Etapa 3.
 """
 
 from __future__ import annotations

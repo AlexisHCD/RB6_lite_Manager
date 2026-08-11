@@ -1,7 +1,7 @@
 """Icono de bandeja del sistema (AppIndicator para GNOME).
 
 Muestra el estado de conexión y permite acceso rápido a las funciones
-principales. Estado: Fase 1 — esqueleto. Implementación en Fase 6.
+principales. Estado: Etapa 0 — esqueleto; se prevé después del MVP de la Etapa 3.
 
 Nota: GNOME no incluye soporte nativo de tray; requiere una extensión tipo
 AppIndicator (gnome-shell-extension-appindicator), comúnmente instalada en
@@ -14,8 +14,8 @@ from __future__ import annotations
 class TrayIndicator:
     """Icono residente en la bandeja del sistema.
 
-    Estado: Fase 1 — sin implementación.
+    Estado: Etapa 0 — sin implementación; se prevé después del MVP de la Etapa 3.
     """
 
     def __init__(self) -> None:
-        raise NotImplementedError("Fase 6 (Interfaz gráfica).")
+        raise NotImplementedError("Implementación prevista después del MVP de la Etapa 3.")

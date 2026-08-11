@@ -131,15 +131,15 @@ def _cmd_version(_context: CliContext) -> int:
 
 
 def _cmd_future(command: str) -> int:
-    """Informa de la fase responsable de un comando aún no implementado."""
-    phases = {
-        "codec": "Fase 3/4",
-        "health": "Fase 5",
-        "bench": "Fase 5",
+    """Informa del hito responsable de un comando aún no implementado."""
+    milestones = {
+        "codec": "Etapa 2 (sujeto a evidencia de la Etapa 1)",
+        "health": "Etapa 4",
+        "bench": "una etapa posterior",
     }
     print(
         f"El subcomando '{command}' aún no está implementado; "
-        f"se implementará en {phases[command]}.",
+        f"se implementará en {milestones[command]}.",
         file=sys.stderr,
     )
     return 2
@@ -153,9 +153,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="Diagnostica sistema, runtime y hardware Bluetooth.")
-    sub.add_parser("config", help="Muestra la configuración efectiva (Fase 2).")
+    sub.add_parser("config", help="Muestra la configuración efectiva.")
     sub.add_parser("version", help="Muestra la versión de OpenBuds Manager.")
-    devices = sub.add_parser("devices", help="Lista dispositivos Bluetooth (Fase 3).")
+    devices = sub.add_parser("devices", help="Lista dispositivos Bluetooth.")
     devices.add_argument(
         "-p",
         "--paired-only",
@@ -168,9 +168,9 @@ def build_parser() -> argparse.ArgumentParser:
         type=_adapter_path,
         help="Adaptador hciN o /org/bluez/hciN.",
     )
-    sub.add_parser("codec", help="Muestra el códec activo (Fase 3/4).")
-    sub.add_parser("health", help="Ejecuta un Health Check (Fase 5).")
-    sub.add_parser("bench", help="Ejecuta un benchmark de enlace (Fase 5).")
+    sub.add_parser("codec", help="Muestra el códec activo.")
+    sub.add_parser("health", help="Ejecuta un Health Check.")
+    sub.add_parser("bench", help="Ejecuta un benchmark de enlace.")
     return parser
 
 

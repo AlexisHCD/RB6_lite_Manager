@@ -1,7 +1,7 @@
 """Interfaz gráfica basada en PySide6 (Qt).
 
-Estado: Fase 1 — esqueleto de la ventana principal con el sidebar de las 10
-vistas requeridas. Sin lógica de negocio. Implementación completa en Fase 6.
+Estado: Etapa 0 — scaffolding/placeholder legado de la ventana principal. Sin
+lógica de negocio. La ventana útil corresponde a la Etapa 3.
 """
 
 from __future__ import annotations

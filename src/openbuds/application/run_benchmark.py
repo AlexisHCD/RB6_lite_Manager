@@ -1,6 +1,6 @@
 """Caso de uso: ejecutar un benchmark de calidad de enlace.
 
-Estado: Fase 1 — contrato definido, sin implementación (Fase 5).
+Estado: Etapa 0 — contrato definido, sin implementación; previsto para una etapa posterior.
 """
 
 from __future__ import annotations
@@ -17,4 +17,4 @@ class RunBenchmarkUseCase:
 
     def execute(self, device_address: str, duration_seconds: int = 10) -> BenchmarkResult:
         """Ejecuta un benchmark para el dispositivo dado."""
-        raise NotImplementedError("Implementación diferida a Fase 5 (Diagnóstico).")
+        raise NotImplementedError("Implementación pendiente para una etapa posterior (benchmark).")

@@ -12,7 +12,7 @@ Ejemplo de archivo override:
   ``bluetooth.lua.d/50-bluez-config.lua`` con bloque ``bluez_monitor.properties``.
 NO usar la sintaxis 0.5 (``wireplumber.conf.d/*.conf``): rompería en Noble.
 
-Estado: Fase 1 — esqueleto. Implementación en Fase 4.
+Estado: Etapa 0 — esqueleto. Implementación pendiente de la Etapa 5.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ USER_CONFIG_DIR = Path.home() / ".config" / "wireplumber"
 class WirePlumberConfigEditor:
     """Lectura y escritura segura de overrides de WirePlumber (sintaxis 0.4).
 
-    Estado: Fase 1 — sin implementación.
+    Estado: Etapa 0 — sin implementación.
     """
 
     def __init__(self, base_dir: Path = USER_CONFIG_DIR) -> None:
@@ -34,7 +34,7 @@ class WirePlumberConfigEditor:
 
     def read(self, relative_path: str) -> str:
         """Lee un override. Devuelve cadena vacía si no existe."""
-        raise NotImplementedError("Fase 4 (Optimización).")
+        raise NotImplementedError("Implementación pendiente de la Etapa 5 (configuración).")
 
     def write(self, relative_path: str, content: str) -> str:
         """Escribe un override de forma segura (backup previo).
@@ -43,8 +43,8 @@ class WirePlumberConfigEditor:
             Ruta absoluta del backup creado.
 
         """
-        raise NotImplementedError("Fase 4 (Optimización).")
+        raise NotImplementedError("Implementación pendiente de la Etapa 5 (configuración).")
 
     def restore(self, backup_path: str, target_path: str) -> None:
         """Restaura ``target_path`` desde ``backup_path``."""
-        raise NotImplementedError("Fase 4 (Optimización).")
+        raise NotImplementedError("Implementación pendiente de la Etapa 5 (configuración).")

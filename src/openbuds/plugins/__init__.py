@@ -1,8 +1,7 @@
-"""Sistema de plugins (Fase 8).
+"""Paquete reservado para el contrato de plugins de una etapa posterior.
 
-Permitirá soportar nuevos modelos de auriculares sin recompilar ni modificar
-el núcleo. Cada plugin registra perfiles y, opcionalmente, extensiones de
-funcionalidad. Estado: Fase 1 — contrato vacío.
+Está fuera del roadmap inmediato y no implementa un mecanismo de carga ni
+garantiza capacidades.
 """
 
 from __future__ import annotations

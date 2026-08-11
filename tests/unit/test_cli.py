@@ -153,13 +153,17 @@ def test_unexpected_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.parametrize(
-    ("command", "phase"),
-    [("codec", "Fase 3/4"), ("health", "Fase 5"), ("bench", "Fase 5")],
+    ("command", "milestone"),
+    [
+        ("codec", "Etapa 2 (sujeto a evidencia de la Etapa 1)"),
+        ("health", "Etapa 4"),
+        ("bench", "una etapa posterior"),
+    ],
 )
-def test_future_command_returns_two_with_real_phase(
-    capsys: pytest.CaptureFixture[str], command: str, phase: str
+def test_future_command_returns_two_with_real_milestone(
+    capsys: pytest.CaptureFixture[str], command: str, milestone: str
 ) -> None:
     assert cli.main([command]) == 2
     error = capsys.readouterr().err
-    assert phase in error
+    assert milestone in error
     assert "no está implementado" in error

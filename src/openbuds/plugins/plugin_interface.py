@@ -1,11 +1,6 @@
-"""Contrato base para plugins de OpenBuds (Fase 8).
+"""Contrato reservado para plugins de OpenBuds en una etapa posterior.
 
-Un plugin puede:
-  - Registrar nuevos perfiles de dispositivo.
-  - Aportar comandos de diagnóstico adicionales.
-  - Aportar vistas de laboratorio experimental.
-
-Estado: Fase 1 — contrato definido, sin mecanismo de carga/registro.
+No existe un mecanismo de carga o registro, ni se garantizan capacidades.
 """
 
 from __future__ import annotations
@@ -15,11 +10,7 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class OpenBudsPlugin(Protocol):
-    """Contrato que todo plugin debe satisfacer.
-
-    El sistema de carga (Fase 8) descubrirá entry points o módulos y los
-    instanciará; este Protocol define la forma esperada.
-    """
+    """Forma reservada del contrato de plugin, sin mecanismo de carga asociado."""
 
     @property
     def plugin_id(self) -> str:
@@ -32,9 +23,9 @@ class OpenBudsPlugin(Protocol):
         ...
 
     def activate(self) -> None:
-        """Inicializa el plugin (registra perfiles, hooks, etc.)."""
+        """Activa el plugin según su implementación."""
         ...
 
     def deactivate(self) -> None:
-        """Limpia recursos al descargar el plugin."""
+        """Desactiva el plugin según su implementación."""
         ...

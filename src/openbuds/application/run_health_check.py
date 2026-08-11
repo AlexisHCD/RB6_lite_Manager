@@ -1,6 +1,6 @@
 """Caso de uso: ejecutar un Health Check completo del sistema.
 
-Estado: Fase 1 — contrato definido, sin implementación (Fase 5).
+Estado: Etapa 0 — contrato definido, sin implementación; pendiente de la Etapa 4.
 """
 
 from __future__ import annotations
@@ -21,4 +21,4 @@ class RunHealthCheckUseCase:
 
     def execute(self) -> HealthReport:
         """Ejecuta el Health Check y devuelve el informe."""
-        raise NotImplementedError("Implementación diferida a Fase 5 (Diagnóstico).")
+        raise NotImplementedError("Implementación pendiente de la Etapa 4 (Health Check).")

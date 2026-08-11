@@ -1,6 +1,7 @@
 """Cargador y validador de perfiles de dispositivo (YAML -> DeviceProfile).
 
-Estado: Fase 1 — esqueleto. Implementación en Fase 7.
+Estado: Etapa 0 — esqueleto bloqueado hasta aprobar la propuesta tipada y
+obtener evidencia pasiva de la Etapa 1.
 """
 
 from __future__ import annotations
@@ -16,9 +17,13 @@ PROFILES_DIR = Path(__file__).resolve().parent
 def load_profile_from_yaml(path: Path) -> DeviceProfile:
     """Carga y valida un perfil desde un archivo YAML.
 
-    Estado: Fase 1 — sin implementación.
+    Estado: Etapa 0 — sin implementación; bloqueado hasta aprobar la propuesta
+    tipada y obtener evidencia pasiva de la Etapa 1.
     """
-    raise NotImplementedError("Fase 7 (Device Profiles).")
+    raise NotImplementedError(
+        "Device Profiles bloqueado hasta aprobar la propuesta tipada y obtener "
+        "evidencia pasiva de la Etapa 1."
+    )
 
 
 def list_available_profiles() -> list[str]:

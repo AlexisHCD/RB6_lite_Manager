@@ -4,7 +4,7 @@ Centraliza la creación y restauración de backups. Si la creación del backup
 falla, el cambio NO se aplica (lanza ``BackupError``): es invariante de
 seguridad del proyecto.
 
-Estado: Fase 1 — esqueleto. Implementación en Fase 4.
+Estado: Etapa 0 — esqueleto. Implementación pendiente de la Etapa 5.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ def timestamp() -> str:
 class BackupManager:
     """Crea y restaura backups de archivos de configuración.
 
-    Estado: Fase 1 — sin implementación.
+    Estado: Etapa 0 — sin implementación.
 
     Invariante: ``create_backup`` devuelve una ruta válida o lanza
     ``BackupError``. Nunca devuelve None silenciosamente.
@@ -40,12 +40,12 @@ class BackupManager:
         devuelve una ruta "marker" que indica que el original estaba ausente
         (para que restore sepa eliminar el override en lugar de restaurar).
         """
-        raise NotImplementedError("Fase 4 (Optimización).")
+        raise NotImplementedError("Implementación pendiente de la Etapa 5 (backup y rollback).")
 
     def list_backups(self) -> list[Path]:
         """Lista los backups disponibles, del más reciente al más antiguo."""
-        raise NotImplementedError("Fase 4 (Optimización).")
+        raise NotImplementedError("Implementación pendiente de la Etapa 5 (backup y rollback).")
 
     def restore(self, backup_path: Path) -> None:
         """Restaura el original desde ``backup_path``."""
-        raise NotImplementedError("Fase 4 (Optimización).")
+        raise NotImplementedError("Implementación pendiente de la Etapa 5 (backup y rollback).")

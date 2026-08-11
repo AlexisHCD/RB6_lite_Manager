@@ -2,7 +2,7 @@
 
 Ajustes de la aplicación.
 
-Estado: Fase 1 — placeholder sin lógica. Implementación en Fase 6.
+Estado: Etapa 0 — placeholder legado sin lógica. Configuración persistente pendiente de la Etapa 5.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from __future__ import annotations
 class SettingsView:
     """Placeholder de la vista 'Configuración'.
 
-    Estado: Fase 1 — sin implementación.
+    Estado: Etapa 0 — sin implementación.
     """
 
     def __init__(self) -> None:
-        raise NotImplementedError("Fase 6 (Interfaz gráfica).")
+        raise NotImplementedError("Configuración persistente pendiente de la Etapa 5.")

@@ -35,10 +35,14 @@ class PipeWireRepository(IAudioRepository):
         self._runner = runner if runner is not None else PwDumpRunner()
 
     def get_active_codec(self, device_address: str) -> CodecInfo | None:
-        raise NotImplementedError("Implementación pendiente en la siguiente Fase 4 (Audio).")
+        raise NotImplementedError(
+            "Implementación pendiente de la Etapa 2, sujeta a evidencia de la Etapa 1."
+        )
 
     def list_bluetooth_audio_nodes(self) -> list[dict[str, str]]:
         return parse_bluetooth_audio_nodes(self._runner.dump())
 
     def get_default_audio_sink(self) -> str | None:
-        raise NotImplementedError("Implementación pendiente en la siguiente Fase 4 (Audio).")
+        raise NotImplementedError(
+            "Implementación pendiente de la Etapa 2, sujeta a evidencia de la Etapa 1."
+        )

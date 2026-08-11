@@ -3,7 +3,8 @@
 Combina datos de BlueZ (dispositivo, batería, RSSI) y de PipeWire/WirePlumber
 (códec activo) en una vista unificada para la UI.
 
-Estado: Fase 1 — contrato definido, sin implementación (Fase 3/4).
+Estado: Etapa 0 — contrato definido, sin implementación; pendiente de Etapa 2 y
+de la evidencia de la Etapa 1 cuando corresponda.
 """
 
 from __future__ import annotations
@@ -42,4 +43,6 @@ class GetDeviceInfoUseCase:
 
     def execute(self, device_path: str) -> DeviceAggregate | None:
         """Devuelve la información agregada del dispositivo, o ``None``."""
-        raise NotImplementedError("Implementación diferida a Fase 3/4.")
+        raise NotImplementedError(
+            "Implementación pendiente de la Etapa 2 y de la evidencia de la Etapa 1."
+        )

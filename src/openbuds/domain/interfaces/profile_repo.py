@@ -1,8 +1,9 @@
-"""Contrato del repositorio de perfiles de dispositivo.
+"""Contrato provisional del repositorio de perfiles de dispositivo.
 
-Cada auricular soportado se describe como un perfil independiente (YAML).
-El primer perfil es Redmi Buds 6 Lite. Añadir un dispositivo nuevo = añadir
-un perfil, sin tocar el núcleo del programa (ver ADR-0005).
+YAML es la dirección arquitectónica de ADR-0005, pero el contrato y el YAML
+actuales son incompatibles. El contrato actual será revisado antes de habilitar
+el loader, sujeto a una propuesta tipada aprobada y evidencia pasiva de la
+Etapa 1.
 """
 
 from __future__ import annotations
@@ -11,11 +12,9 @@ from openbuds.domain.models.device import DeviceInfo
 
 
 class DeviceProfile:
-    """Descripción estática de un modelo de auricular soportado.
+    """Descripción estática provisional de un modelo soportado.
 
-    Es una clase base del dominio (no una interfaz) que define el contrato que
-    todo perfil YAML debe satisfacer al ser cargado. La implementación concreta
-    de carga/validación vive en ``openbuds.device_profiles``.
+    El contrato se revisará antes de habilitar la carga desde YAML.
 
     Atributos:
         profile_id: Identificador estable (p. ej. "redmi_buds_6_lite").

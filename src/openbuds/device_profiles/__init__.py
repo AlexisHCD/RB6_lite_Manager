@@ -1,8 +1,8 @@
 """Perfiles de dispositivo.
 
-Cada auricular soportado se describe como un perfil independiente (YAML).
-El primer perfil es Redmi Buds 6 Lite. Añadir un dispositivo nuevo = añadir
-un perfil YAML, sin tocar el núcleo del programa (ver ADR-0005).
+YAML es la dirección arquitectónica de ADR-0005, pero el contrato y el YAML
+actuales son incompatibles. El loader queda bloqueado hasta aprobar una
+propuesta tipada y obtener evidencia pasiva de la Etapa 1.
 """
 
 from __future__ import annotations

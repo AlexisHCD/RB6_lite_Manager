@@ -9,7 +9,7 @@ enumeraciones.
 Referencias verificadas (ver docs/bluez/dbus-interfaces.md y docs/RESEARCH_LIMITS.md):
   - SBC = 0x00 y AAC = 0x02 son los únicos codec bytes A2DP canonizados en el
     estándar (A2DP v1.3). aptX/LDAC son endpoints de proveedor y NO están
-    canonizados: se validan empíricamente en Fase 3/4.
+     canonizados: se validan empíricamente en la Etapa 1.
 """
 
 from __future__ import annotations

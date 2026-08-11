@@ -13,7 +13,7 @@ Todo cambio de configuración de WirePlumber sigue este flujo obligatorio:
 Si CUALQUIER paso falla, el cambio se revierte y se lanza una excepción del
 dominio. Nada queda en estado intermedio.
 
-Estado: Fase 1 — flujo y contrato definidos; sin implementación (Fase 4).
+Estado: Etapa 0 — flujo y contrato definidos; sin implementación, pendiente de la Etapa 5.
 """
 
 from __future__ import annotations
@@ -58,4 +58,6 @@ class ApplyOptimizationUseCase:
         Lanza ``BackupError``/``RollbackError``/``UnsafeEnvironmentError`` si
         procede. En caso de éxito devuelve sin excepción.
         """
-        raise NotImplementedError("Implementación diferida a Fase 4 (Optimización).")
+        raise NotImplementedError(
+            "Implementación pendiente de la Etapa 5 (persistencia y rollback)."
+        )

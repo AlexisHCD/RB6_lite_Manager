@@ -2,7 +2,7 @@
 
 Implementaciones de referencia:
   - ``openbuds.infrastructure.system.environment_detector`` (parte de Health Check).
-  - Módulo de benchmark (Fase 5).
+  - Módulo de benchmark en una etapa posterior.
 """
 
 from __future__ import annotations
