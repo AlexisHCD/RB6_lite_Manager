@@ -349,4 +349,4 @@ Si el backup falla, **no se aplica el cambio**. Ver
 
 ## Licencia
 
-GPL-3.0-or-later.
+Licenciado bajo [GPL-3.0-or-later](LICENSE).

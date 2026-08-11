@@ -21,7 +21,7 @@ ausentes ni se ejecutan acciones de hardware sin aprobación explícita.
 - [x] Corregir rutas y afirmaciones obsoletas restantes: documentación
   normativa/técnica y metadatos fuente alineados con las etapas; `MASTER_DOC`
   etiquetado como histórico.
-- [ ] Añadir `LICENSE` GPL-3.0-or-later.
+- [x] Añadir `LICENSE` GPL-3.0-or-later.
 - [ ] Diseñar CI básica para unit tests, Ruff y mypy.
 - [ ] Mantener WirePlumber en modo de solo lectura.
 
