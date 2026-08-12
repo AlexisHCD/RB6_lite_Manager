@@ -396,3 +396,231 @@ def test_watch_error_propagates(
 
     assert cli.main(["watch"]) == 1
     assert capsys.readouterr().err == "Error: watch failed\n"
+
+
+class _SessionScan:
+    def __init__(self, devices: list[DeviceInfo]) -> None:
+        self.devices = devices
+        self.requests: list[object] = []
+
+    def execute(self, request: object) -> list[DeviceInfo]:
+        self.requests.append(request)
+        return self.devices
+
+
+class _SessionBluetoothAction:
+    def __init__(self) -> None:
+        self.requests: list[object] = []
+
+    def execute(self, request: object) -> None:
+        self.requests.append(request)
+
+
+class _SessionAudioAction:
+    def __init__(self) -> None:
+        self.requests: list[object] = []
+
+    def execute(self, request: object) -> str:
+        self.requests.append(request)
+        return "profile"
+
+
+def _session_device(name: str = "Buds", connected: bool = True) -> DeviceInfo:
+    return replace(
+        _status_device(),
+        object_path="/org/bluez/hci0/dev_00_11_22_33_44_55",
+        name=name,
+        alias=name,
+        connected=connected,
+        connection_state=(ConnectionState.CONNECTED if connected else ConnectionState.DISCONNECTED),
+    )
+
+
+def _run_session_command(
+    monkeypatch: pytest.MonkeyPatch,
+    scan: _SessionScan,
+    connect: _SessionBluetoothAction,
+    disconnect: _SessionBluetoothAction,
+    audio: _SessionAudioAction,
+    argv: list[str],
+) -> int:
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    monkeypatch.setattr(cli._LOGGER, "error", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        cli,
+        "_build_session_use_cases",
+        lambda: (connect, disconnect, audio, scan),
+    )
+    return cli.main(argv)
+
+
+def test_connect_resolves_name_case_insensitively_and_confirms(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scan = _SessionScan([_session_device()])
+    connect = _SessionBluetoothAction()
+
+    monkeypatch.setattr("builtins.input", lambda _prompt: "s")
+    result = _run_session_command(
+        monkeypatch,
+        scan,
+        connect,
+        _SessionBluetoothAction(),
+        _SessionAudioAction(),
+        ["connect", "bUdS"],
+    )
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert "Conectado: Buds" in output
+    assert "openbuds music para A2DP" in output
+    assert connect.requests
+    assert "00:11:22:33:44:55" not in output
+    assert "/org/bluez/" not in output
+
+
+def test_connect_yes_skips_input_and_disconnect_reports_success(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    device = _session_device()
+    scan = _SessionScan([device])
+    connect = _SessionBluetoothAction()
+    disconnect = _SessionBluetoothAction()
+
+    monkeypatch.setattr("builtins.input", lambda _prompt: pytest.fail("input must not be called"))
+    assert (
+        _run_session_command(
+            monkeypatch,
+            scan,
+            connect,
+            disconnect,
+            _SessionAudioAction(),
+            ["connect", "Buds", "--yes"],
+        )
+        == 0
+    )
+    assert (
+        _run_session_command(
+            monkeypatch,
+            scan,
+            connect,
+            disconnect,
+            _SessionAudioAction(),
+            ["disconnect", "Buds", "-y"],
+        )
+        == 0
+    )
+    assert "Desconectado: Buds" in capsys.readouterr().out
+    assert disconnect.requests
+
+
+def test_music_applies_a2dp_and_mic_prints_warning(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scan = _SessionScan([_session_device()])
+    audio = _SessionAudioAction()
+
+    monkeypatch.setattr("builtins.input", lambda _prompt: "s")
+    assert (
+        _run_session_command(
+            monkeypatch,
+            scan,
+            _SessionBluetoothAction(),
+            _SessionBluetoothAction(),
+            audio,
+            ["music", "buds"],
+        )
+        == 0
+    )
+    assert "Perfil A2DP aplicado a Buds" in capsys.readouterr().out
+    assert audio.requests[-1].profile is BluetoothProfile.A2DP  # type: ignore[union-attr]
+
+    assert (
+        _run_session_command(
+            monkeypatch,
+            scan,
+            _SessionBluetoothAction(),
+            _SessionBluetoothAction(),
+            audio,
+            ["mic", "--yes"],
+        )
+        == 0
+    )
+    output = capsys.readouterr().out
+    assert "Advertencia: activar el micrófono Bluetooth (HFP)" in output
+    assert "Perfil HFP aplicado a Buds" in output
+    assert audio.requests[-1].profile is BluetoothProfile.HFP  # type: ignore[union-attr]
+
+
+def test_declining_confirmation_cancels_without_execution(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    connect = _SessionBluetoothAction()
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+
+    result = _run_session_command(
+        monkeypatch,
+        _SessionScan([_session_device()]),
+        connect,
+        _SessionBluetoothAction(),
+        _SessionAudioAction(),
+        ["connect", "Buds"],
+    )
+
+    assert result == 0
+    assert connect.requests == []
+    assert capsys.readouterr().out == "Cancelado.\n"
+
+
+def test_noninteractive_confirmation_is_an_error(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("builtins.input", lambda _prompt: (_ for _ in ()).throw(EOFError))
+
+    result = _run_session_command(
+        monkeypatch,
+        _SessionScan([_session_device()]),
+        _SessionBluetoothAction(),
+        _SessionBluetoothAction(),
+        _SessionAudioAction(),
+        ["connect", "Buds"],
+    )
+
+    assert result == 1
+    assert "usa --yes en modo no interactivo" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("devices", "argv", "message"),
+    [
+        ([], ["connect", "Missing", "--yes"], "dispositivo no encontrado"),
+        (
+            [_session_device("Buds"), _session_device("Buds")],
+            ["connect", "Buds", "--yes"],
+            "nombre ambiguo",
+        ),
+        ([_session_device(connected=False)], ["music", "--yes"], "ningún dispositivo conectado"),
+    ],
+)
+def test_session_resolution_errors_return_one(
+    devices: list[DeviceInfo],
+    argv: list[str],
+    message: str,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = _run_session_command(
+        monkeypatch,
+        _SessionScan(devices),
+        _SessionBluetoothAction(),
+        _SessionBluetoothAction(),
+        _SessionAudioAction(),
+        argv,
+    )
+
+    assert result == 1
+    error = capsys.readouterr().err
+    assert message in error
+    assert "00:11:22:33:44:55" not in error
+    assert "/org/bluez/" not in error

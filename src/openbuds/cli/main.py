@@ -12,18 +12,32 @@ from typing import Final
 from openbuds import __version__
 from openbuds.application.get_device_info import DeviceAggregate, GetDeviceInfoUseCase
 from openbuds.application.scan_devices import ScanDevicesRequest, ScanDevicesUseCase
+from openbuds.application.session_control import (
+    ConnectDeviceRequest,
+    ConnectDeviceUseCase,
+    DisconnectDeviceRequest,
+    DisconnectDeviceUseCase,
+    SetAudioProfileRequest,
+    SetAudioProfileUseCase,
+)
 from openbuds.application.watch_devices import WatchDevicesUseCase
 from openbuds.core.config import CONFIG_FILE, AppConfig, load_config
 from openbuds.core.errors import OpenBudsError
 from openbuds.core.logging_setup import get_logger, setup_logging_from_config
-from openbuds.domain.enums import ConnectionState, DeviceChangeKind
+from openbuds.domain.enums import BluetoothProfile, ConnectionState, DeviceChangeKind
 from openbuds.domain.models import DeviceChangeEvent, DeviceInfo
 from openbuds.infrastructure.system import environment_detector
 
 _LOGGER = get_logger(__name__)
-_BOOTSTRAP_COMMANDS: Final = frozenset({"doctor", "config", "devices", "status", "watch"})
+_BOOTSTRAP_COMMANDS: Final = frozenset(
+    {"doctor", "config", "devices", "status", "watch", "connect", "disconnect", "music", "mic"}
+)
 _ADAPTER_NAME = re.compile(r"hci[0-9]+")
 _ADDRESS = re.compile(r"[0-9A-Fa-f]{2}(?:[:_. ]?[0-9A-Fa-f]{2}){5}")
+
+
+class _ConfirmationCancelledError(Exception):
+    """Internal control flow for a user-declined action."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +48,9 @@ class CliContext:
     scan_devices_use_case: ScanDevicesUseCase | None = None
     get_device_info_use_case: GetDeviceInfoUseCase | None = None
     watch_devices_use_case: WatchDevicesUseCase | None = None
+    connect_use_case: ConnectDeviceUseCase | None = None
+    disconnect_use_case: DisconnectDeviceUseCase | None = None
+    set_audio_profile_use_case: SetAudioProfileUseCase | None = None
 
 
 def _cmd_doctor(_context: CliContext) -> int:
@@ -108,6 +125,146 @@ def _cmd_status(context: CliContext, args: argparse.Namespace) -> int:
         if index:
             print()
         print(_format_status(aggregate))
+    return 0
+
+
+def _resolve_device(
+    scan_use_case: ScanDevicesUseCase,
+    nombre: str | None,
+    *,
+    require_connected: bool,
+) -> DeviceInfo | None:
+    """Resolve a paired device by exact case-insensitive display name."""
+    devices = scan_use_case.execute(ScanDevicesRequest(include_paired_only=True))
+    if nombre is None:
+        for device in devices:
+            if device.connected:
+                return device
+        raise OpenBudsError("ningún dispositivo conectado")
+
+    target = nombre.lower()
+    matches = [
+        device for device in devices if target in (device.alias.lower(), device.name.lower())
+    ]
+    safe_name = _sanitize_display_field(nombre)
+    if not matches:
+        raise OpenBudsError(f"dispositivo no encontrado: {safe_name}")
+    if len(matches) > 1:
+        raise OpenBudsError(f"nombre ambiguo: {safe_name}")
+    device = matches[0]
+    if require_connected and not device.connected:
+        raise OpenBudsError(f"dispositivo no está conectado: {safe_name}")
+    return device
+
+
+def _confirm(action: str, yes: bool) -> None:
+    """Require explicit confirmation unless ``--yes`` was provided."""
+    if yes:
+        return
+    try:
+        response = input(f"{action} [s/N]: ")
+    except EOFError as exc:
+        raise OpenBudsError("confirmación requerida; usa --yes en modo no interactivo") from exc
+    if response.strip().casefold() not in {"s", "y", "sí", "si"}:
+        print("Cancelado.")
+        raise _ConfirmationCancelledError
+
+
+def _device_display_name(device: DeviceInfo) -> str:
+    """Return a privacy-safe display name for a device."""
+    return _sanitize_display_field(device.alias or device.name or "Dispositivo sin nombre")
+
+
+def _cmd_connect(context: CliContext, args: argparse.Namespace) -> int:
+    """Connect a paired device after explicit confirmation."""
+    if context.scan_devices_use_case is None or context.connect_use_case is None:
+        raise RuntimeError("casos de uso de conexión no disponibles")
+    device = _resolve_device(
+        context.scan_devices_use_case,
+        args.dispositivo,
+        require_connected=False,
+    )
+    if device is None:
+        raise OpenBudsError("dispositivo no encontrado")
+    name = _device_display_name(device)
+    try:
+        _confirm(f"¿Conectar {name}?", args.yes)
+    except _ConfirmationCancelledError:
+        return 0
+    context.connect_use_case.execute(ConnectDeviceRequest(device.object_path))
+    print(f"Conectado: {name}")
+    print("Recomendación: openbuds music para A2DP")
+    return 0
+
+
+def _cmd_disconnect(context: CliContext, args: argparse.Namespace) -> int:
+    """Disconnect a connected device after explicit confirmation."""
+    if context.scan_devices_use_case is None or context.disconnect_use_case is None:
+        raise RuntimeError("casos de uso de desconexión no disponibles")
+    device = _resolve_device(
+        context.scan_devices_use_case,
+        args.dispositivo,
+        require_connected=True,
+    )
+    if device is None:
+        raise OpenBudsError("dispositivo no encontrado")
+    name = _device_display_name(device)
+    try:
+        _confirm(f"¿Desconectar {name}?", args.yes)
+    except _ConfirmationCancelledError:
+        return 0
+    context.disconnect_use_case.execute(DisconnectDeviceRequest(device.object_path))
+    print(f"Desconectado: {name}")
+    return 0
+
+
+def _cmd_music(context: CliContext, args: argparse.Namespace) -> int:
+    """Select the offered runtime A2DP profile after confirmation."""
+    if context.scan_devices_use_case is None or context.set_audio_profile_use_case is None:
+        raise RuntimeError("casos de uso de audio no disponibles")
+    device = _resolve_device(
+        context.scan_devices_use_case,
+        args.dispositivo,
+        require_connected=True,
+    )
+    if device is None:
+        raise OpenBudsError("dispositivo no encontrado")
+    name = _device_display_name(device)
+    try:
+        _confirm(f"¿Activar Música (A2DP) en {name}?", args.yes)
+    except _ConfirmationCancelledError:
+        return 0
+    context.set_audio_profile_use_case.execute(
+        SetAudioProfileRequest(device.address, BluetoothProfile.A2DP)
+    )
+    print(f"Perfil A2DP aplicado a {name}")
+    return 0
+
+
+def _cmd_mic(context: CliContext, args: argparse.Namespace) -> int:
+    """Select the offered runtime HFP profile after confirmation."""
+    if context.scan_devices_use_case is None or context.set_audio_profile_use_case is None:
+        raise RuntimeError("casos de uso de audio no disponibles")
+    device = _resolve_device(
+        context.scan_devices_use_case,
+        args.dispositivo,
+        require_connected=True,
+    )
+    if device is None:
+        raise OpenBudsError("dispositivo no encontrado")
+    name = _device_display_name(device)
+    print(
+        "Advertencia: activar el micrófono Bluetooth (HFP) puede reducir la calidad de "
+        "reproducción."
+    )
+    try:
+        _confirm(f"¿Activar Micrófono (HFP) en {name}?", args.yes)
+    except _ConfirmationCancelledError:
+        return 0
+    context.set_audio_profile_use_case.execute(
+        SetAudioProfileRequest(device.address, BluetoothProfile.HFP)
+    )
+    print(f"Perfil HFP aplicado a {name}")
     return 0
 
 
@@ -272,6 +429,27 @@ def _build_watch_devices_use_case() -> WatchDevicesUseCase:
     return WatchDevicesUseCase(BlueZRepository())
 
 
+def _build_session_use_cases() -> tuple[
+    ConnectDeviceUseCase,
+    DisconnectDeviceUseCase,
+    SetAudioProfileUseCase,
+    ScanDevicesUseCase,
+]:
+    """Compose the approved session use cases with lazy system adapters."""
+    from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
+    from openbuds.infrastructure.pipewire.pipewire_control_repository import (
+        PipeWireControlRepository,
+    )
+
+    bluetooth = BlueZRepository()
+    return (
+        ConnectDeviceUseCase(bluetooth),
+        DisconnectDeviceUseCase(bluetooth),
+        SetAudioProfileUseCase(PipeWireControlRepository()),
+        ScanDevicesUseCase(bluetooth),
+    )
+
+
 def _cmd_version(_context: CliContext) -> int:
     """Muestra la versión sin cargar configuración ni inicializar logging."""
     print(f"OpenBuds Manager {__version__}")
@@ -334,6 +512,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=_adapter_path,
         help="Adaptador hciN o /org/bluez/hciN.",
     )
+    connect = sub.add_parser("connect", help="Conecta un dispositivo emparejado.")
+    connect.add_argument("dispositivo", help="Alias o nombre exacto del dispositivo.")
+    connect.add_argument("-y", "--yes", action="store_true", help="Omite la confirmación.")
+    disconnect = sub.add_parser("disconnect", help="Desconecta un dispositivo conectado.")
+    disconnect.add_argument("dispositivo", help="Alias o nombre exacto del dispositivo.")
+    disconnect.add_argument("-y", "--yes", action="store_true", help="Omite la confirmación.")
+    music = sub.add_parser("music", help="Activa el perfil A2DP runtime.")
+    music.add_argument("dispositivo", nargs="?", help="Alias o nombre exacto del dispositivo.")
+    music.add_argument("-y", "--yes", action="store_true", help="Omite la confirmación.")
+    mic = sub.add_parser("mic", help="Activa el perfil HFP runtime.")
+    mic.add_argument("dispositivo", nargs="?", help="Alias o nombre exacto del dispositivo.")
+    mic.add_argument("-y", "--yes", action="store_true", help="Omite la confirmación.")
     sub.add_parser("codec", help="Muestra el códec activo.")
     sub.add_parser("health", help="Ejecuta un Health Check.")
     sub.add_parser("bench", help="Ejecuta un benchmark de enlace.")
@@ -373,6 +563,24 @@ def main(argv: list[str] | None = None) -> int:
                 config=config, watch_devices_use_case=_build_watch_devices_use_case()
             )
             return _cmd_watch(context, args)
+        if command in {"connect", "disconnect", "music", "mic"}:
+            connect_use_case, disconnect_use_case, set_profile_use_case, scan_use_case = (
+                _build_session_use_cases()
+            )
+            context = CliContext(
+                config=config,
+                scan_devices_use_case=scan_use_case,
+                connect_use_case=connect_use_case,
+                disconnect_use_case=disconnect_use_case,
+                set_audio_profile_use_case=set_profile_use_case,
+            )
+            handlers = {
+                "connect": _cmd_connect,
+                "disconnect": _cmd_disconnect,
+                "music": _cmd_music,
+                "mic": _cmd_mic,
+            }
+            return handlers[command](context, args)
         context = CliContext(config=config)
         handler = _cmd_doctor if command == "doctor" else _cmd_config
         return handler(context)
