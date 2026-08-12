@@ -13,9 +13,13 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 
 ## Estado del proyecto
 
-🔜 **Etapa 0 — Estabilización inmediata.** La base BlueZ y la inspección
-PipeWire de solo lectura están implementadas, pero el producto completo y la
-validación física de Redmi Buds 6 Lite siguen pendientes.
+🔜 **Etapa 1 — Caracterización física pasiva en curso.** Primera evidencia
+pasiva del Redmi Buds 6 Lite real (A2DP/SBC reproduciendo, 2026-08-11) en
+[`docs/research/redmi-buds-6-lite-passive-characterization.md`](docs/research/redmi-buds-6-lite-passive-characterization.md).
+
+El **backend base de BlueZ**, la base de **inspección PipeWire de solo lectura**,
+la **CI** y la **licencia GPL-3.0-or-later** de la Etapa 0 están **completados** según el
+roadmap ([`docs/ROADMAP.md`](docs/ROADMAP.md)).
 
 El repositorio contiene la arquitectura por capas, los cimientos del dominio,
 la configuración TOML, logging, detección del entorno y una CLI base funcional.

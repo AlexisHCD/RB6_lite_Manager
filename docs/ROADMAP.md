@@ -5,7 +5,7 @@ dependa del hardware queda como **implementación software completa; validación
 física pendiente** hasta obtener evidencia real. No se infieren propiedades
 ausentes ni se ejecutan acciones de hardware sin aprobación explícita.
 
-## Etapa 0 — Estabilización inmediata (en curso)
+## Etapa 0 — Estabilización inmediata (completada)
 
 **Objetivo:** recuperar una base reproducible antes de añadir funciones.
 
@@ -26,7 +26,9 @@ ausentes ni se ejecutan acciones de hardware sin aprobación explícita.
   en push/PR a `main` y manual (`workflow_dispatch`), **Python 3.12**, gates
   unitarios (unit tests + Ruff check/format + mypy) sin hardware ni
   PyGObject/Gio; ver `.github/workflows/ci.yml`.
-- [ ] Mantener WirePlumber en modo de solo lectura.
+- WirePlumber permanece estrictamente en modo de solo lectura: no se habilitan
+  mutaciones, y cualquier cambio futuro requiere la Etapa 5 (backup, rollback y
+  aprobación explícita).
 
 **Salida:** unit tests, Ruff y mypy pasan; `doctor` detecta un runtime inválido;
 las integraciones de lectura pasan con Python 3.12/Gio; README y roadmap no
@@ -50,11 +52,31 @@ En cada estado se observarán `Device1`, `Battery1` si aparece, RSSI,
 `ServicesResolved`, nodos de `pw-dump`, `wpctl status`, `wpctl inspect`, perfiles
 ofrecidos, propiedades de códec/transporte si existen, señales y polling.
 
+**Estado de caracterización (2026-08-11):** registro **parcial**. Solo el estado
+3 cuenta con evidencia pasiva; los estados 1, 2, 4, 5 y 6 siguen pendientes.
+
+- [x] Estado 3 (parcial): **A2DP/SBC reproduciendo** — evidencia pasiva
+  2026-08-11: perfil `a2dp-sink`, códec runtime `sbc`, un único `Audio/Sink`,
+  `Battery1` 100 %, perfiles ofrecidos por el sistema (incluida oferta HSP/HFP
+  **sin prueba funcional**), 3 muestras estables. Ver
+  [`docs/research/redmi-buds-6-lite-passive-characterization.md`](research/redmi-buds-6-lite-passive-characterization.md).
+- [ ] Estado 1: emparejados y desconectados (estable bajo protocolo).
+- [ ] Estado 2: conectados sin reproducir (idle formal).
+- [ ] Estado 4: micrófono mediante HFP (funcional).
+- [ ] Estado 5: desconexión y reconexión manuales.
+- [ ] Estado 6: suspensión y reanudación de Ubuntu.
+
+**La Etapa 1 no está completa:** el gate físico se mantiene para las sesiones
+restantes (protocolo pasivo y política de redacción aprobados antes de cada una).
+La evidencia del estado 3 habilita el trabajo de backend SBC/A2DP de la Etapa 2
+**sin repetir la conexión**; los estados restantes se validarán cuando su
+funcionalidad consumidora los requiera, con gate.
+
 **Gate físico:** antes de comenzar se presentará el protocolo exacto, comandos de
 solo lectura y política de redacción; se esperará confirmación de que el usuario
-conectó manualmente los audífonos desde GNOME. OpenBuds no llamará métodos
-mutadores, cambiará perfiles/volumen, reiniciará servicios ni guardará MAC,
-object paths o payloads completos.
+conectó manualmente los audífonos mediante una interfaz estándar aprobada.
+OpenBuds no llamará métodos mutadores, no cambiará perfiles/volumen, no
+reiniciará servicios ni guardará MAC, object paths o payloads completos.
 
 **Salida:** detección privada; conectado/desconectado estable; nodos y perfiles
 reales conocidos; propiedades ausentes se muestran como «No disponible»; breve
@@ -71,6 +93,8 @@ observado → casos de uso → CLI, sin configuración persistente.
 - [ ] Asociación segura entre `Device1` y nodos PipeWire.
 - [ ] Sink/source activos; códec solo con propiedades validadas en la Etapa 1.
 - [ ] CLI `openbuds status` y `openbuds watch`.
+- [ ] Batería agregada estándar (`Battery1`); L/R/estuche solo si existe una
+  fuente identificable; ausente = «No disponible».
 - [ ] Casos de uso Connect, Disconnect, Música (A2DP) y Micrófono (HFP).
 
 No se hardcodean índices ni nombres de perfiles. Connect/Disconnect usarán APIs
@@ -84,7 +108,8 @@ los ofrece; ningún cambio persistente.
 
 **Objetivo:** una ventana PySide6 útil antes de añadir vistas secundarias.
 
-- Nombre, estado, batería/RSSI opcionales, perfil, códec o «No disponible».
+- Nombre, estado, batería agregada estándar / RSSI opcionales, perfil, códec o
+  «No disponible»; L/R/estuche solo si una fuente los identifica.
 - Sink/source y selector Música/Micrófono con aviso de pérdida de calidad.
 - Botón Conectar/Desconectar, estado del sistema y acceso a Diagnóstico.
 - Paleta del sistema, accesibilidad y operaciones no bloqueantes.
