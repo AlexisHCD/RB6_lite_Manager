@@ -161,21 +161,31 @@ lazy; error claro sin PySide6 o sin display). Smoke real verificado con
 **Salida:** funciona con estados reales y sin audífonos; ausencias no rompen el
 layout; operaciones en curso deshabilitan controles; errores sin datos sensibles.
 
-## Etapa 4 — Health Check y diagnóstico
+## Etapa 4 — Health Check y diagnóstico (completada)
 
 **Incremento 1 completado:** `openbuds health` implementado y verificado real
 sin hardware (14 checks estables, `Estado global: OK`, exit 0, sin MAC ni
 object paths). Ver [`docs/cli/health-command.md`](cli/health-command.md).
+
+**Incremento 2 completado:** `openbuds logs` implementado y verificado real
+sin hardware: líneas de los 3 servicios con MAC/object paths redactados. Ver
+[`docs/cli/logs-command.md`](cli/logs-command.md).
 
 - [x] Runtime Python/Gio, BlueZ/D-Bus, PipeWire, WirePlumber y adaptador —
   checks `system.*`, `runtime.gio` y `hardware.adapter` (incremento 1).
 - [x] Dispositivo, perfil, códec, sink/source, micrófono y configuración
   efectiva — checks `device.*`, `audio.*` y `battery.aggregate` (incluye
   `audio.sink_default`; incremento 1).
-- Logs relevantes con redacción de identificadores — **pendiente parcial**
-  (incremento 1): el Health Check redacta MAC y object paths en todos sus
-  mensajes; el volcado de logs/journal con redacción se difiere a un
-  incremento posterior.
+- [x] Logs relevantes con redacción de identificadores — **incremento 2
+  completado:** `openbuds logs [--service bluez|wireplumber|pipewire]...
+  [--lines N]` (1-200, default 20; `--service` repetible; sin flag, usa los
+  tres); `journalctl -o short --no-pager`; unit real `bluetooth.service` (no
+  `bluez.service`); fallback `--user` para wireplumber/pipewire cuando el
+  unit de sistema no existe, no produce líneas o falla; redacción compartida
+  (`infrastructure/redaction.py`, usada también por health) en doble capa con
+  límites 300/80; exit 0 si al menos un servicio disponible, 1 si todos
+  fallan; verificado real 2026-08-11 (`openbuds logs --lines 5` con líneas de
+  los 3 servicios y MAC redactadas, sin identificadores reales).
 - [x] Cada dato se etiqueta como **observado**, **inferido**, **no
   disponible**, **recomendación** o **acción segura disponible** —
   `EvidenceKind` en cada `CheckResult.evidence` (incremento 1).
@@ -184,8 +194,17 @@ No se prometen jitter, packet loss, retransmisiones o latencia exacta si el
 sistema no los expone; toda estimación se etiqueta como tal (**cumplido** en
 el incremento 1: el Health Check no promete ni estima esas métricas).
 
+**Etapa 4 cerrada:** incrementos 1 y 2 completados — Health Check con
+evidencia etiquetada y logs redactados, ambos verificados reales sin hardware.
+
+**Diferido/post-MVP (no forma parte del cierre de Etapa 4):** **auto-fix
+seguro** (aplicar recomendaciones automáticamente; requiere la Etapa 5 con
+backup y rollback) y **benchmark de enlace** (`openbuds bench`). No se marcan
+como completados.
+
 **Salida:** informe CLI de solo lectura con los 14 checks en orden fijo y
-cada dato etiquetado por evidencia; exit 0/1 según el estado global.
+cada dato etiquetado por evidencia; exit 0/1 según el estado global; volcado
+de logs por servicio con identificadores redactados.
 
 ## Etapa 5 — Optimización persistente y rollback
 

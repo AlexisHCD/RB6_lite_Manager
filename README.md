@@ -13,12 +13,15 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 
 ## Estado del proyecto
 
-🔜 **Etapa 4 — Health Check en curso (Incremento 1 completado).** `openbuds
+✅ **Etapa 4 — Health Check completada (Incrementos 1 y 2).** `openbuds
 health` ejecuta el Health Check de **solo lectura**: 14 checks estables del
 stack completo (sistema, runtime, adaptador, dispositivo, audio y batería),
 cada dato etiquetado por evidencia (observado / inferido / no disponible /
 recomendación / acción segura disponible) y sin MAC ni object paths en la
-salida. Ver [`docs/cli/health-command.md`](docs/cli/health-command.md).
+salida; `openbuds logs` muestra los logs de bluez/wireplumber/pipewire con
+identificadores redactados (MAC y object paths → `<redacted>`), solo lectura.
+Ver [`docs/cli/health-command.md`](docs/cli/health-command.md) y
+[`docs/cli/logs-command.md`](docs/cli/logs-command.md).
 
 La **GUI MVP de la Etapa 3** sigue operativa: `openbuds gui` lanza la ventana
 única PySide6 (estado, controles de sesión y diagnóstico informativo);
@@ -279,6 +282,7 @@ con 1 si el sistema o el runtime son inválidos.
 .venv/bin/openbuds connect|disconnect|music|mic [dispositivo]  # sesión: confirmación previa; mic advierte de degradación; perfil runtime no persistente
 .venv/bin/openbuds gui          # lanza la ventana única PySide6 (MVP); requiere display
 .venv/bin/openbuds health        # Health Check etiquetado por evidencia; solo lectura
+.venv/bin/openbuds logs          # logs de bluez/wireplumber/pipewire con identificadores redactados; solo lectura
 .venv/bin/openbuds codec         # futuro: muestra el códec activo (Etapa 2, sujeto a evidencia de Etapa 1)
 .venv/bin/openbuds bench         # futuro: benchmark de enlace (posterior)
 ```
