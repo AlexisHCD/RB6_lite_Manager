@@ -6,8 +6,10 @@ import argparse
 import re
 import sys
 import threading
-from dataclasses import dataclass
-from typing import Final
+from dataclasses import dataclass, fields, replace
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Final, cast
 
 from openbuds import __version__
 from openbuds.application.get_device_info import DeviceAggregate, GetDeviceInfoUseCase
@@ -23,8 +25,17 @@ from openbuds.application.session_control import (
     SetAudioProfileUseCase,
 )
 from openbuds.application.watch_devices import WatchDevicesUseCase
-from openbuds.core.config import CONFIG_FILE, AppConfig, load_config
-from openbuds.core.errors import OpenBudsError
+from openbuds.core.config import (
+    BACKUP_DIR,
+    CONFIG_FILE,
+    AppConfig,
+    backup_config_file,
+    default_config,
+    load_config,
+    restore_config_file,
+    save_config,
+)
+from openbuds.core.errors import ConfigError, OpenBudsError
 from openbuds.core.logging_setup import get_logger, setup_logging_from_config
 from openbuds.domain.enums import BluetoothProfile, CheckSeverity, DeviceChangeKind, HealthStatus
 from openbuds.domain.models import CheckResult, DeviceChangeEvent, DeviceInfo
@@ -55,6 +66,16 @@ _BOOTSTRAP_COMMANDS: Final = frozenset(
     }
 )
 _LOG_SERVICES: Final = ("bluez", "wireplumber", "pipewire")
+_CONFIG_KEYS: Final = tuple(field.name for field in fields(AppConfig))
+_CONFIG_BOOL_VALUES: Final = {
+    "true": True,
+    "false": False,
+    "sí": True,
+    "si": True,
+    "no": False,
+    "1": True,
+    "0": False,
+}
 _ADAPTER_NAME = re.compile(r"hci[0-9]+")
 _ADDRESS = REDACT_ADDRESS
 
@@ -68,6 +89,7 @@ class CliContext:
     """Dependencias efectivas disponibles para un handler de la CLI."""
 
     config: AppConfig | None = None
+    config_file: Path | None = None
     scan_devices_use_case: ScanDevicesUseCase | None = None
     get_device_info_use_case: GetDeviceInfoUseCase | None = None
     watch_devices_use_case: WatchDevicesUseCase | None = None
@@ -96,19 +118,104 @@ def _cmd_doctor(_context: CliContext) -> int:
     return 0 if info.is_supported and runtime_ready else 1
 
 
-def _cmd_config(context: CliContext) -> int:
-    """Muestra la configuración efectiva sin persistirla."""
+def _cmd_config(context: CliContext, args: argparse.Namespace | None = None) -> int:
+    """Read or safely update the application's persistent configuration."""
     if context.config is None:
         raise RuntimeError("configuración no disponible para el comando config")
+
     config = context.config
+    action = "get" if args is None else (args.config_action or "get")
+    config_path = context.config_file or CONFIG_FILE
+
+    if action == "get":
+        _print_config(config, config_path)
+        return 0
+    if args is None:
+        raise ConfigError("faltan argumentos para el subcomando config")
+
+    if action == "set":
+        value = _parse_config_value(config, args.key, args.value)
+        updated = replace(config, **{args.key: cast(Any, value)})
+        result = save_config(updated, config_path, dry_run=args.dry_run)
+        if args.dry_run:
+            if not isinstance(result, str):
+                raise ConfigError("dry-run did not produce rendered TOML")
+            print(result, end="" if result.endswith("\n") else "\n")
+            print("(dry-run: no se escribió nada)")
+            return 0
+
+        if isinstance(result, str):
+            raise ConfigError("configuration save returned an unexpected dry-run result")
+        backup_detail = f" (backup: {result})" if result is not None else ""
+        print(f"Configuración guardada{backup_detail}")
+        return 0
+
+    if action == "backup":
+        backup = backup_config_file(config_path, BACKUP_DIR)
+        print(f"Backup creado: {backup}")
+        return 0
+
+    if action == "backups":
+        _print_config_backups()
+        return 0
+
+    if action == "restore":
+        restore_config_file(args.backup_file, config_path)
+        print(f"Configuración restaurada desde: {args.backup_file}")
+        return 0
+
+    raise ConfigError(f"subcomando config desconocido: {action}")
+
+
+def _print_config(config: AppConfig, config_path: Path) -> None:
+    """Print effective configuration values."""
     log_file = config.log_file or "stderr"
     print(f"Nivel de log: {config.log_level}")
     print(f"Archivo de log: {log_file}")
     print(f"Directorio de backups: {config.backup_dir}")
     print(f"Auto rollback: {'sí' if config.auto_rollback_on_error else 'no'}")
     print(f"Funciones experimentales: {'sí' if config.experimental_features else 'no'}")
-    print(f"CONFIG_FILE: {CONFIG_FILE}")
-    return 0
+    print(f"CONFIG_FILE: {config_path}")
+
+
+def _parse_config_value(config: AppConfig, key: str, raw_value: str) -> object:
+    """Parse a CLI value according to the current field type."""
+    if key not in _CONFIG_KEYS:
+        raise ConfigError(f"clave de configuración no válida: {key}")
+
+    current = getattr(config, key)
+    if not isinstance(current, bool):
+        return raw_value
+
+    normalized = raw_value.casefold()
+    if normalized not in _CONFIG_BOOL_VALUES:
+        accepted = ", ".join(sorted(_CONFIG_BOOL_VALUES))
+        raise ConfigError(f"valor booleano no válido para {key}; usa: {accepted}")
+    return _CONFIG_BOOL_VALUES[normalized]
+
+
+def _print_config_backups() -> None:
+    """Print application configuration backups with UTC time and size."""
+    if not BACKUP_DIR.is_dir():
+        print("Sin backups")
+        return
+
+    entries: list[tuple[float, Path, int, str]] = []
+    try:
+        for path in BACKUP_DIR.glob("*.bak"):
+            stat = path.stat()
+            timestamp = datetime.fromtimestamp(stat.st_mtime, UTC).isoformat()
+            entries.append((stat.st_mtime, path, stat.st_size, timestamp))
+    except OSError as exc:
+        raise ConfigError(f"No se pudieron listar los backups: {exc}") from exc
+
+    if not entries:
+        print("Sin backups")
+        return
+
+    entries.sort(key=lambda entry: entry[0], reverse=True)
+    for _, path, size, timestamp in entries:
+        print(f"{timestamp}\t{size} bytes\t{path}")
 
 
 def _cmd_gui(_context: CliContext) -> int:
@@ -551,7 +658,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="Diagnostica sistema, runtime y hardware Bluetooth.")
-    sub.add_parser("config", help="Muestra la configuración efectiva.")
+    config = sub.add_parser("config", help="Lee y guarda la configuración de la aplicación.")
+    config_sub = config.add_subparsers(dest="config_action")
+    config_sub.add_parser("get", help="Muestra la configuración efectiva.")
+    config_set = config_sub.add_parser("set", help="Actualiza una clave de configuración.")
+    config_set.add_argument("key", choices=_CONFIG_KEYS, help="Clave de configuración.")
+    config_set.add_argument("value", help="Nuevo valor, según el tipo de la clave.")
+    config_set.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Muestra el TOML resultante sin escribir archivos.",
+    )
+    config_sub.add_parser("backup", help="Crea un backup de la configuración actual.")
+    config_sub.add_parser("backups", help="Lista los backups de configuración.")
+    config_restore = config_sub.add_parser("restore", help="Restaura un backup de configuración.")
+    config_restore.add_argument("backup_file", type=Path, help="Ruta al archivo .bak.")
     sub.add_parser("gui", help="Abre la interfaz gráfica; requiere un display.")
     sub.add_parser("version", help="Muestra la versión de OpenBuds Manager.")
     devices = sub.add_parser("devices", help="Lista dispositivos Bluetooth.")
@@ -629,9 +750,19 @@ def main(argv: list[str] | None = None) -> int:
 
     logging_configured = False
     try:
-        config = load_config()
-        setup_logging_from_config(config)
-        logging_configured = True
+        config_action = getattr(args, "config_action", None)
+        if command == "config" and config_action in {"backup", "backups", "restore"}:
+            config = default_config()
+        elif command == "config" and config_action is not None:
+            config = load_config(CONFIG_FILE)
+        else:
+            config = load_config()
+        dry_run = (
+            command == "config" and config_action == "set" and bool(getattr(args, "dry_run", False))
+        )
+        if not dry_run:
+            setup_logging_from_config(config)
+            logging_configured = True
         if command == "devices":
             context = CliContext(
                 config=config,
@@ -682,9 +813,15 @@ def main(argv: list[str] | None = None) -> int:
             return handlers[command](context, args)
         if command == "gui":
             return _cmd_gui(CliContext(config=config))
-        context = CliContext(config=config)
-        handler = _cmd_doctor if command == "doctor" else _cmd_config
-        return handler(context)
+        context = CliContext(
+            config=config,
+            config_file=CONFIG_FILE if command == "config" else None,
+        )
+        if command == "doctor":
+            return _cmd_doctor(context)
+        if getattr(args, "config_action", None) is None:
+            return _cmd_config(context)
+        return _cmd_config(context, args)
     except OpenBudsError as exc:
         if logging_configured:
             _LOGGER.error("CLI error: %s", exc)

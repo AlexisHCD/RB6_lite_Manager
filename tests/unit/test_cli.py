@@ -13,9 +13,10 @@ from unittest.mock import Mock
 import pytest
 
 import openbuds.cli.main as cli
+import openbuds.core.config as config_module
 from openbuds import __version__
 from openbuds.application.get_device_info import DeviceAggregate
-from openbuds.core.config import CONFIG_FILE, default_config
+from openbuds.core.config import CONFIG_FILE, backup_config_file, default_config, load_config
 from openbuds.core.errors import ConfigError, OpenBudsError
 from openbuds.domain.enums import (
     AddressType,
@@ -147,6 +148,121 @@ def test_config_error_from_load_is_reported(
 
     assert cli.main(["config"]) == 1
     assert capsys.readouterr().err == "Error: config inválida\n"
+
+
+def test_config_set_updates_string_and_creates_backup(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config_path = tmp_path / "config.toml"
+    backup_dir = tmp_path / "backups"
+    config_path.write_text('[openbuds]\nlog_level = "INFO"\n', encoding="utf-8")
+    monkeypatch.setattr(cli, "CONFIG_FILE", config_path)
+    monkeypatch.setattr(cli, "BACKUP_DIR", backup_dir)
+    monkeypatch.setattr(config_module, "BACKUP_DIR", backup_dir)
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+
+    assert cli.main(["config", "set", "log_level", "DEBUG"]) == 0
+
+    assert load_config(config_path).log_level == "DEBUG"
+    backups = list(backup_dir.glob("*.bak"))
+    assert len(backups) == 1
+    assert "Configuración guardada (backup:" in capsys.readouterr().out
+
+
+def test_config_set_rejects_invalid_boolean(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(cli, "CONFIG_FILE", tmp_path / "config.toml")
+    monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+
+    assert cli.main(["config", "set", "experimental_features", "maybe"]) == 1
+
+    assert "valor booleano no válido" in capsys.readouterr().err
+    assert not (tmp_path / "config.toml").exists()
+
+
+def test_config_set_dry_run_does_not_write(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config_path = tmp_path / "config.toml"
+    monkeypatch.setattr(cli, "CONFIG_FILE", config_path)
+    monkeypatch.setattr(cli, "BACKUP_DIR", tmp_path / "backups")
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+
+    assert cli.main(["config", "set", "experimental_features", "true", "--dry-run"]) == 0
+
+    output = capsys.readouterr().out
+    assert "experimental_features = true" in output
+    assert "(dry-run: no se escribió nada)" in output
+    assert not config_path.exists()
+    assert not (tmp_path / "backups").exists()
+
+
+def test_config_backup_creates_a_manual_backup(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config_path = tmp_path / "config.toml"
+    backup_dir = tmp_path / "backups"
+    config_path.write_text('[openbuds]\nlog_level = "INFO"\n', encoding="utf-8")
+    monkeypatch.setattr(cli, "CONFIG_FILE", config_path)
+    monkeypatch.setattr(cli, "BACKUP_DIR", backup_dir)
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+
+    assert cli.main(["config", "backup"]) == 0
+
+    assert len(list(backup_dir.glob("*.bak"))) == 1
+    assert "Backup creado:" in capsys.readouterr().out
+
+
+def test_config_restore_restores_selected_backup(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config_path = tmp_path / "config.toml"
+    backup_dir = tmp_path / "backups"
+    config_path.write_text('[openbuds]\nlog_level = "INFO"\n', encoding="utf-8")
+    backup = backup_config_file(config_path, backup_dir)
+    config_path.write_text("malformed = = toml", encoding="utf-8")
+    monkeypatch.setattr(cli, "CONFIG_FILE", config_path)
+    monkeypatch.setattr(cli, "BACKUP_DIR", backup_dir)
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+
+    assert cli.main(["config", "restore", str(backup)]) == 0
+
+    assert load_config(config_path).log_level == "INFO"
+    assert "Configuración restaurada desde:" in capsys.readouterr().out
+
+
+def test_config_backups_lists_files_or_reports_empty(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config_path = tmp_path / "config.toml"
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    backup = backup_dir / "config.20260812-120000.bak"
+    backup.write_text("backup", encoding="utf-8")
+    monkeypatch.setattr(cli, "CONFIG_FILE", config_path)
+    monkeypatch.setattr(cli, "BACKUP_DIR", backup_dir)
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+
+    assert cli.main(["config", "backups"]) == 0
+
+    output = capsys.readouterr().out
+    assert str(backup) in output
+    assert "bytes" in output
+
+
+def test_config_get_subcommand_prints_effective_values(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('[openbuds]\nlog_level = "DEBUG"\n', encoding="utf-8")
+    monkeypatch.setattr(cli, "CONFIG_FILE", config_path)
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+
+    assert cli.main(["config", "get"]) == 0
+
+    assert "Nivel de log: DEBUG" in capsys.readouterr().out
 
 
 def test_gui_parser_and_handler_use_lazy_import(

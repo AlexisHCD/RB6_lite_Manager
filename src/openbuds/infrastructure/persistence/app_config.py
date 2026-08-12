@@ -8,6 +8,7 @@ clase es el adaptador que la presenta como un store con una ruta fija.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from openbuds.core.config import AppConfig, load_config, save_config
 
@@ -27,6 +28,6 @@ class AppConfigStore:
         """Carga la configuración; devuelve defaults si el archivo no existe."""
         return load_config(self._path)
 
-    def save(self, config: AppConfig) -> None:
-        """Guarda la configuración en disco (creando el directorio si hace falta)."""
-        save_config(config, self._path)
+    def save(self, config: AppConfig) -> Path | None:
+        """Save the configuration and return the created backup, if any."""
+        return cast(Path | None, save_config(config, self._path))

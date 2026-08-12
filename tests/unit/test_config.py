@@ -6,13 +6,16 @@ from pathlib import Path
 
 import pytest
 
+import openbuds.core.config as config_module
 from openbuds.core.config import (
     BACKUP_DIR,
     CONFIG_DIR,
     CONFIG_FILE,
+    backup_config_file,
     default_config,
     load_config,
     resolve_xdg_home,
+    restore_config_file,
     save_config,
 )
 from openbuds.core.errors import ConfigError
@@ -198,7 +201,7 @@ class TestSaveConfig:
         monkeypatch.setattr(Path, "mkdir", fail_mkdir)
 
         with pytest.raises(ConfigError, match=str(path)) as raised:
-            save_config(default_config(), path)
+            save_config(default_config(), path, backup_dir=tmp_path / "backups")
         assert isinstance(raised.value.__cause__, OSError)
 
     def test_replace_failure_preserves_previous_file_and_cleans_temp(
@@ -213,7 +216,7 @@ class TestSaveConfig:
         monkeypatch.setattr("openbuds.core.config.os.replace", fail_replace)
 
         with pytest.raises(ConfigError, match=str(path)):
-            save_config(default_config(), path)
+            save_config(default_config(), path, backup_dir=tmp_path / "backups")
 
         assert path.read_text(encoding="utf-8") == "previous"
         assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
@@ -230,7 +233,7 @@ class TestSaveConfig:
         monkeypatch.setattr("openbuds.core.config.os.fsync", fail_fsync)
 
         with pytest.raises(ConfigError, match=str(path)):
-            save_config(default_config(), path)
+            save_config(default_config(), path, backup_dir=tmp_path / "backups")
 
         assert path.read_text(encoding="utf-8") == "previous"
         assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
@@ -241,6 +244,133 @@ class TestSaveConfig:
         save_config(default_config(), path)
 
         assert list(tmp_path.glob(f".{path.name}.*.tmp")) == []
+
+    def test_save_creates_backup_with_previous_content(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.toml"
+        backup_dir = tmp_path / "backups"
+        previous = '[openbuds]\nlog_level = "WARNING"\n'
+        path.write_text(previous, encoding="utf-8")
+
+        backup = save_config(default_config(), path, backup_dir=backup_dir)
+
+        assert backup is not None
+        assert isinstance(backup, Path)
+        assert backup.read_text(encoding="utf-8") == previous
+        assert load_config(path) == default_config()
+
+    def test_dry_run_renders_without_creating_files(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.toml"
+        backup_dir = tmp_path / "backups"
+
+        rendered = save_config(default_config(), path, backup_dir=backup_dir, dry_run=True)
+
+        assert isinstance(rendered, str)
+        assert "[openbuds]" in rendered
+        assert not path.exists()
+        assert not backup_dir.exists()
+
+    def test_save_without_previous_file_returns_no_backup(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.toml"
+
+        result = save_config(default_config(), path, backup_dir=tmp_path / "backups")
+
+        assert result is None
+
+    def test_backup_failure_preserves_original(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "config.toml"
+        path.write_text("previous", encoding="utf-8")
+
+        def fail_backup(*args: object, **kwargs: object) -> Path:
+            raise OSError("backup denied")
+
+        monkeypatch.setattr(config_module, "backup_config_file", fail_backup)
+
+        with pytest.raises(ConfigError, match="backup"):
+            save_config(default_config(), path, backup_dir=tmp_path / "backups")
+
+        assert path.read_text(encoding="utf-8") == "previous"
+
+    def test_verification_failure_rolls_back_automatically(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "config.toml"
+        previous = "previous configuration"
+        path.write_text(previous, encoding="utf-8")
+
+        def fail_verification(_path: Path = path) -> object:
+            raise ConfigError("verification failed")
+
+        monkeypatch.setattr(config_module, "load_config", fail_verification)
+
+        with pytest.raises(ConfigError, match="rollback applied"):
+            save_config(default_config(), path, backup_dir=tmp_path / "backups")
+
+        assert path.read_text(encoding="utf-8") == previous
+
+    def test_verification_failure_without_auto_rollback_keeps_new_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = tmp_path / "config.toml"
+        path.write_text("previous configuration", encoding="utf-8")
+
+        monkeypatch.setattr(
+            config_module,
+            "load_config",
+            lambda _path: (_ for _ in ()).throw(ConfigError("verification failed")),
+        )
+
+        with pytest.raises(ConfigError, match="rollback is disabled"):
+            save_config(
+                default_config(),
+                path,
+                backup_dir=tmp_path / "backups",
+                auto_rollback=False,
+            )
+
+        assert path.read_text(encoding="utf-8") != "previous configuration"
+
+
+class TestConfigBackups:
+    def test_backup_config_file_copies_current_content_atomically(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.toml"
+        backup_dir = tmp_path / "backups"
+        content = '[openbuds]\nlog_level = "INFO"\n'
+        path.write_text(content, encoding="utf-8")
+
+        backup = backup_config_file(path, backup_dir)
+
+        assert backup.parent == backup_dir
+        assert backup.read_text(encoding="utf-8") == content
+
+    def test_restore_config_file_rejects_invalid_backup_without_touching_target(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "config.toml"
+        backup = tmp_path / "invalid.bak"
+        path.write_text("original", encoding="utf-8")
+        backup.write_text("not valid = = toml", encoding="utf-8")
+
+        with pytest.raises(ConfigError):
+            restore_config_file(backup, path)
+
+        assert path.read_text(encoding="utf-8") == "original"
+
+    def test_restore_config_file_restores_valid_backup(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.toml"
+        backup = tmp_path / "valid.bak"
+        expected = default_config()
+        backup.write_text(config_module.render_config_toml(expected), encoding="utf-8")
+        path.write_text(config_module.render_config_toml(default_config()), encoding="utf-8")
+
+        from dataclasses import replace
+
+        changed = replace(expected, log_level="DEBUG")
+        save_config(changed, path, backup_dir=tmp_path / "backups")
+        restore_config_file(backup, path)
+
+        assert load_config(path) == expected
 
 
 class TestAppConfigStore:
