@@ -163,14 +163,29 @@ layout; operaciones en curso deshabilitan controles; errores sin datos sensibles
 
 ## Etapa 4 — Health Check y diagnóstico
 
-- Runtime Python/Gio, BlueZ/D-Bus, PipeWire, WirePlumber y adaptador.
-- Dispositivo, perfil, códec, sink/source, micrófono y configuración efectiva.
-- Logs relevantes con redacción de identificadores.
-- Cada dato se etiqueta como **observado**, **inferido**, **no disponible**,
-  **recomendación** o **acción segura disponible**.
+**Incremento 1 completado:** `openbuds health` implementado y verificado real
+sin hardware (14 checks estables, `Estado global: OK`, exit 0, sin MAC ni
+object paths). Ver [`docs/cli/health-command.md`](cli/health-command.md).
+
+- [x] Runtime Python/Gio, BlueZ/D-Bus, PipeWire, WirePlumber y adaptador —
+  checks `system.*`, `runtime.gio` y `hardware.adapter` (incremento 1).
+- [x] Dispositivo, perfil, códec, sink/source, micrófono y configuración
+  efectiva — checks `device.*`, `audio.*` y `battery.aggregate` (incluye
+  `audio.sink_default`; incremento 1).
+- Logs relevantes con redacción de identificadores — **pendiente parcial**
+  (incremento 1): el Health Check redacta MAC y object paths en todos sus
+  mensajes; el volcado de logs/journal con redacción se difiere a un
+  incremento posterior.
+- [x] Cada dato se etiqueta como **observado**, **inferido**, **no
+  disponible**, **recomendación** o **acción segura disponible** —
+  `EvidenceKind` en cada `CheckResult.evidence` (incremento 1).
 
 No se prometen jitter, packet loss, retransmisiones o latencia exacta si el
-sistema no los expone; toda estimación se etiqueta como tal.
+sistema no los expone; toda estimación se etiqueta como tal (**cumplido** en
+el incremento 1: el Health Check no promete ni estima esas métricas).
+
+**Salida:** informe CLI de solo lectura con los 14 checks en orden fijo y
+cada dato etiquetado por evidencia; exit 0/1 según el estado global.
 
 ## Etapa 5 — Optimización persistente y rollback
 
