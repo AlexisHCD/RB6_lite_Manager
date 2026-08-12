@@ -48,3 +48,13 @@ class HealthReport:
     checks: tuple[CheckResult, ...] = field(default_factory=tuple)
     recommendations: tuple[str, ...] = field(default_factory=tuple)
     generated_at: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceLogs:
+    """Sanitized journal output and availability for one service."""
+
+    service: str
+    available: bool
+    lines: tuple[str, ...] = ()
+    error: str = ""

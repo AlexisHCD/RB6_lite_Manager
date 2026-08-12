@@ -7,7 +7,7 @@ Implementaciones de referencia:
 
 from __future__ import annotations
 
-from openbuds.domain.models import BenchmarkResult, HealthReport, SystemInfo
+from openbuds.domain.models import BenchmarkResult, HealthReport, ServiceLogs, SystemInfo
 
 
 class IDiagnosticsRepository:
@@ -29,6 +29,14 @@ class IDiagnosticsRepository:
 
     def detect_system(self) -> SystemInfo:
         """Detecta el entorno del sistema (SO, versiones del stack, adaptador)."""
+        raise NotImplementedError
+
+    def read_logs(
+        self,
+        services: tuple[str, ...] = ("bluez", "wireplumber", "pipewire"),
+        lines: int = 20,
+    ) -> tuple[ServiceLogs, ...]:
+        """Read sanitized diagnostic logs for the requested services."""
         raise NotImplementedError
 
     def run_benchmark(self, device_address: str, duration_seconds: int = 10) -> BenchmarkResult:

@@ -18,7 +18,7 @@ from openbuds.domain.models.benchmark import BenchmarkResult, BenchmarkSample
 from openbuds.domain.models.codec import CodecInfo
 from openbuds.domain.models.device import DeviceInfo
 from openbuds.domain.models.device_change import DeviceChangeEvent
-from openbuds.domain.models.diagnostic import CheckResult, HealthReport
+from openbuds.domain.models.diagnostic import CheckResult, HealthReport, ServiceLogs
 from openbuds.domain.models.rssi import RSSIReading
 from openbuds.domain.models.system import SystemInfo
 
@@ -35,5 +35,6 @@ __all__ = [
     "EvidenceKind",
     "HealthReport",
     "RSSIReading",
+    "ServiceLogs",
     "SystemInfo",
 ]

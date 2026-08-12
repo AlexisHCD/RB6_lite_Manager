@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -26,14 +25,12 @@ from openbuds.domain.models import (
     CodecInfo,
     DeviceInfo,
     HealthReport,
+    ServiceLogs,
     SystemInfo,
 )
+from openbuds.infrastructure.logs.journal_log_reader import JournalLogReader
+from openbuds.infrastructure.redaction import sanitize_display
 from openbuds.infrastructure.system import environment_detector
-
-_REDACT_OBJECT_PATH = re.compile(r"/org/bluez/[^\s]+")
-_REDACT_ADDRESS = re.compile(
-    r"(?<![A-Za-z0-9])[0-9A-Fa-f]{2}(?:[:_. ]?[0-9A-Fa-f]{2}){5}(?![A-Za-z0-9])"
-)
 
 _CHECK_ORDER = (
     "system.os",
@@ -70,6 +67,7 @@ class HealthCheckRepository(IDiagnosticsRepository):
         audio: IAudioRepository,
         detect: Callable[[], SystemInfo] | None = None,
         runtime_ready: Callable[[], bool] | None = None,
+        log_reader: JournalLogReader | None = None,
     ) -> None:
         self._bluetooth = bluetooth
         self._audio = audio
@@ -77,10 +75,33 @@ class HealthCheckRepository(IDiagnosticsRepository):
         self._runtime_ready = (
             runtime_ready if runtime_ready is not None else environment_detector.is_runtime_ready
         )
+        self._log_reader = log_reader if log_reader is not None else JournalLogReader()
 
     def detect_system(self) -> SystemInfo:
         """Return the detected system information."""
         return self._detect()
+
+    def read_logs(
+        self,
+        services: tuple[str, ...] = ("bluez", "wireplumber", "pipewire"),
+        lines: int = 20,
+    ) -> tuple[ServiceLogs, ...]:
+        """Read supported service logs, silently skipping unknown services."""
+        supported = {"bluez", "wireplumber", "pipewire"}
+        result: list[ServiceLogs] = []
+        for service in services:
+            if service not in supported:
+                continue
+            available, output, error = self._log_reader.read(service, lines)
+            result.append(
+                ServiceLogs(
+                    service=service,
+                    available=available,
+                    lines=tuple(output.splitlines()) if available else (),
+                    error=error,
+                )
+            )
+        return tuple(result)
 
     def run_health_check(self) -> HealthReport:
         """Evaluate all checks without allowing one failure to abort the report."""
@@ -441,7 +462,7 @@ class HealthCheckRepository(IDiagnosticsRepository):
                 "Sink por defecto del sistema",
                 CheckSeverity.OK,
                 "sink por defecto disponible",
-                detail=_sanitize(sink),
+                detail=sanitize_display(sink),
             )
 
         add("audio.sink_default", "Sink por defecto del sistema", check_sink)
@@ -678,10 +699,3 @@ class HealthCheckRepository(IDiagnosticsRepository):
             "invalida el resto",
             evidence=EvidenceKind.NOT_AVAILABLE,
         )
-
-
-def _sanitize(value: str) -> str:
-    """Redact Bluetooth addresses and BlueZ object paths in sink details."""
-    sanitized = _REDACT_OBJECT_PATH.sub("<redacted>", value)
-    sanitized = _REDACT_ADDRESS.sub("<redacted>", sanitized)
-    return "".join(character if character.isprintable() else "?" for character in sanitized)[:80]

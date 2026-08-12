@@ -35,6 +35,7 @@ from openbuds.domain.models import (
     DeviceChangeEvent,
     DeviceInfo,
     HealthReport,
+    ServiceLogs,
     SystemInfo,
 )
 
@@ -288,6 +289,90 @@ def test_health_openbuds_error_uses_cli_error_contract(
 
     assert result == 1
     assert capsys.readouterr().err == "Error: health failed\n"
+
+
+class _LogsUseCase:
+    def __init__(self, logs: tuple[ServiceLogs, ...]) -> None:
+        self.logs = logs
+        self.requests: list[object] = []
+
+    def execute(self, request: object) -> tuple[ServiceLogs, ...]:
+        self.requests.append(request)
+        return self.logs
+
+
+def _run_logs(
+    monkeypatch: pytest.MonkeyPatch,
+    use_case: _LogsUseCase,
+    argv: list[str],
+) -> int:
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    monkeypatch.setattr(cli, "_build_logs_use_case", lambda: use_case)
+    return cli.main(argv)
+
+
+def test_logs_parser_supports_repeated_services_and_bounded_lines() -> None:
+    parser = cli.build_parser()
+
+    args = parser.parse_args(
+        ["logs", "--service", "bluez", "--service", "pipewire", "--lines", "7"]
+    )
+
+    assert args.service == ["bluez", "pipewire"]
+    assert args.lines == 7
+    assert not hasattr(args, "yes")
+    for invalid in ("0", "201"):
+        with pytest.raises(SystemExit):
+            parser.parse_args(["logs", "--lines", invalid])
+
+
+def test_logs_prints_available_and_unavailable_services_without_identifiers(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_case = _LogsUseCase(
+        (
+            ServiceLogs(
+                "bluez",
+                True,
+                ("event 00:11:22:33:44:55 /org/bluez/hci0/dev_00_11_22_33_44_55",),
+            ),
+            ServiceLogs(
+                "wireplumber",
+                False,
+                error="permission denied for 00:11:22:33:44:55 /org/bluez/hci0",
+            ),
+        )
+    )
+
+    result = _run_logs(monkeypatch, use_case, ["logs", "--service", "bluez", "--lines", "5"])
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert "=== bluez ===" in output
+    assert "event <redacted> <redacted>" in output
+    assert "(no disponible: permission denied for <redacted> <redacted>)" in output
+    assert "00:11:22:33:44:55" not in output
+    assert "/org/bluez/" not in output
+
+
+def test_logs_returns_one_when_all_services_are_unavailable(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_case = _LogsUseCase(
+        (
+            ServiceLogs("bluez", False, error="journalctl no disponible"),
+            ServiceLogs("pipewire", False, error="servicio no disponible o sin permisos"),
+        )
+    )
+
+    result = _run_logs(monkeypatch, use_case, ["logs"])
+    output = capsys.readouterr().out
+
+    assert result == 1
+    assert "=== bluez ===" in output
+    assert "=== pipewire ===" in output
+    assert "(no disponible: journalctl no disponible)" in output
 
 
 def _status_device() -> DeviceInfo:

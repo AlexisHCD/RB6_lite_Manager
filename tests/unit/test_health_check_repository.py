@@ -25,6 +25,7 @@ from openbuds.domain.models import (
     CodecInfo,
     DeviceInfo,
     HealthReport,
+    ServiceLogs,
     SystemInfo,
 )
 from openbuds.infrastructure.diagnostics.health_check_repository import HealthCheckRepository
@@ -124,6 +125,18 @@ class FakeAudioRepository:
         return self.sink
 
 
+class FakeLogReader:
+    """Minimal journal reader fake for repository delegation tests."""
+
+    def __init__(self, results: dict[str, tuple[bool, str, str]]) -> None:
+        self.results = results
+        self.calls: list[tuple[str, int]] = []
+
+    def read(self, service: str, lines: int) -> tuple[bool, str, str]:
+        self.calls.append((service, lines))
+        return self.results[service]
+
+
 def _repository(
     bluetooth: FakeBluetoothRepository | None = None,
     audio: FakeAudioRepository | None = None,
@@ -131,6 +144,7 @@ def _repository(
     info: SystemInfo | None = None,
     detect: object | None = None,
     runtime_ready: object | None = None,
+    log_reader: object | None = None,
 ) -> HealthCheckRepository:
     detector = detect if detect is not None else (lambda: info or _system_info())
     runtime = runtime_ready if runtime_ready is not None else (lambda: True)
@@ -139,6 +153,7 @@ def _repository(
         audio or FakeAudioRepository(),  # type: ignore[arg-type]
         detect=detector,  # type: ignore[arg-type]
         runtime_ready=runtime,  # type: ignore[arg-type]
+        log_reader=log_reader,  # type: ignore[arg-type]
     )
 
 
@@ -248,6 +263,24 @@ def test_default_sink_is_optional_and_redacts_identifiers() -> None:
 
     no_sink = _repository(audio=FakeAudioRepository(sink=None)).run_health_check()
     assert _checks(no_sink)["audio.sink_default"].evidence is EvidenceKind.NOT_AVAILABLE
+
+
+def test_read_logs_delegates_supported_services_and_skips_unknown() -> None:
+    reader = FakeLogReader(
+        {
+            "bluez": (True, "bluez line 1\nbluez line 2", ""),
+            "wireplumber": (False, "", "sin permisos"),
+        }
+    )
+    repository = _repository(log_reader=reader)
+
+    logs = repository.read_logs(("bluez", "unsupported", "wireplumber"), lines=7)
+
+    assert logs == (
+        ServiceLogs("bluez", True, ("bluez line 1", "bluez line 2")),
+        ServiceLogs("wireplumber", False, (), "sin permisos"),
+    )
+    assert reader.calls == [("bluez", 7), ("wireplumber", 7)]
 
 
 def test_generated_at_is_utc_iso_and_all_failures_are_unknown() -> None:

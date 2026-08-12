@@ -11,6 +11,7 @@ from typing import Final
 
 from openbuds import __version__
 from openbuds.application.get_device_info import DeviceAggregate, GetDeviceInfoUseCase
+from openbuds.application.read_logs import ReadLogsRequest, ReadLogsUseCase
 from openbuds.application.run_health_check import RunHealthCheckUseCase
 from openbuds.application.scan_devices import ScanDevicesRequest, ScanDevicesUseCase
 from openbuds.application.session_control import (
@@ -49,9 +50,11 @@ _BOOTSTRAP_COMMANDS: Final = frozenset(
         "music",
         "mic",
         "health",
+        "logs",
         "gui",
     }
 )
+_LOG_SERVICES: Final = ("bluez", "wireplumber", "pipewire")
 _ADAPTER_NAME = re.compile(r"hci[0-9]+")
 _ADDRESS = REDACT_ADDRESS
 
@@ -72,6 +75,7 @@ class CliContext:
     disconnect_use_case: DisconnectDeviceUseCase | None = None
     set_audio_profile_use_case: SetAudioProfileUseCase | None = None
     health_check_use_case: RunHealthCheckUseCase | None = None
+    logs_use_case: ReadLogsUseCase | None = None
 
 
 def _cmd_doctor(_context: CliContext) -> int:
@@ -176,6 +180,27 @@ def _cmd_health(context: CliContext, _args: argparse.Namespace) -> int:
         for recommendation in report.recommendations:
             print(f" - {_sanitize_display_field(recommendation)}")
     return 0 if report.overall_status in {HealthStatus.OK, HealthStatus.WARNING} else 1
+
+
+def _cmd_logs(context: CliContext, args: argparse.Namespace) -> int:
+    """Print sanitized journal logs for the requested services."""
+    if context.logs_use_case is None:
+        raise RuntimeError("caso de uso de logs no disponible")
+
+    services = tuple(args.service) if args.service else _LOG_SERVICES
+    logs = context.logs_use_case.execute(ReadLogsRequest(services=services, lines=args.lines))
+    available = False
+    for service_logs in logs:
+        service = _sanitize_display_field(service_logs.service)
+        print(f"=== {service} ===")
+        if service_logs.available:
+            available = True
+            for line in service_logs.lines:
+                print(_sanitize_display_field(line))
+        else:
+            error = _sanitize_display_field(service_logs.error)
+            print(f"(no disponible: {error})")
+    return 0 if available else 1
 
 
 def _format_health_check(check: CheckResult) -> str:
@@ -450,6 +475,15 @@ def _build_health_check_use_case() -> RunHealthCheckUseCase:
     return RunHealthCheckUseCase(HealthCheckRepository(BlueZRepository(), PipeWireRepository()))
 
 
+def _build_logs_use_case() -> ReadLogsUseCase:
+    """Compose the read-only diagnostic repositories lazily for ``logs``."""
+    from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
+    from openbuds.infrastructure.diagnostics.health_check_repository import HealthCheckRepository
+    from openbuds.infrastructure.pipewire.pipewire_repository import PipeWireRepository
+
+    return ReadLogsUseCase(HealthCheckRepository(BlueZRepository(), PipeWireRepository()))
+
+
 def _build_watch_devices_use_case() -> WatchDevicesUseCase:
     """Compose the read-only BlueZ repository for ``watch``."""
     from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
@@ -496,6 +530,17 @@ def _cmd_future(command: str) -> int:
         file=sys.stderr,
     )
     return 2
+
+
+def _parse_log_lines(value: str) -> int:
+    """Parse the bounded line count accepted by ``openbuds logs``."""
+    try:
+        lines = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("LINES debe ser un entero entre 1 y 200") from exc
+    if not 1 <= lines <= 200:
+        raise argparse.ArgumentTypeError("LINES debe estar entre 1 y 200")
+    return lines
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -554,6 +599,20 @@ def build_parser() -> argparse.ArgumentParser:
     mic.add_argument("-y", "--yes", action="store_true", help="Omite la confirmación.")
     sub.add_parser("codec", help="Muestra el códec activo.")
     sub.add_parser("health", help="Ejecuta un Health Check.")
+    logs = sub.add_parser("logs", help="Muestra logs relevantes del stack de audio.")
+    logs.add_argument(
+        "--service",
+        action="append",
+        choices=_LOG_SERVICES,
+        default=None,
+        help="Servicio a consultar; repite la opción para varios.",
+    )
+    logs.add_argument(
+        "--lines",
+        type=_parse_log_lines,
+        default=20,
+        help="Número de líneas por servicio (1-200).",
+    )
     sub.add_parser("bench", help="Ejecuta un benchmark de enlace.")
     return parser
 
@@ -592,6 +651,12 @@ def main(argv: list[str] | None = None) -> int:
                 health_check_use_case=_build_health_check_use_case(),
             )
             return _cmd_health(context, args)
+        if command == "logs":
+            context = CliContext(
+                config=config,
+                logs_use_case=_build_logs_use_case(),
+            )
+            return _cmd_logs(context, args)
         if command == "watch":
             context = CliContext(
                 config=config, watch_devices_use_case=_build_watch_devices_use_case()
