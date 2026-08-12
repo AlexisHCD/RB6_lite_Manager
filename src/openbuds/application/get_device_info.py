@@ -1,10 +1,9 @@
-"""Caso de uso: obtener información agregada de un dispositivo.
+"""Use case for collecting aggregated device information.
 
-Combina datos de BlueZ (dispositivo, batería, RSSI) y de PipeWire/WirePlumber
-(códec activo) en una vista unificada para la UI.
+Combines BlueZ device, battery, and RSSI data with the active PipeWire codec
+in one view for the UI.
 
-Estado: Etapa 0 — contrato definido, sin implementación; pendiente de Etapa 2 y
-de la evidencia de la Etapa 1 cuando corresponda.
+Stage 2: implemented and validated with Stage 1 hardware evidence (A2DP/SBC).
 """
 
 from __future__ import annotations
@@ -12,7 +11,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from openbuds.domain.interfaces import IAudioRepository, IBluetoothRepository
-from openbuds.domain.models import BatteryLevel, CodecInfo, DeviceInfo, RSSIReading
+from openbuds.domain.models import (
+    BatteryLevel,
+    BluetoothAudioNode,
+    CodecInfo,
+    DeviceInfo,
+    RSSIReading,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +33,7 @@ class DeviceAggregate:
     battery: BatteryLevel | None
     rssi: RSSIReading | None
     codec: CodecInfo | None
+    audio_nodes: tuple[BluetoothAudioNode, ...] = ()
 
 
 class GetDeviceInfoUseCase:
@@ -42,7 +48,14 @@ class GetDeviceInfoUseCase:
         self._audio = audio_repo
 
     def execute(self, device_path: str) -> DeviceAggregate | None:
-        """Devuelve la información agregada del dispositivo, o ``None``."""
-        raise NotImplementedError(
-            "Implementación pendiente de la Etapa 2 y de la evidencia de la Etapa 1."
+        """Return the aggregated device information, or ``None``."""
+        device = self._bluetooth.get_device(device_path)
+        if device is None:
+            return None
+        return DeviceAggregate(
+            device=device,
+            battery=self._bluetooth.get_battery(device_path),
+            rssi=self._bluetooth.get_rssi(device_path),
+            codec=self._audio.get_active_codec(device.address),
+            audio_nodes=tuple(self._audio.list_device_audio_nodes(device.address)),
         )
