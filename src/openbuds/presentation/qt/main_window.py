@@ -212,7 +212,7 @@ if _QT_IMPORT_ERROR is None:
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
-            return answer == QMessageBox.StandardButton.Yes
+            return bool(answer == QMessageBox.StandardButton.Yes)
 
         def _on_connect(self) -> None:
             name = self.view_model.device_name
@@ -285,7 +285,7 @@ def run_app() -> int:
         app = QApplication(sys.argv)
     window = build_main_window()
     window.show()
-    return app.exec()
+    return int(app.exec())
 
 
 __all__ = ["MainWindow", "build_default_view_model", "build_main_window", "run_app"]
