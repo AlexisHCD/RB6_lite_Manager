@@ -8,7 +8,11 @@ from typing import Any
 
 import pytest
 
-from openbuds.core.errors import PipeWireParseError, PipeWireUnavailableError
+from openbuds.core.errors import (
+    PipeWireParseError,
+    PipeWireUnavailableError,
+    WirePlumberUnavailableError,
+)
 from openbuds.domain.enums import BluetoothProfile, CodecType
 from openbuds.domain.models import BluetoothAudioNode
 from openbuds.infrastructure.pipewire import pipewire_repository as repository_module
@@ -35,6 +39,21 @@ class FakeRunner:
         if self.error is not None:
             raise self.error
         return next(self._payloads)
+
+
+class FakeWpctl:
+    """Deterministic ``wpctl`` adapter substitute."""
+
+    def __init__(self, output: str = "", error: BaseException | None = None) -> None:
+        self.output = output
+        self.error = error
+        self.target: str | None = None
+
+    def inspect(self, target: str) -> str:
+        self.target = target
+        if self.error is not None:
+            raise self.error
+        return self.output
 
 
 def _node(node_id: int, node_name: str, media_class: str = "Audio/Sink") -> dict[str, Any]:
@@ -141,9 +160,43 @@ def test_runner_unavailable_error_is_propagated_identically() -> None:
     assert raised.value.__cause__ is error.__cause__
 
 
-def test_default_sink_remains_explicit() -> None:
-    with pytest.raises(NotImplementedError):
-        PipeWireRepository(FakeRunner([])).get_default_audio_sink()
+def test_default_sink_returns_observed_name() -> None:
+    wpctl = FakeWpctl(
+        'id 141, type PipeWire:Interface:Node\n  * node.name = "bluez_output.00_11_22_33_44_55.1"\n'
+    )
+
+    repository = PipeWireRepository(FakeRunner([]), wpctl)
+
+    assert repository.get_default_audio_sink() == "bluez_output.00_11_22_33_44_55.1"
+    assert wpctl.target == "@DEFAULT_AUDIO_SINK@"
+
+
+def test_default_sink_parses_indented_property_lines() -> None:
+    wpctl = FakeWpctl(
+        "id 48, type PipeWire:Interface:Node\n"
+        '    node.name = "alsa_output.pci-0000_00_1f.3.analog-stereo"\n'
+    )
+
+    assert (
+        PipeWireRepository(FakeRunner([]), wpctl).get_default_audio_sink()
+        == "alsa_output.pci-0000_00_1f.3.analog-stereo"
+    )
+
+
+def test_default_sink_returns_none_without_node_name() -> None:
+    wpctl = FakeWpctl('object.path = "x"\n')
+
+    assert PipeWireRepository(FakeRunner([]), wpctl).get_default_audio_sink() is None
+
+
+def test_default_sink_returns_none_when_wireplumber_is_unavailable() -> None:
+    wpctl = FakeWpctl(error=WirePlumberUnavailableError("unavailable"))
+
+    assert PipeWireRepository(FakeRunner([]), wpctl).get_default_audio_sink() is None
+
+
+def test_default_wpctl_is_created() -> None:
+    assert PipeWireRepository(FakeRunner([]))._wpctl is not None
 
 
 def test_active_codec_maps_observed_profile_and_codec() -> None:

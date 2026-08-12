@@ -8,14 +8,17 @@ inspección fiable se hace parseando ``pw-dump`` (JSON) y ``wpctl inspect``.
 
 from __future__ import annotations
 
+import re
 from typing import Protocol
 
+from openbuds.core.errors import WirePlumberUnavailableError
 from openbuds.domain.enums import BluetoothProfile, CodecType
 from openbuds.domain.interfaces import IAudioRepository
 from openbuds.domain.models import BluetoothAudioNode, CodecInfo
 from openbuds.infrastructure.pipewire.node_mapper import match_nodes_by_address, to_domain_node
 from openbuds.infrastructure.pipewire.pw_dump_parser import parse_bluetooth_audio_nodes
 from openbuds.infrastructure.pipewire.pw_dump_runner import PwDumpRunner
+from openbuds.infrastructure.wireplumber.wpctl_adapter import WpctlAdapter
 
 
 class DumpRunner(Protocol):
@@ -26,15 +29,28 @@ class DumpRunner(Protocol):
         ...
 
 
+class WpctlInspector(Protocol):
+    """Contrato mínimo para consultas de solo lectura vía ``wpctl``."""
+
+    def inspect(self, target: str) -> str:
+        """Return the output produced by ``wpctl inspect <target>``."""
+        ...
+
+
 class PipeWireRepository(IAudioRepository):
     """Repositorio de audio basado en las CLI de PipeWire/WirePlumber.
 
     Incremento 1: listado de nodos Bluetooth desde ``pw-dump``.
     """
 
-    def __init__(self, runner: DumpRunner | None = None) -> None:
+    def __init__(
+        self,
+        runner: DumpRunner | None = None,
+        wpctl: WpctlInspector | None = None,
+    ) -> None:
         """Create the repository with an injectable ``pw-dump`` runner."""
         self._runner = runner if runner is not None else PwDumpRunner()
+        self._wpctl = wpctl if wpctl is not None else WpctlAdapter()
 
     def get_active_codec(self, device_address: str) -> CodecInfo | None:
         flat_nodes = parse_bluetooth_audio_nodes(self._runner.dump())
@@ -72,6 +88,10 @@ class PipeWireRepository(IAudioRepository):
         return match_nodes_by_address(device_address, flat_nodes)
 
     def get_default_audio_sink(self) -> str | None:
-        raise NotImplementedError(
-            "Implementación pendiente de la Etapa 2, sujeta a evidencia de la Etapa 1."
-        )
+        """Return the default sink name, or ``None`` if WirePlumber is unavailable."""
+        try:
+            output = self._wpctl.inspect("@DEFAULT_AUDIO_SINK@")
+        except WirePlumberUnavailableError:
+            return None
+        match = re.search(r'node\.name\s*=\s*"([^"]+)"', output)
+        return match.group(1) if match is not None else None
