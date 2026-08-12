@@ -13,6 +13,15 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 
 ## Estado del proyecto
 
+✅ **Etapa 5 — Persistencia segura completada (Incremento 1).** La
+configuración de la app (TOML en `~/.config/openbuds/`) y los overrides de
+WirePlumber 0.4 (solo `~/.config/wireplumber/`) se guardan con **backup
+timestamped previo, escritura atómica, verificación post-escritura y rollback
+automático**; `config set --dry-run` no escribe nada; `config
+backup|backups|restore` gestionan copias manuales. La validación física de
+overrides WirePlumber reales queda diferida (aún no existe configuración
+WirePlumber modificable). Ver [`docs/ADR/0008-safe-persistence.md`](docs/ADR/0008-safe-persistence.md).
+
 ✅ **Etapa 4 — Health Check completada (Incrementos 1 y 2).** `openbuds
 health` ejecuta el Health Check de **solo lectura**: 14 checks estables del
 stack completo (sistema, runtime, adaptador, dispositivo, audio y batería),
@@ -273,6 +282,7 @@ con 1 si el sistema o el runtime son inválidos.
 ```bash
 .venv/bin/openbuds doctor        # diagnostica sistema, runtime y hardware
 .venv/bin/openbuds config        # muestra la configuración efectiva
+.venv/bin/openbuds config get|set|backup|backups|restore  # persistencia segura: backup, verificación y rollback (dry-run con --dry-run)
 .venv/bin/openbuds version       # muestra la versión sin cargar config
 .venv/bin/openbuds devices       # lista dispositivos Bluetooth (backend base publicado): snapshot TSV
 .venv/bin/openbuds devices --paired-only            # solo emparejados
@@ -361,6 +371,7 @@ Ver [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) para el detalle y el diagrama
 | [0004](docs/ADR/0004-clean-architecture-dependency-rule.md) | Regla de dependencias de Clean Architecture |
 | [0005](docs/ADR/0005-device-profile-contract.md) | Contrato de perfiles de dispositivo |
 | [0006](docs/ADR/0006-app-config-toml-xdg-atomic-write.md) | Configuración TOML con rutas XDG y escritura atómica |
+| [0008](docs/ADR/0008-safe-persistence.md) | Persistencia segura: backups, verificación y rollback (Etapa 5) |
 
 ## Seguridad
 

@@ -208,19 +208,43 @@ de logs por servicio con identificadores redactados.
 
 ## Etapa 5 — Optimización persistente y rollback
 
-No comienza hasta que las etapas anteriores funcionen con hardware real.
+**Incremento 1 completado (2026-08-12) — persistencia segura de configuración.**
 
-1. Dry-run.
-2. Validación del entorno y ruta confinada.
-3. Lectura de configuración existente y backup.
-4. Validación sintáctica y escritura atómica.
-5. Recarga o reinicio previamente aprobado.
-6. Verificación y rollback automático si falla.
-7. Verificación del rollback.
+> **Nota de cierre:** se marca la **implementación completa**; la **validación
+> física de overrides WirePlumber reales queda diferida** porque aún no existe
+> ninguna configuración de WirePlumber modificable por la app (ninguna función
+> escribe overrides hoy). Lo validado es la capa de persistencia aislada y
+> reversible, con smoke real de la CLI sobre XDG temporales (config del usuario
+> no tocada). Ver [ADR-0008](ADR/0008-safe-persistence.md).
+
+- [x] Dry-run: `config set <clave> <valor> --dry-run` renderiza el TOML
+  resultante sin escribir nada.
+- [x] Validación del entorno y ruta confinada: config TOML de la app bajo
+  `~/.config/openbuds/` y overrides WirePlumber bajo `~/.config/wireplumber/`
+  (solo XDG, nunca root); `WirePlumberConfigEditor` rechaza rutas absolutas,
+  traversal (`..`), backslashes/drives de Windows y NUL.
+- [x] Lectura de configuración existente y backup: backup timestamped previo
+  automático antes de reemplazar (config de la app y overrides) y backup
+  manual (`config backup`).
+- [x] Validación sintáctica y escritura atómica: temp + fsync + `os.replace`
+  (ya existente desde ADR-0006, ahora siempre precedida de backup).
+- [x] Verificación y rollback automático si falla: verificación post-escritura
+  con `load_config` (TOML) y lectura de contenido (overrides); rollback
+  automático restaurando el backup (salvo `auto_rollback=False`); sin archivo
+  previo → `backup_path` vacío y error claro.
+- [x] Verificación del rollback: `config restore <archivo.bak>` pre-valida el
+  TOML del backup, lo instala atómicamente y verifica el resultado.
+
+**Salida del incremento:** `AppConfigStore.save` devuelve el backup creado
+(`Path | None`); el contrato `IConfigRepository` queda implementado por
+`WirePlumberConfigEditor`; `apply_optimization.py` **no se tocó** (stub
+histórico: el flujo de seguridad que documenta ya está materializado por las
+primitivas de este incremento).
 
 La lógica se prueba primero en directorios temporales, nunca usando los
 audífonos para ensayar backup o rollback. Solo se escribe bajo
-`~/.config/wireplumber/`; nunca globalmente ni con `sudo`.
+`~/.config/wireplumber/` y `~/.config/openbuds/`; nunca globalmente ni con
+`sudo`.
 
 ## Etapas posteriores
 
