@@ -40,6 +40,18 @@ class BlueZDBusClient:
         """Devuelve el snapshot obtenido por el proveedor configurado."""
         return self._provider.get_managed_objects()
 
+    def call_device_method(self, device_path: str, method: str) -> None:
+        """Delegate an official ``Device1`` method to the provider."""
+        self._provider.call_device_method(device_path, method)
+
+    def connect_device(self, device_path: str) -> None:
+        """Connect a device through ``Device1.Connect``."""
+        self._provider.call_device_method(device_path, "Connect")
+
+    def disconnect_device(self, device_path: str) -> None:
+        """Disconnect a device through ``Device1.Disconnect``."""
+        self._provider.call_device_method(device_path, "Disconnect")
+
     def subscribe(
         self,
         callback: SignalCallback,

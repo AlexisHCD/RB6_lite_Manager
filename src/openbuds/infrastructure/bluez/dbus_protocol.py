@@ -373,6 +373,10 @@ class SnapshotProvider(Protocol):
         """Devuelve el árbol de objetos administrados por BlueZ."""
         ...
 
+    def call_device_method(self, device_path: str, method: str) -> None:
+        """Call an official ``org.bluez.Device1`` method."""
+        ...
+
 
 class SignalProvider(Protocol):
     """Fuente interna capaz de gestionar suscripciones a señales."""
@@ -635,3 +639,39 @@ class GioDBusProtocol:
             raise BluetoothError("La respuesta de BlueZ tiene una forma desempaquetada inválida")
 
         return _validate_snapshot(unpacked[0])
+
+    def call_device_method(self, device_path: str, method: str) -> None:
+        """Call a ``Device1`` method through a short-lived object proxy.
+
+        The synchronous proxy method invocation uses Gio's default method
+        timeout; the shared ObjectManager proxy and bus connection remain open.
+        """
+        if not isinstance(device_path, str) or not device_path:
+            raise BluetoothError("La ruta D-Bus del dispositivo no puede estar vacía")
+        if not isinstance(method, str) or not method:
+            raise BluetoothError("El método de Device1 no puede estar vacío")
+
+        try:
+            proxy = self._gio.DBusProxy.new_for_bus_sync(
+                self._gio.BusType.SYSTEM,
+                self._gio.DBusProxyFlags.DO_NOT_AUTO_START,
+                None,
+                "org.bluez",
+                device_path,
+                "org.bluez.Device1",
+                None,
+            )
+        except self._glib.Error as exc:
+            raise BluetoothError(f"No se pudo construir el proxy de Device1: {exc}") from exc
+
+        try:
+            operation = getattr(proxy, method)
+        except AttributeError as exc:
+            raise BluetoothError(f"El método {method} no existe en el proxy de Device1") from exc
+        if not callable(operation):
+            raise BluetoothError(f"El atributo {method} de Device1 no es invocable")
+
+        try:
+            operation()
+        except self._glib.Error as exc:
+            raise BluetoothError(f"No se pudo ejecutar {method} en el dispositivo: {exc}") from exc

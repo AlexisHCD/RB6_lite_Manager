@@ -38,7 +38,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class SnapshotClient(Protocol):
-    """Cliente estructural de snapshots y señales de BlueZ."""
+    """Cliente estructural de snapshots, señales y sesión de BlueZ."""
 
     def snapshot(self) -> ManagedObjects:
         """Devuelve el árbol actual de objetos administrados."""
@@ -59,6 +59,10 @@ class SnapshotClient(Protocol):
         """Cancela una suscripción de señales."""
         ...
 
+    def call_device_method(self, device_path: str, method: str) -> None:
+        """Ejecuta un método oficial de ``org.bluez.Device1``."""
+        ...
+
 
 @dataclass
 class _Subscriber:
@@ -69,7 +73,10 @@ class _Subscriber:
 
 
 class BlueZRepository(IBluetoothRepository):
-    """Repositorio de solo lectura basado en snapshots frescos de BlueZ."""
+    """BlueZ snapshots with explicitly controlled session operations.
+
+    All other repository access remains read-only.
+    """
 
     def __init__(
         self,
@@ -136,6 +143,14 @@ class BlueZRepository(IBluetoothRepository):
         if "RSSI" not in props and "TxPower" not in props:
             return None
         return map_rssi(props)
+
+    def connect(self, device_path: str) -> None:
+        """Connect a device through the official BlueZ ``Device1`` API."""
+        self._client.call_device_method(device_path, "Connect")
+
+    def disconnect(self, device_path: str) -> None:
+        """Disconnect a device through the official BlueZ ``Device1`` API."""
+        self._client.call_device_method(device_path, "Disconnect")
 
     def subscribe_device_changes(self, callback: DeviceChangeCallback) -> Unsubscribe:
         current_thread_id = threading.get_ident()

@@ -15,6 +15,7 @@ class FakeSnapshotClient:
     def __init__(self, snapshots: Iterable[ManagedObjects]) -> None:
         self.snapshots = iter(snapshots)
         self.calls = 0
+        self.device_method_calls: list[tuple[str, str]] = []
 
     def __bool__(self) -> bool:
         return False
@@ -22,6 +23,9 @@ class FakeSnapshotClient:
     def snapshot(self) -> ManagedObjects:
         self.calls += 1
         return next(self.snapshots)
+
+    def call_device_method(self, device_path: str, method: str) -> None:
+        self.device_method_calls.append((device_path, method))
 
 
 class ErrorSnapshotClient:
@@ -60,6 +64,33 @@ def test_list_adapters_maps_only_adapters_in_object_path_order() -> None:
     ]
     assert [adapter.address for adapter in result] == ["00", "11"]
     assert client.calls == 1
+
+
+def test_connect_and_disconnect_delegate_to_device_method() -> None:
+    client = FakeSnapshotClient([{}])
+    repository = BlueZRepository(client)
+
+    repository.connect("/org/bluez/hci0/dev_00_11_22_33_44_55")
+    repository.disconnect("/org/bluez/hci0/dev_00_11_22_33_44_55")
+
+    assert client.device_method_calls == [
+        ("/org/bluez/hci0/dev_00_11_22_33_44_55", "Connect"),
+        ("/org/bluez/hci0/dev_00_11_22_33_44_55", "Disconnect"),
+    ]
+
+
+def test_connect_propagates_client_error() -> None:
+    error = BluetoothError("connect failed")
+
+    class ErrorClient(FakeSnapshotClient):
+        def call_device_method(self, device_path: str, method: str) -> None:
+            del device_path, method
+            raise error
+
+    with pytest.raises(BluetoothError) as raised:
+        BlueZRepository(ErrorClient([{}])).connect("/org/bluez/hci0/dev_00_11_22_33_44_55")
+
+    assert raised.value is error
 
 
 def test_list_adapters_returns_empty_list_for_empty_snapshot() -> None:

@@ -57,6 +57,22 @@ class FakeProxy:
         return self.reply
 
 
+class FakeDeviceProxy:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.calls: list[str] = []
+
+    def Connect(self) -> None:  # noqa: N802
+        self.calls.append("Connect")
+        if self.error is not None:
+            raise self.error
+
+    def Disconnect(self) -> None:  # noqa: N802
+        self.calls.append("Disconnect")
+        if self.error is not None:
+            raise self.error
+
+
 class FakeGio:
     class BusType:
         SYSTEM = "system"
@@ -67,17 +83,27 @@ class FakeGio:
     class DBusCallFlags:
         NO_AUTO_START = "no-auto-start-call"
 
-    def __init__(self, proxy: FakeProxy, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        proxy: FakeProxy,
+        error: Exception | None = None,
+        device_proxy: FakeDeviceProxy | None = None,
+        device_error: Exception | None = None,
+    ) -> None:
         self.proxy = proxy
         self.error = error
+        self.device_proxy = device_proxy if device_proxy is not None else proxy
+        self.device_error = device_error
         self.new_for_bus_sync_calls: list[tuple[object, ...]] = []
         self.DBusProxy = self
 
     def new_for_bus_sync(self, *args: object) -> FakeProxy:
         self.new_for_bus_sync_calls.append(args)
+        if args[4] != "/" and self.device_error is not None:
+            raise self.device_error
         if self.error is not None:
             raise self.error
-        return self.proxy
+        return self.proxy if args[4] == "/" else self.device_proxy
 
 
 def make_loader(gio: FakeGio):
@@ -157,6 +183,72 @@ def test_glib_error_calling_snapshot_is_wrapped_with_cause() -> None:
     assert raised.value.__cause__ is cause
 
 
+def test_call_device_method_uses_device1_proxy_and_invokes_connect() -> None:
+    manager = FakeProxy(FakeReply((SNAPSHOT,)))
+    device = FakeDeviceProxy()
+    gio = FakeGio(manager, device_proxy=device)
+    protocol = GioDBusProtocol(loader=make_loader(gio))
+
+    protocol.call_device_method(
+        "/org/bluez/hci0/dev_00_11_22_33_44_55",
+        "Connect",
+    )
+
+    assert device.calls == ["Connect"]
+    assert gio.new_for_bus_sync_calls[-1] == (
+        gio.BusType.SYSTEM,
+        gio.DBusProxyFlags.DO_NOT_AUTO_START,
+        None,
+        "org.bluez",
+        "/org/bluez/hci0/dev_00_11_22_33_44_55",
+        "org.bluez.Device1",
+        None,
+    )
+
+
+def test_call_device_method_wraps_glib_operation_error() -> None:
+    cause = FakeGLibError("connect failed")
+    gio = FakeGio(
+        FakeProxy(FakeReply((SNAPSHOT,))),
+        device_proxy=FakeDeviceProxy(error=cause),
+    )
+    protocol = GioDBusProtocol(loader=make_loader(gio))
+
+    with pytest.raises(BluetoothError, match="ejecutar Connect") as raised:
+        protocol.call_device_method("/org/bluez/hci0/dev_00_11_22_33_44_55", "Connect")
+
+    assert raised.value.__cause__ is cause
+
+
+def test_call_device_method_wraps_device_proxy_construction_error() -> None:
+    cause = FakeGLibError("device proxy failed")
+    gio = FakeGio(FakeProxy(FakeReply((SNAPSHOT,))), device_error=cause)
+    protocol = GioDBusProtocol(loader=make_loader(gio))
+
+    with pytest.raises(BluetoothError, match="construir el proxy de Device1") as raised:
+        protocol.call_device_method("/org/bluez/hci0/dev_00_11_22_33_44_55", "Connect")
+
+    assert raised.value.__cause__ is cause
+
+
+def test_call_device_method_rejects_empty_path() -> None:
+    gio = FakeGio(FakeProxy(FakeReply((SNAPSHOT,))))
+    protocol = GioDBusProtocol(loader=make_loader(gio))
+
+    with pytest.raises(BluetoothError, match="ruta"):
+        protocol.call_device_method("", "Connect")
+
+    assert len(gio.new_for_bus_sync_calls) == 1
+
+
+def test_call_device_method_rejects_unknown_method() -> None:
+    gio = FakeGio(FakeProxy(FakeReply((SNAPSHOT,))), device_proxy=FakeDeviceProxy())
+    protocol = GioDBusProtocol(loader=make_loader(gio))
+
+    with pytest.raises(BluetoothError, match="no existe"):
+        protocol.call_device_method("/org/bluez/hci0/dev_00_11_22_33_44_55", "Missing")
+
+
 @pytest.mark.parametrize("loader_error", [ImportError("gi missing"), ValueError("Gio version")])
 def test_gi_loader_errors_are_actionable(loader_error: Exception) -> None:
     def loader() -> tuple[FakeGio, type[FakeGLib]]:
@@ -178,10 +270,14 @@ class FakeProvider:
         self.subscribe_intervals: list[int | None] = []
         self.unsubscribe_ids: list[int] = []
         self.close_calls = 0
+        self.device_method_calls: list[tuple[str, str]] = []
 
     def get_managed_objects(self) -> ManagedObjects:
         self.calls += 1
         return self.snapshot_value
+
+    def call_device_method(self, device_path: str, method: str) -> None:
+        self.device_method_calls.append((device_path, method))
 
     def subscribe(
         self,
@@ -212,6 +308,19 @@ def test_client_delegates_snapshot_to_injected_provider() -> None:
 
     assert client.snapshot() == SNAPSHOT
     assert provider.calls == 1
+
+
+def test_client_delegates_device_session_methods_to_provider() -> None:
+    provider = FakeProvider(SNAPSHOT)
+    client = BlueZDBusClient(provider=provider)
+
+    client.connect_device("/org/bluez/hci0/dev_00_11_22_33_44_55")
+    client.disconnect_device("/org/bluez/hci0/dev_00_11_22_33_44_55")
+
+    assert provider.device_method_calls == [
+        ("/org/bluez/hci0/dev_00_11_22_33_44_55", "Connect"),
+        ("/org/bluez/hci0/dev_00_11_22_33_44_55", "Disconnect"),
+    ]
 
 
 def test_client_accepts_falsy_injected_provider() -> None:

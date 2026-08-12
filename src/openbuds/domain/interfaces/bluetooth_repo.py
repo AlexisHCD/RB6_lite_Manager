@@ -10,16 +10,16 @@ from openbuds.domain.models import AdapterInfo, BatteryLevel, DeviceInfo, RSSIRe
 
 
 class IBluetoothRepository:
-    """Acceso de solo lectura al estado Bluetooth del sistema vía BlueZ.
+    """Access Bluetooth state and explicit session operations.
 
     Responsabilidades:
       - Listar adaptadores y dispositivos conocidos.
       - Obtener datos derivados (batería, RSSI) de un dispositivo.
       - Suscribirse a cambios de estado (conexión/desconexión, propiedades).
 
-    IMPORTANTE: esta interfaz es de SOLO LECTURA sobre el estado del dispositivo.
-    No envía comandos al hardware. El proyecto no escribe en el dispositivo
-    Bluetooth (ver filosofía del proyecto y docs/RESTRICTIONES).
+    Queries are read-only. ``connect`` and ``disconnect`` use the official
+    ``org.bluez.Device1`` methods and mutate only connection state, not pairing.
+    User approval is required before execution against a real system.
     """
 
     def list_adapters(self) -> list[AdapterInfo]:
@@ -54,4 +54,12 @@ class IBluetoothRepository:
         La implementación se basa en las señales D-Bus estándar de BlueZ:
         ``InterfacesAdded``, ``InterfacesRemoved`` y ``PropertiesChanged``.
         """
+        raise NotImplementedError
+
+    def connect(self, device_path: str) -> None:
+        """Conecta el dispositivo mediante ``org.bluez.Device1.Connect``."""
+        raise NotImplementedError
+
+    def disconnect(self, device_path: str) -> None:
+        """Desconecta el dispositivo mediante ``org.bluez.Device1.Disconnect``."""
         raise NotImplementedError
