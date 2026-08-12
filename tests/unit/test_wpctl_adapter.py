@@ -139,12 +139,51 @@ def test_unexpected_runtime_error_is_propagated() -> None:
     assert raised.value is error
 
 
-@pytest.mark.parametrize("method", ["set_profile", "restart_service"])
-def test_mutating_methods_are_not_implemented_or_executed(method: str) -> None:
-    executor = RecordingExecutor(error=AssertionError("executor must not be called"))
-    adapter = WpctlAdapter(executor=executor)
+def test_set_profile_uses_exact_runtime_command() -> None:
+    executor = RecordingExecutor(FakeWpctlResult(0, "", ""))
+    adapter = WpctlAdapter(timeout_seconds=3.5, executor=executor)
 
-    with pytest.raises(NotImplementedError):
-        getattr(adapter, method)(*(1, 2) if method == "set_profile" else ())
+    adapter.set_profile(42, 7)
+
+    assert executor.calls == [
+        (["wpctl", "set-profile", "42", "7"], EXPECTED_KWARGS),
+    ]
+
+
+@pytest.mark.parametrize("value", [True, -1, None, "42"])
+def test_set_profile_rejects_invalid_device_id(value: object) -> None:
+    executor = RecordingExecutor(error=AssertionError("executor must not be called"))
+
+    with pytest.raises(ValueError):
+        WpctlAdapter(executor=executor).set_profile(value, 1)  # type: ignore[arg-type]
 
     assert executor.calls == []
+
+
+@pytest.mark.parametrize("value", [True, -1, None, "7"])
+def test_set_profile_rejects_invalid_profile_index(value: object) -> None:
+    executor = RecordingExecutor(error=AssertionError("executor must not be called"))
+
+    with pytest.raises(ValueError):
+        WpctlAdapter(executor=executor).set_profile(1, value)  # type: ignore[arg-type]
+
+    assert executor.calls == []
+
+
+def test_restart_service_remains_blocked() -> None:
+    executor = RecordingExecutor(error=AssertionError("executor must not be called"))
+
+    with pytest.raises(NotImplementedError):
+        WpctlAdapter(executor=executor).restart_service()
+
+    assert executor.calls == []
+
+
+def test_set_profile_nonzero_result_is_unavailable() -> None:
+    executor = RecordingExecutor(FakeWpctlResult(7, "secret", "sensitive"))
+
+    with pytest.raises(WirePlumberUnavailableError) as raised:
+        WpctlAdapter(executor=executor).set_profile(42, 1)
+
+    assert "secret" not in str(raised.value)
+    assert "sensitive" not in str(raised.value)

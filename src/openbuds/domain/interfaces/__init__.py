@@ -12,6 +12,7 @@ internas no conocen los detalles técnicos de las externas.
 
 from __future__ import annotations
 
+from openbuds.domain.interfaces.audio_control_repo import IAudioControlRepository
 from openbuds.domain.interfaces.audio_repo import IAudioRepository
 from openbuds.domain.interfaces.bluetooth_repo import IBluetoothRepository
 from openbuds.domain.interfaces.config_repo import IConfigRepository
@@ -20,6 +21,7 @@ from openbuds.domain.interfaces.profile_repo import IDeviceProfileRepository
 
 __all__ = [
     "IAudioRepository",
+    "IAudioControlRepository",
     "IBluetoothRepository",
     "IConfigRepository",
     "IDiagnosticsRepository",

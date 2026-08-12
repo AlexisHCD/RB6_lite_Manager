@@ -1,4 +1,4 @@
-"""Adaptador de solo lectura para la CLI ``wpctl`` (Incremento 1)."""
+"""Safe adapter for runtime queries and profile changes through ``wpctl``."""
 
 from __future__ import annotations
 
@@ -28,8 +28,9 @@ class Executor(Protocol):
 class WpctlAdapter:
     """Ejecuta consultas seguras y frescas contra ``wpctl``.
 
-    Incremento 1 es estrictamente de solo lectura. Las operaciones mutadoras
-    permanecen sin implementar hasta disponer de backup y rollback.
+    Incremento 3 habilita el cambio de perfil runtime (no persistente) para
+    casos de uso de sesión aprobados. La configuración persistente y el
+    reinicio siguen bloqueados hasta la Etapa 5.
     """
 
     def __init__(
@@ -83,8 +84,12 @@ class WpctlAdapter:
         return self._run(["inspect", target])
 
     def set_profile(self, device_id: int, profile_index: int) -> None:
-        """No implementado: el Incremento 1 no permite mutaciones."""
-        raise NotImplementedError("WpctlAdapter Incremento 1 is read-only")
+        """Set a runtime profile index without persisting configuration."""
+        if type(device_id) is not int or device_id < 0:
+            raise ValueError("invalid wpctl device id")
+        if type(profile_index) is not int or profile_index < 0:
+            raise ValueError("invalid wpctl profile index")
+        self._run(["set-profile", str(device_id), str(profile_index)])
 
     def restart_service(self) -> None:
         """No implementado: el Incremento 1 no permite mutaciones."""

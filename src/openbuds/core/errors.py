@@ -50,6 +50,10 @@ class WirePlumberUnavailableError(AudioSubsystemError):
     """El daemon WirePlumber no está disponible o no responde."""
 
 
+class ProfileUnavailableError(OpenBudsError):
+    """The device does not offer the requested audio profile."""
+
+
 class CodecDetectionError(AudioSubsystemError):
     """No se pudo determinar el códec activo de forma fiable."""
 

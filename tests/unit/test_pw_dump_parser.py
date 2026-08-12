@@ -8,7 +8,10 @@ import json
 import pytest
 
 from openbuds.core.errors import PipeWireParseError
-from openbuds.infrastructure.pipewire.pw_dump_parser import parse_bluetooth_audio_nodes
+from openbuds.infrastructure.pipewire.pw_dump_parser import (
+    parse_bluetooth_audio_nodes,
+    parse_bluetooth_device_ids,
+)
 
 _MISSING = object()
 
@@ -39,6 +42,25 @@ def _node(
 
 def _payload(*entries: object) -> str:
     return json.dumps(list(entries))
+
+
+def _device(
+    device_id: object = 12,
+    *,
+    address: object = "00:11:22:33:44:55",
+    device_api: object = "bluez5",
+    info: object = _MISSING,
+) -> dict[str, object]:
+    props: dict[str, object] = {
+        "device.api": device_api,
+        "api.bluez5.address": address,
+    }
+    device_info = {"props": props} if info is _MISSING else info
+    return {
+        "id": device_id,
+        "type": "PipeWire:Interface:Device",
+        "info": device_info,
+    }
 
 
 def test_invalid_json_is_wrapped_and_chains_json_decode_error() -> None:
@@ -200,3 +222,36 @@ def test_input_fixture_is_not_mutated_and_output_dicts_are_independent() -> None
     assert fixture == original
     result[0]["new"] = "value"
     assert "new" not in result[1]
+
+
+def test_parse_bluetooth_device_ids_normalizes_addresses() -> None:
+    payload = _payload(
+        _device(14, address="00_11_22_33_44_55"),
+        _device(9, address="AA:BB:CC:DD:EE:FF"),
+    )
+
+    assert parse_bluetooth_device_ids(payload) == {
+        "001122334455": 14,
+        "aabbccddeeff": 9,
+    }
+
+
+def test_parse_bluetooth_device_ids_ignores_non_bluetooth_or_malformed_devices() -> None:
+    invalid = [
+        _device(1, device_api="other"),
+        _device(2, address=None),
+        _device(True),
+        _device(-1),
+        _device(3, info=None),
+        {"id": 4, "type": "PipeWire:Interface:Node", "info": {"props": {}}},
+    ]
+
+    assert parse_bluetooth_device_ids(_payload(*invalid)) == {}
+
+
+def test_parse_bluetooth_device_ids_uses_the_same_json_errors_as_node_parser() -> None:
+    with pytest.raises(PipeWireParseError, match="JSON"):
+        parse_bluetooth_device_ids("not json")
+
+    with pytest.raises(PipeWireParseError, match="root"):
+        parse_bluetooth_device_ids("{}")

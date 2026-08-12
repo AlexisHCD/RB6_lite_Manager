@@ -10,6 +10,7 @@ import json
 from typing import Any
 
 from openbuds.core.errors import PipeWireParseError
+from openbuds.infrastructure.pipewire.node_mapper import normalize_address
 
 
 def parse_bluetooth_audio_nodes(payload: str) -> list[dict[str, str]]:
@@ -79,3 +80,31 @@ def parse_bluetooth_audio_nodes(payload: str) -> list[dict[str, str]]:
 
     candidates.sort(key=lambda item: (item[0], item[1]))
     return [flat for _, _, flat in candidates]
+
+
+def parse_bluetooth_device_ids(payload: str) -> dict[str, int]:
+    """Extract normalized Bluetooth device addresses and PipeWire object IDs."""
+    try:
+        root: Any = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise PipeWireParseError("JSON de pw-dump inválido") from exc
+
+    if not isinstance(root, list):
+        raise PipeWireParseError("El root JSON de pw-dump debe ser una lista")
+
+    device_ids: dict[str, int] = {}
+    for entry in root:
+        if not isinstance(entry, dict) or entry.get("type") != "PipeWire:Interface:Device":
+            continue
+        info = entry.get("info")
+        if not isinstance(info, dict):
+            continue
+        props = info.get("props")
+        if not isinstance(props, dict) or props.get("device.api") != "bluez5":
+            continue
+        address = props.get("api.bluez5.address")
+        device_id = entry.get("id")
+        if not isinstance(address, str) or type(device_id) is not int or device_id < 0:
+            continue
+        device_ids[normalize_address(address)] = device_id
+    return device_ids
