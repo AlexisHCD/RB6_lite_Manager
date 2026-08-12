@@ -266,6 +266,7 @@ con 1 si el sistema o el runtime son inválidos.
 .venv/bin/openbuds devices       # lista dispositivos Bluetooth (backend base publicado): snapshot TSV
 .venv/bin/openbuds devices --paired-only            # solo emparejados
 .venv/bin/openbuds devices --adapter hci0           # solo el adaptador hci0 (o /org/bluez/hci0)
+.venv/bin/openbuds status         # estado agregado de dispositivos emparejados (batería/RSSI/perfil/códec/sink/source observados; sin identificadores)
 .venv/bin/openbuds health        # futuro: Health Check (Etapa 4)
 .venv/bin/openbuds codec         # futuro: muestra el códec activo (Etapa 2, sujeto a evidencia de Etapa 1)
 .venv/bin/openbuds bench         # futuro: benchmark de enlace (posterior)

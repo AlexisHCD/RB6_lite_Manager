@@ -89,13 +89,19 @@ observado → casos de uso → CLI, sin configuración persistente.
 
 - [x] Base BlueZ de solo lectura: snapshots, eventos y polling.
 - [x] Base PipeWire de solo lectura: `pw-dump`, parser y listado de nodos.
-- [ ] `GetDeviceInfoUseCase` y estado agregado tipado.
-- [ ] Asociación segura entre `Device1` y nodos PipeWire.
-- [ ] Sink/source activos; códec solo con propiedades validadas en la Etapa 1.
-- [ ] CLI `openbuds status` y `openbuds watch`.
-- [ ] Batería agregada estándar (`Battery1`); L/R/estuche solo si existe una
-  fuente identificable; ausente = «No disponible».
-- [ ] Casos de uso Connect, Disconnect, Música (A2DP) y Micrófono (HFP).
+- [x] `GetDeviceInfoUseCase` y estado agregado tipado (`DeviceAggregate` +
+  `BluetoothAudioNode`).
+- [x] Asociación segura `Device1`↔nodos PipeWire (MAC normalizada, precedencia
+  `api.bluez5.address`→`node.name`→`device.name`).
+- [x] Sink/source activos; códec solo con propiedades validadas (verified;
+  `off`→sin códec; transport conservado).
+- [x] CLI `openbuds status` (ver
+  [`docs/cli/status-command.md`](cli/status-command.md)); `watch` sigue [ ]
+  (incremento posterior).
+- [x] Batería agregada estándar (`Battery1`) en status; L/R/estuche solo si
+  existe una fuente identificable (ya documentado en Etapa 1).
+- [ ] Casos de uso Connect, Disconnect, Música (A2DP) y Micrófono (HFP) — sin
+  cambios.
 
 No se hardcodean índices ni nombres de perfiles. Connect/Disconnect usarán APIs
 oficiales BlueZ detrás de interfaces y con fakes. Antes de una prueba real se
