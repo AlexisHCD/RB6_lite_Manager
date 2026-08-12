@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from openbuds import __version__
+from openbuds.application.get_device_info import DeviceAggregate, GetDeviceInfoUseCase
 from openbuds.application.scan_devices import ScanDevicesRequest, ScanDevicesUseCase
 from openbuds.core.config import CONFIG_FILE, AppConfig, load_config
 from openbuds.core.errors import OpenBudsError
@@ -18,8 +19,9 @@ from openbuds.domain.models import DeviceInfo
 from openbuds.infrastructure.system import environment_detector
 
 _LOGGER = get_logger(__name__)
-_BOOTSTRAP_COMMANDS: Final = frozenset({"doctor", "config", "devices"})
+_BOOTSTRAP_COMMANDS: Final = frozenset({"doctor", "config", "devices", "status"})
 _ADAPTER_NAME = re.compile(r"hci[0-9]+")
+_ADDRESS = re.compile(r"[0-9A-Fa-f]{2}(?:[:_. ]?[0-9A-Fa-f]{2}){5}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +30,7 @@ class CliContext:
 
     config: AppConfig | None = None
     scan_devices_use_case: ScanDevicesUseCase | None = None
+    get_device_info_use_case: GetDeviceInfoUseCase | None = None
 
 
 def _cmd_doctor(_context: CliContext) -> int:
@@ -84,6 +87,73 @@ def _cmd_devices(context: CliContext, args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_status(context: CliContext, args: argparse.Namespace) -> int:
+    """Print aggregated state for paired Bluetooth devices."""
+    if context.scan_devices_use_case is None or context.get_device_info_use_case is None:
+        raise RuntimeError("casos de uso de estado no disponibles")
+    devices = context.scan_devices_use_case.execute(
+        ScanDevicesRequest(adapter_path=args.adapter, include_paired_only=True)
+    )
+    if not devices:
+        print("No se encontraron dispositivos emparejados.")
+        return 0
+
+    for index, device in enumerate(devices):
+        aggregate = context.get_device_info_use_case.execute(device.object_path)
+        if aggregate is None:
+            continue
+        if index:
+            print()
+        print(_format_status(aggregate))
+    return 0
+
+
+def _format_status(aggregate: DeviceAggregate) -> str:
+    """Format an aggregate without displaying identifiers."""
+    device = aggregate.device
+    display_name = _sanitize_display_field(device.alias or device.name or "Dispositivo sin nombre")
+    if device.connected:
+        connection = "conectado"
+    elif device.paired:
+        connection = "emparejado"
+    else:
+        connection = "desconectado"
+    battery = (
+        f"{aggregate.battery.percentage}%"
+        if aggregate.battery is not None and aggregate.battery.percentage is not None
+        else "No disponible"
+    )
+    rssi = (
+        f"{aggregate.rssi.rssi_dbm} dBm"
+        if aggregate.rssi is not None and aggregate.rssi.rssi_dbm is not None
+        else "No disponible"
+    )
+    profile = "No disponible"
+    codec = "No disponible"
+    if aggregate.codec is not None and aggregate.codec.verified:
+        profile = aggregate.codec.profile.value
+        codec = f"{aggregate.codec.codec.value} ({aggregate.codec.profile.value})"
+
+    sinks = [node.node_name for node in aggregate.audio_nodes if node.media_class == "Audio/Sink"]
+    sources = [
+        node.node_name for node in aggregate.audio_nodes if node.media_class == "Audio/Source"
+    ]
+    sink = _sanitize_display_field(sinks[0]) if sinks else "No disponible"
+    source = _sanitize_display_field(sources[0]) if sources else "No disponible"
+    return "\n".join(
+        (
+            f"Dispositivo: {display_name}",
+            f"Estado: {connection}",
+            f"Batería: {battery}",
+            f"RSSI: {rssi}",
+            f"Perfil: {profile}",
+            f"Códec: {codec}",
+            f"Sink: {sink}",
+            f"Source: {source}",
+        )
+    )
+
+
 def _format_device(device: DeviceInfo) -> str:
     """Convierte un dispositivo en una fila TSV sin identificadores sensibles."""
     display_name = device.alias or device.name or "Dispositivo sin nombre"
@@ -105,7 +175,8 @@ def _format_device(device: DeviceInfo) -> str:
 
 def _sanitize_display_field(value: str) -> str:
     """Sustituye caracteres no imprimibles y limita el campo a 80 caracteres."""
-    return "".join(character if character.isprintable() else "?" for character in value)[:80]
+    sanitized = _ADDRESS.sub("<redacted>", value)
+    return "".join(character if character.isprintable() else "?" for character in sanitized)[:80]
 
 
 def _adapter_path(value: str) -> str:
@@ -122,6 +193,14 @@ def _build_scan_devices_use_case() -> ScanDevicesUseCase:
     from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
 
     return ScanDevicesUseCase(BlueZRepository())
+
+
+def _build_get_device_info_use_case() -> GetDeviceInfoUseCase:
+    """Compose the read-only BlueZ and PipeWire repositories for ``status``."""
+    from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
+    from openbuds.infrastructure.pipewire.pipewire_repository import PipeWireRepository
+
+    return GetDeviceInfoUseCase(BlueZRepository(), PipeWireRepository())
 
 
 def _cmd_version(_context: CliContext) -> int:
@@ -168,6 +247,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=_adapter_path,
         help="Adaptador hciN o /org/bluez/hciN.",
     )
+    status = sub.add_parser(
+        "status", help="Muestra el estado agregado de los dispositivos emparejados."
+    )
+    status.add_argument(
+        "-a",
+        "--adapter",
+        type=_adapter_path,
+        help="Adaptador hciN o /org/bluez/hciN.",
+    )
     sub.add_parser("codec", help="Muestra el códec activo.")
     sub.add_parser("health", help="Ejecuta un Health Check.")
     sub.add_parser("bench", help="Ejecuta un benchmark de enlace.")
@@ -195,6 +283,13 @@ def main(argv: list[str] | None = None) -> int:
                 scan_devices_use_case=_build_scan_devices_use_case(),
             )
             return _cmd_devices(context, args)
+        if command == "status":
+            context = CliContext(
+                config=config,
+                scan_devices_use_case=_build_scan_devices_use_case(),
+                get_device_info_use_case=_build_get_device_info_use_case(),
+            )
+            return _cmd_status(context, args)
         context = CliContext(config=config)
         handler = _cmd_doctor if command == "doctor" else _cmd_config
         return handler(context)

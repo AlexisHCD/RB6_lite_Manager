@@ -10,9 +10,17 @@ import pytest
 
 import openbuds.cli.main as cli
 from openbuds import __version__
+from openbuds.application.get_device_info import DeviceAggregate
 from openbuds.core.config import CONFIG_FILE, default_config
 from openbuds.core.errors import ConfigError, OpenBudsError
-from openbuds.domain.models import SystemInfo
+from openbuds.domain.enums import (
+    AddressType,
+    BluetoothProfile,
+    CodecType,
+    ConnectionState,
+    DeviceIcon,
+)
+from openbuds.domain.models import BluetoothAudioNode, CodecInfo, DeviceInfo, SystemInfo
 
 
 def _system_info(supported: bool = True) -> SystemInfo:
@@ -167,3 +175,132 @@ def test_future_command_returns_two_with_real_milestone(
     error = capsys.readouterr().err
     assert milestone in error
     assert "no está implementado" in error
+
+
+def _status_device() -> DeviceInfo:
+    return DeviceInfo(
+        object_path="/org/bluez/hci0/dev_00_11_22_33_44_55",
+        address="00:11:22:33:44:55",
+        name="Buds",
+        alias="Buds",
+        icon=DeviceIcon.UNKNOWN,
+        address_type=AddressType.UNKNOWN,
+        paired=True,
+        connected=True,
+        trusted=False,
+        blocked=False,
+        services_resolved=False,
+        connection_state=ConnectionState.CONNECTED,
+    )
+
+
+class _StatusScan:
+    def __init__(self, devices: list[DeviceInfo] | Exception) -> None:
+        self.devices = devices
+
+    def execute(self, _request: object) -> list[DeviceInfo]:
+        if isinstance(self.devices, Exception):
+            raise self.devices
+        return self.devices
+
+
+class _StatusInfo:
+    def __init__(self, aggregate: DeviceAggregate | Exception) -> None:
+        self.aggregate = aggregate
+
+    def execute(self, _path: str) -> DeviceAggregate | None:
+        if isinstance(self.aggregate, Exception):
+            raise self.aggregate
+        return self.aggregate
+
+
+def _status_aggregate() -> DeviceAggregate:
+    return DeviceAggregate(
+        device=_status_device(),
+        battery=None,
+        rssi=None,
+        codec=CodecInfo(CodecType.SBC, BluetoothProfile.A2DP),
+        audio_nodes=(
+            BluetoothAudioNode(
+                "bluez_output.00_11_22_33_44_55.1", "Audio/Sink", "a2dp-sink", "sbc", ""
+            ),
+        ),
+    )
+
+
+def _run_status(
+    monkeypatch: pytest.MonkeyPatch,
+    scan: _StatusScan,
+    info: _StatusInfo,
+    capsys: pytest.CaptureFixture[str],
+) -> tuple[int, str, str]:
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    monkeypatch.setattr(cli._LOGGER, "error", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_build_scan_devices_use_case", lambda: scan)
+    monkeypatch.setattr(cli, "_build_get_device_info_use_case", lambda: info)
+    result = cli.main(["status"])
+    captured = capsys.readouterr()
+    return result, captured.out, captured.err
+
+
+def test_status_no_paired_devices(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, output, _ = _run_status(
+        monkeypatch, _StatusScan([]), _StatusInfo(_status_aggregate()), capsys
+    )
+
+    assert result == 0
+    assert output == "No se encontraron dispositivos emparejados.\n"
+
+
+def test_status_prints_aggregate_without_identifiers(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, output, _ = _run_status(
+        monkeypatch, _StatusScan([_status_device()]), _StatusInfo(_status_aggregate()), capsys
+    )
+
+    assert result == 0
+    assert "Dispositivo: Buds" in output
+    assert "Estado: conectado" in output
+    assert "Perfil: a2dp" in output
+    assert "Códec: sbc (a2dp)" in output
+    assert "Sink: bluez_output.<redacted>.1" in output
+    assert "00:11:22:33:44:55" not in output
+    assert "/org/bluez/" not in output
+
+
+def test_status_hides_unverified_codec_as_unavailable(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    aggregate = DeviceAggregate(
+        device=_status_device(),
+        battery=None,
+        rssi=None,
+        codec=CodecInfo(CodecType.UNKNOWN, BluetoothProfile.UNKNOWN, verified=False),
+        audio_nodes=(),
+    )
+    result, output, _ = _run_status(
+        monkeypatch, _StatusScan([_status_device()]), _StatusInfo(aggregate), capsys
+    )
+
+    assert result == 0
+    assert "Perfil: No disponible" in output
+    assert "Códec: No disponible" in output
+    assert "unknown" not in output
+
+
+def test_status_error_propagates(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, _, error = _run_status(
+        monkeypatch,
+        _StatusScan([_status_device()]),
+        _StatusInfo(OpenBudsError("status failed")),
+        capsys,
+    )
+
+    assert result == 1
+    assert error == "Error: status failed\n"
