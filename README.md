@@ -13,9 +13,10 @@ El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds
 
 ## Estado del proyecto
 
-🔜 **Etapa 1 — Caracterización física pasiva en curso.** Primera evidencia
-pasiva del Redmi Buds 6 Lite real (A2DP/SBC reproduciendo, 2026-08-11) en
-[`docs/research/redmi-buds-6-lite-passive-characterization.md`](docs/research/redmi-buds-6-lite-passive-characterization.md).
+🔜 **Etapa 3 — GUI MVP en curso (Incremento 1 completado).** `openbuds gui`
+lanza la ventana única PySide6 (estado, controles de sesión y diagnóstico
+informativo); funciona con estados reales y sin audífonos. Ver
+[`docs/gui/main-window.md`](docs/gui/main-window.md).
 
 El **backend base de BlueZ**, la base de **inspección PipeWire de solo lectura**,
 la **CI** y la **licencia GPL-3.0-or-later** de la Etapa 0 están **completados** según el
@@ -269,6 +270,7 @@ con 1 si el sistema o el runtime son inválidos.
 .venv/bin/openbuds status         # estado agregado de dispositivos emparejados (batería/RSSI/perfil/códec/sink/source observados; sin identificadores)
 .venv/bin/openbuds watch          # observa en vivo cambios de estado de dispositivos emparejados (solo lectura; Ctrl+C para salir)
 .venv/bin/openbuds connect|disconnect|music|mic [dispositivo]  # sesión: confirmación previa; mic advierte de degradación; perfil runtime no persistente
+.venv/bin/openbuds gui          # lanza la ventana única PySide6 (MVP); requiere display
 .venv/bin/openbuds health        # futuro: Health Check (Etapa 4)
 .venv/bin/openbuds codec         # futuro: muestra el códec activo (Etapa 2, sujeto a evidencia de Etapa 1)
 .venv/bin/openbuds bench         # futuro: benchmark de enlace (posterior)
@@ -293,10 +295,12 @@ mensaje en stderr. Detalles en
 
 ### GUI (PySide6)
 
-La GUI se implementará después de la caracterización física y del backend de
-sesión. El MVP será una sola ventana útil con estado, batería/RSSI opcionales,
-perfil, códec observado, sink/source, modos Música/Micrófono y Diagnóstico. La
-bandeja de GNOME y vistas avanzadas se añadirán después del MVP.
+`openbuds gui` abre el MVP: una sola ventana con estado (batería/RSSI/perfil/
+códec/sink/source o «No disponible»), botones Conectar/Desconectar y modos
+Música/Micrófono con aviso, actualización automática cada 2 s y Diagnóstico
+informativo (remite a `openbuds doctor`; el diagnóstico real es Etapa 4).
+Requiere PySide6 y un display; sin ellos el error es claro. La bandeja de
+GNOME, las notificaciones y las vistas avanzadas se añadirán después del MVP.
 
 ## Desarrollo
 

@@ -136,13 +136,27 @@ los ofrece; ningún cambio persistente.
 
 **Objetivo:** una ventana PySide6 útil antes de añadir vistas secundarias.
 
-- Nombre, estado, batería agregada estándar / RSSI opcionales, perfil, códec o
-  «No disponible»; L/R/estuche solo si una fuente los identifica.
-- Sink/source y selector Música/Micrófono con aviso de pérdida de calidad.
-- Botón Conectar/Desconectar, estado del sistema y acceso a Diagnóstico.
-- Paleta del sistema, accesibilidad y operaciones no bloqueantes.
-- Widgets → ViewModels → casos de uso; sin D-Bus/subprocess en la UI.
-- Bandeja GNOME y notificaciones después del MVP.
+**Incremento 1 completado:** `openbuds gui` lanza la ventana única (import
+lazy; error claro sin PySide6 o sin display). Smoke real verificado con
+`QT_QPA_PLATFORM=offscreen` y repositorios reales sin hardware. Ver
+[`docs/gui/main-window.md`](gui/main-window.md).
+
+- [x] Nombre, estado, batería agregada estándar / RSSI opcionales, perfil,
+  códec o «No disponible» (panel de 8 campos, `QFormLayout`); L/R/estuche solo
+  si una fuente los identifica (sin fuente por ahora).
+- [x] Sink/source y selector Música/Micrófono con aviso de pérdida de calidad
+  (warning HFP antes de confirmar, igual que la CLI).
+- [x] Botón Conectar/Desconectar, estado del sistema (barra con errores
+  sanitizados) y acceso a Diagnóstico (**informativo**: botón remite a
+  `openbuds doctor`; el diagnóstico real es Etapa 4).
+- [x] Paleta del sistema y accesibilidad (`accessibleName`, texto
+  seleccionable).
+- [x] Operaciones no bloqueantes: `DeviceWorker` (QThread) + `QTimer` 2 s;
+  `busy` deshabilita controles.
+- [x] Widgets → ViewModels → casos de uso; sin D-Bus/subprocess en la UI
+  (composición solo en `build_default_view_model`; formatter compartido
+  CLI/GUI con redacción).
+- [ ] Bandeja GNOME y notificaciones después del MVP (post-MVP).
 
 **Salida:** funciona con estados reales y sin audífonos; ausencias no rompen el
 layout; operaciones en curso deshabilitan controles; errores sin datos sensibles.
