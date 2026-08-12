@@ -95,9 +95,13 @@ observado → casos de uso → CLI, sin configuración persistente.
   `api.bluez5.address`→`node.name`→`device.name`).
 - [x] Sink/source activos; códec solo con propiedades validadas (verified;
   `off`→sin códec; transport conservado).
-- [x] CLI `openbuds status` (ver
-  [`docs/cli/status-command.md`](cli/status-command.md)); `watch` sigue [ ]
-  (incremento posterior).
+- [x] CLI `openbuds status` (Incremento 1) y `openbuds watch` (Incremento 2)
+  (ver [`docs/cli/status-command.md`](cli/status-command.md) y
+  [`docs/cli/watch-command.md`](cli/watch-command.md)).
+- [x] `PipeWireRepository.get_default_audio_sink` implementado (solo lectura,
+  vía `wpctl inspect @DEFAULT_AUDIO_SINK@` con `WpctlInspector` inyectable;
+  verificado real: `alsa_output.pci-0000_00_1f.3.analog-stereo`); consumo en
+  `status`/Health posterior.
 - [x] Batería agregada estándar (`Battery1`) en status; L/R/estuche solo si
   existe una fuente identificable (ya documentado en Etapa 1).
 - [ ] Casos de uso Connect, Disconnect, Música (A2DP) y Micrófono (HFP) — sin
