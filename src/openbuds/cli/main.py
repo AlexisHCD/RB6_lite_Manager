@@ -11,6 +11,7 @@ from typing import Final
 
 from openbuds import __version__
 from openbuds.application.get_device_info import DeviceAggregate, GetDeviceInfoUseCase
+from openbuds.application.run_health_check import RunHealthCheckUseCase
 from openbuds.application.scan_devices import ScanDevicesRequest, ScanDevicesUseCase
 from openbuds.application.session_control import (
     ConnectDeviceRequest,
@@ -24,8 +25,8 @@ from openbuds.application.watch_devices import WatchDevicesUseCase
 from openbuds.core.config import CONFIG_FILE, AppConfig, load_config
 from openbuds.core.errors import OpenBudsError
 from openbuds.core.logging_setup import get_logger, setup_logging_from_config
-from openbuds.domain.enums import BluetoothProfile, DeviceChangeKind
-from openbuds.domain.models import DeviceChangeEvent, DeviceInfo
+from openbuds.domain.enums import BluetoothProfile, CheckSeverity, DeviceChangeKind, HealthStatus
+from openbuds.domain.models import CheckResult, DeviceChangeEvent, DeviceInfo
 from openbuds.infrastructure.system import environment_detector
 from openbuds.presentation.formatting import (
     REDACT_ADDRESS,
@@ -47,6 +48,7 @@ _BOOTSTRAP_COMMANDS: Final = frozenset(
         "disconnect",
         "music",
         "mic",
+        "health",
         "gui",
     }
 )
@@ -69,6 +71,7 @@ class CliContext:
     connect_use_case: ConnectDeviceUseCase | None = None
     disconnect_use_case: DisconnectDeviceUseCase | None = None
     set_audio_profile_use_case: SetAudioProfileUseCase | None = None
+    health_check_use_case: RunHealthCheckUseCase | None = None
 
 
 def _cmd_doctor(_context: CliContext) -> int:
@@ -151,6 +154,45 @@ def _cmd_status(context: CliContext, args: argparse.Namespace) -> int:
             print()
         print(_format_status(aggregate))
     return 0
+
+
+def _cmd_health(context: CliContext, _args: argparse.Namespace) -> int:
+    """Print the stable, evidence-labelled read-only Health Check order."""
+    if context.health_check_use_case is None:
+        raise RuntimeError("caso de uso de Health Check no disponible")
+
+    report = context.health_check_use_case.execute()
+    overall_label = {
+        HealthStatus.OK: "OK",
+        HealthStatus.WARNING: "Con advertencias",
+        HealthStatus.ERROR: "Error",
+        HealthStatus.UNKNOWN: "Desconocido",
+    }[report.overall_status]
+    print(f"Estado global: {overall_label}")
+    for check in report.checks:
+        print(_format_health_check(check))
+    if report.recommendations:
+        print("Recomendaciones:")
+        for recommendation in report.recommendations:
+            print(f" - {_sanitize_display_field(recommendation)}")
+    return 0 if report.overall_status in {HealthStatus.OK, HealthStatus.WARNING} else 1
+
+
+def _format_health_check(check: CheckResult) -> str:
+    """Format one Health Check result without exposing dynamic identifiers."""
+    severity = {
+        CheckSeverity.OK: "OK",
+        CheckSeverity.WARNING: "WARN",
+        CheckSeverity.ERROR: "ERROR",
+        CheckSeverity.INFO: "INFO",
+    }[check.severity]
+    prefix = f"[{severity}]".ljust(10)
+    check_id = _sanitize_display_field(check.check_id)
+    label = _sanitize_display_field(check.label)
+    message = _sanitize_display_field(check.message)
+    detail = f" [{_sanitize_display_field(check.detail)}]" if check.detail else ""
+    evidence = _sanitize_display_field(check.evidence.value)
+    return f"{prefix}{check_id} — {label}: {message}{detail} ({evidence})"
 
 
 def _resolve_device(
@@ -399,6 +441,15 @@ def _build_get_device_info_use_case() -> GetDeviceInfoUseCase:
     return GetDeviceInfoUseCase(BlueZRepository(), PipeWireRepository())
 
 
+def _build_health_check_use_case() -> RunHealthCheckUseCase:
+    """Compose the read-only Health Check repositories lazily."""
+    from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
+    from openbuds.infrastructure.diagnostics.health_check_repository import HealthCheckRepository
+    from openbuds.infrastructure.pipewire.pipewire_repository import PipeWireRepository
+
+    return RunHealthCheckUseCase(HealthCheckRepository(BlueZRepository(), PipeWireRepository()))
+
+
 def _build_watch_devices_use_case() -> WatchDevicesUseCase:
     """Compose the read-only BlueZ repository for ``watch``."""
     from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
@@ -437,7 +488,6 @@ def _cmd_future(command: str) -> int:
     """Informa del hito responsable de un comando aún no implementado."""
     milestones = {
         "codec": "Etapa 2 (sujeto a evidencia de la Etapa 1)",
-        "health": "Etapa 4",
         "bench": "una etapa posterior",
     }
     print(
@@ -536,6 +586,12 @@ def main(argv: list[str] | None = None) -> int:
                 get_device_info_use_case=_build_get_device_info_use_case(),
             )
             return _cmd_status(context, args)
+        if command == "health":
+            context = CliContext(
+                config=config,
+                health_check_use_case=_build_health_check_use_case(),
+            )
+            return _cmd_health(context, args)
         if command == "watch":
             context = CliContext(
                 config=config, watch_devices_use_case=_build_watch_devices_use_case()

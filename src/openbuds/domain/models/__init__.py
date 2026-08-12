@@ -10,6 +10,7 @@ Convención: las marcas de tiempo usan ``datetime`` consciente de zona horaria
 
 from __future__ import annotations
 
+from openbuds.domain.enums import EvidenceKind
 from openbuds.domain.models.adapter import AdapterInfo
 from openbuds.domain.models.audio import BluetoothAudioNode
 from openbuds.domain.models.battery import BatteryLevel
@@ -31,6 +32,7 @@ __all__ = [
     "CodecInfo",
     "DeviceInfo",
     "DeviceChangeEvent",
+    "EvidenceKind",
     "HealthReport",
     "RSSIReading",
     "SystemInfo",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from openbuds.domain.enums import CheckSeverity, HealthStatus
+from openbuds.domain.enums import CheckSeverity, EvidenceKind, HealthStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +20,7 @@ class CheckResult:
         detail: Detalle técnico opcional (salida de comando, versión, etc.).
         auto_fix_available: Si existe una reparación automática segura posible.
         auto_fix_id: Identificador de la reparación automática, si procede.
+        evidence: Provenance label for the datum represented by this result.
     """
 
     check_id: str
@@ -29,6 +30,7 @@ class CheckResult:
     detail: str = ""
     auto_fix_available: bool = False
     auto_fix_id: str = ""
+    evidence: EvidenceKind = EvidenceKind.OBSERVED
 
 
 @dataclass(frozen=True, slots=True)

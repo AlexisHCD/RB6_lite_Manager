@@ -112,6 +112,17 @@ class CheckSeverity(StrEnum):
 
 
 @unique
+class EvidenceKind(StrEnum):
+    """Provenance label for each Health Check datum defined by Stage 4."""
+
+    OBSERVED = "observado"
+    INFERRED = "inferido"
+    NOT_AVAILABLE = "no disponible"
+    RECOMMENDATION = "recomendación"
+    SAFE_ACTION = "acción segura disponible"
+
+
+@unique
 class AddressType(StrEnum):
     """Tipo de dirección Bluetooth (``Device1.AddressType``)."""
 

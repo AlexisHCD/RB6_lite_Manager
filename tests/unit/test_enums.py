@@ -10,6 +10,7 @@ from openbuds.domain.enums import (
     ConnectionState,
     DeviceChangeKind,
     DeviceIcon,
+    EvidenceKind,
     HealthStatus,
     ProfileState,
 )
@@ -24,6 +25,7 @@ def test_enums_are_unique() -> None:
         CodecType,
         ConnectionState,
         DeviceIcon,
+        EvidenceKind,
         HealthStatus,
         ProfileState,
     ):
@@ -45,3 +47,13 @@ def test_connection_states() -> None:
 
 def test_device_change_kind_values() -> None:
     assert [kind.value for kind in DeviceChangeKind] == ["added", "updated", "removed"]
+
+
+def test_evidence_kind_values_follow_stage_four_policy() -> None:
+    assert [kind.value for kind in EvidenceKind] == [
+        "observado",
+        "inferido",
+        "no disponible",
+        "recomendación",
+        "acción segura disponible",
+    ]

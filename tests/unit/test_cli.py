@@ -20,16 +20,21 @@ from openbuds.core.errors import ConfigError, OpenBudsError
 from openbuds.domain.enums import (
     AddressType,
     BluetoothProfile,
+    CheckSeverity,
     CodecType,
     ConnectionState,
     DeviceChangeKind,
     DeviceIcon,
+    EvidenceKind,
+    HealthStatus,
 )
 from openbuds.domain.models import (
     BluetoothAudioNode,
+    CheckResult,
     CodecInfo,
     DeviceChangeEvent,
     DeviceInfo,
+    HealthReport,
     SystemInfo,
 )
 
@@ -192,7 +197,6 @@ def test_unexpected_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     ("command", "milestone"),
     [
         ("codec", "Etapa 2 (sujeto a evidencia de la Etapa 1)"),
-        ("health", "Etapa 4"),
         ("bench", "una etapa posterior"),
     ],
 )
@@ -203,6 +207,87 @@ def test_future_command_returns_two_with_real_milestone(
     error = capsys.readouterr().err
     assert milestone in error
     assert "no está implementado" in error
+
+
+class _HealthUseCase:
+    def __init__(self, report: HealthReport | Exception) -> None:
+        self.report = report
+
+    def execute(self) -> HealthReport:
+        if isinstance(self.report, Exception):
+            raise self.report
+        return self.report
+
+
+def _health_report(status: HealthStatus) -> HealthReport:
+    return HealthReport(
+        overall_status=status,
+        checks=(
+            CheckResult(
+                "system.os",
+                "Sistema operativo",
+                CheckSeverity.OK,
+                "Ubuntu 24.04 soportado",
+                evidence=EvidenceKind.OBSERVED,
+            ),
+            CheckResult(
+                "audio.sink_default",
+                "Sink por defecto del sistema",
+                CheckSeverity.WARNING if status is HealthStatus.WARNING else CheckSeverity.ERROR,
+                "sin sink por defecto",
+                detail="bluez_output.00:11:22:33:44:55.1",
+                evidence=EvidenceKind.NOT_AVAILABLE,
+            ),
+        ),
+        recommendations=("Activa Música (A2DP) con openbuds music para mejor calidad",),
+        generated_at="2026-08-11T00:00:00+00:00",
+    )
+
+
+def _run_health(
+    monkeypatch: pytest.MonkeyPatch,
+    use_case: _HealthUseCase,
+) -> int:
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    monkeypatch.setattr(cli._LOGGER, "error", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_build_health_check_use_case", lambda: use_case)
+    return cli.main(["health"])
+
+
+def test_health_prints_evidence_recommendations_and_private_fields(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result = _run_health(monkeypatch, _HealthUseCase(_health_report(HealthStatus.WARNING)))
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert "Estado global: Con advertencias" in output
+    assert "[OK]" in output
+    assert "[WARN]" in output
+    assert "(observado)" in output
+    assert "Recomendaciones:" in output
+    assert "openbuds music" in output
+    assert "00:11:22:33:44:55" not in output
+    assert "/org/bluez/" not in output
+
+
+def test_health_error_returns_one(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result = _run_health(monkeypatch, _HealthUseCase(_health_report(HealthStatus.ERROR)))
+
+    assert result == 1
+    assert "Estado global: Error" in capsys.readouterr().out
+
+
+def test_health_openbuds_error_uses_cli_error_contract(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result = _run_health(monkeypatch, _HealthUseCase(OpenBudsError("health failed")))
+
+    assert result == 1
+    assert capsys.readouterr().err == "Error: health failed\n"
 
 
 def _status_device() -> DeviceInfo:
