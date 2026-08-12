@@ -56,6 +56,21 @@ def _require_qt() -> None:
         raise OpenBudsError("la interfaz gráfica requiere PySide6 instalado") from _QT_IMPORT_ERROR
 
 
+def _xcb_cursor_available() -> bool:
+    """Return whether the ``xcb-cursor`` shared library can be loaded.
+
+    Uses ``ctypes.CDLL`` (dlopen) instead of ``ctypes.util.find_library``:
+    dlopen honors ``LD_LIBRARY_PATH``, which is how the library is provided
+    when it is not installed system-wide (for example, vendored in a
+    user-scoped directory without root access).
+    """
+    try:
+        ctypes.CDLL("libxcb-cursor.so.0")
+    except OSError:
+        return False
+    return True
+
+
 def _display_is_available() -> bool:
     """Return whether Qt can use a display or an explicitly selected test backend."""
     platform = os.environ.get("QT_QPA_PLATFORM", "").casefold()
@@ -64,7 +79,7 @@ def _display_is_available() -> bool:
     if os.environ.get("WAYLAND_DISPLAY"):
         return True
     if os.environ.get("DISPLAY"):
-        return ctypes.util.find_library("xcb-cursor") is not None
+        return _xcb_cursor_available()
     return False
 
 
