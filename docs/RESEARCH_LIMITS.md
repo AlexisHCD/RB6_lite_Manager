@@ -109,7 +109,8 @@ y [org.bluez.Battery.rst](https://github.com/bluez/bluez/blob/master/doc/org.blu
 
 **Estado:** señal primaria y **respaldo por polling implementados y verificados
 (2026-08-10)**; con hardware conectado (2026-08-11) la validación fue de
-**lifecycle A/B**, **no** de un evento físico real.
+**lifecycle A/B** (sesión 1) y de **suscripción correcta con hardware
+conectado** (sesión 2); **ningún evento físico real observado durante `watch`**.
 
 En ciertas situaciones, la señal `PropertiesChanged` de BlueZ puede no llegar.
 Como respaldo, se implementó **polling periódico** de propiedades críticas
@@ -123,12 +124,13 @@ de snapshots; ver [repository-design §6](bluez/repository-design.md#6-subscribe
 solo timer por repositorio y pipeline común señal/poll;
 [signal-lifecycle-design §12](bluez/signal-lifecycle-design.md#12-polling-de-respaldo-implementado-y-verificado-2026-08-10)
 y [repository-design §12](bluez/repository-design.md#12-polling-de-respaldo-del-repositorio-implementado-y-verificado-2026-08-10)).
-La **validación de evento físico real sigue pendiente**: la caracterización
-pasiva 2026-08-11 solo validó el **lifecycle A/B** (subscribe/unsubscribe/close
-+ snapshot A/B) con `Connected=true` coincidente; no se indujeron cambios
-físicos (sin desconexión/reconexión, sin encendido/apagado ni suspensión).
-Todavía **no** se afirma que la señal o el poll capturen transiciones
-`connected`→`disconnected` reales (Etapa 1, estados 4–6). Evidencia en
+La **validación de evento físico real sigue pendiente**: la sesión 1 (pasiva)
+solo validó el **lifecycle A/B** (subscribe/unsubscribe/close + snapshot A/B)
+con `Connected=true` coincidente; en la **sesión 2** (mutaciones controladas)
+`watch` **suscribió correctamente** con hardware conectado, pero **no se
+inducieron cambios durante `watch`** en esa sesión. Todavía **no** se afirma
+que la señal o el poll capturen transiciones `connected`→`disconnected`
+reales (Etapa 1, estados 1/2/6). Evidencia en
 [`research/redmi-buds-6-lite-passive-characterization.md`](research/redmi-buds-6-lite-passive-characterization.md).
 
 Fuente: discusiones de la comunidad; el mecanismo base está en la
@@ -145,7 +147,7 @@ PyGObject/Gio, que es parte del stack GNOME y sí está verificada).
 
 ## 6. Perfil Redmi Buds 6 Lite
 
-**Estado:** descriptivo con **evidencia runtime parcial (2026-08-11)**.
+**Estado:** descriptivo con **evidencia runtime (2026-08-11, dos sesiones)**.
 
 Los datos del perfil `redmi_buds_6_lite.yaml` (versión Bluetooth, códecs,
 capacidades) provienen de **fuentes públicas no oficiales**. Cada campo no
@@ -153,17 +155,29 @@ verificado se marca con `verified: false`. El contrato y el YAML están
 **bloqueados**: no se validarán en campo hasta aprobar la propuesta tipada del
 contrato (ver el gate en [`ROADMAP.md`](ROADMAP.md)).
 
-**Evidencia runtime observada (2026-08-11, pasiva):** perfil activo
-`a2dp-sink` con códec `sbc` (un único nodo `Audio/Sink`, 2 canales / 44100 Hz);
-perfiles ofrecidos por el sistema: `off`, HSP/HFP genérico, HSP/HFP CVSD,
-HSP/HFP mSBC y A2DP Sink SBC. La oferta HSP/HFP es **runtime**, no prueba
-funcional. Siguen pendientes: HFP/micrófono, desconectado estable, RSSI
-positivo, `api.bluez5.transport` con valor y AAC (fuera del alcance aprobado).
-Evidencia en
+**Evidencia runtime (2026-08-11):**
+
+- **Sesión 1 (pasiva):** perfil activo `a2dp-sink` con códec `sbc` (un único
+  nodo `Audio/Sink`, 2 canales / 44100 Hz); perfiles ofrecidos por el sistema:
+  `off`, HSP/HFP genérico, HSP/HFP CVSD, HSP/HFP mSBC y A2DP Sink SBC. La
+  oferta HSP/HFP era **runtime**, sin prueba funcional.
+- **Sesión 2 (mutaciones controladas aprobadas):** **HFP funcional
+  validado** — `mic` aplicó `headset-head-unit-msbc` (el códec HFP ofrecido de
+  mayor calidad) y el perfil quedó activo con códec mSBC y source Bluetooth;
+  `music` restauró A2DP/SBC. La oferta HSP/HFP ya **no es solo runtime**: al
+  menos **HFP + mSBC quedó probado funcionalmente**. El **HSP genérico y CVSD
+  no se probaron funcionalmente**; no se asume su comportamiento.
+
+Siguen pendientes: desconectado estable (estado 1), idle formal (estado 2),
+suspensión/reanudación (estado 6), RSSI positivo, `api.bluez5.transport` con
+valor, AAC (fuera del alcance aprobado) y un evento físico real durante
+`watch`. Evidencia en
 [`research/redmi-buds-6-lite-passive-characterization.md`](research/redmi-buds-6-lite-passive-characterization.md).
 
-**Importante:** el proyecto **nunca** envía comandos al dispositivo para
-"probar" funciones. La validación es **pasiva** (lectura de estado estándar).
+**Importante:** el proyecto **nunca** envía comandos propietarios o
+desconocidos al dispositivo. La validación por defecto es pasiva; las
+mutaciones de la sesión 2 usaron exclusivamente interfaces estándar (BlueZ
+D-Bus, perfil runtime de PipeWire) bajo protocolo aprobado y reversibles.
 
 ---
 

@@ -52,24 +52,31 @@ En cada estado se observarán `Device1`, `Battery1` si aparece, RSSI,
 `ServicesResolved`, nodos de `pw-dump`, `wpctl status`, `wpctl inspect`, perfiles
 ofrecidos, propiedades de códec/transporte si existen, señales y polling.
 
-**Estado de caracterización (2026-08-11):** registro **parcial**. Solo el estado
-3 cuenta con evidencia pasiva; los estados 1, 2, 4, 5 y 6 siguen pendientes.
+**Estado de caracterización (2026-08-11):** registro **parcial**. Con
+evidencia: estado 3 (sesión 1, pasiva) y estados 4 y 5 (sesión 2, mutaciones
+controladas aprobadas). Pendientes: 1, 2 y 6.
 
-- [x] Estado 3 (parcial): **A2DP/SBC reproduciendo** — evidencia pasiva
-  2026-08-11: perfil `a2dp-sink`, códec runtime `sbc`, un único `Audio/Sink`,
+- [x] Estado 3: **A2DP/SBC reproduciendo** — evidencia pasiva 2026-08-11
+  (sesión 1): perfil `a2dp-sink`, códec runtime `sbc`, un único `Audio/Sink`,
   `Battery1` 100 %, perfiles ofrecidos por el sistema (incluida oferta HSP/HFP
-  **sin prueba funcional**), 3 muestras estables. Ver
+  **sin prueba funcional**), 3 muestras estables; reconfirmado en la sesión 2
+  (restauración A2DP/SBC tras `mic`). Ver
   [`docs/research/redmi-buds-6-lite-passive-characterization.md`](research/redmi-buds-6-lite-passive-characterization.md).
 - [ ] Estado 1: emparejados y desconectados (estable bajo protocolo).
 - [ ] Estado 2: conectados sin reproducir (idle formal).
-- [ ] Estado 4: micrófono mediante HFP (funcional).
-- [ ] Estado 5: desconexión y reconexión manuales.
+- [x] Estado 4: **micrófono HFP — funcional**, validado 2026-08-11 (sesión 2,
+  mutaciones controladas aprobadas): `openbuds mic` aplicó HFP con códec
+  **mSBC** (el de mayor calidad de los ofrecidos) y source Bluetooth;
+  `openbuds music` restauró A2DP/SBC.
+- [x] Estado 5: **desconexión/reconexión manuales**, validado 2026-08-11
+  (sesión 2): `openbuds disconnect`/`connect` (org.bluez.Device1) con
+  emparejamiento intacto; sin conexión no se inventan datos («No disponible»).
 - [ ] Estado 6: suspensión y reanudación de Ubuntu.
 
-**La Etapa 1 no está completa:** el gate físico se mantiene para las sesiones
-restantes (protocolo pasivo y política de redacción aprobados antes de cada una).
-La evidencia del estado 3 habilita el trabajo de backend SBC/A2DP de la Etapa 2
-**sin repetir la conexión**; los estados restantes se validarán cuando su
+**La Etapa 1 no está completa:** quedan los estados 1 (desconectado estable),
+2 (idle formal) y 6 (suspensión/reanudación), que **no** se validaron en la
+sesión 2. El gate físico se mantiene para las sesiones restantes (protocolo y
+política de redacción aprobados antes de cada una); se validarán cuando su
 funcionalidad consumidora los requiera, con gate.
 
 **Gate físico:** antes de comenzar se presentará el protocolo exacto, comandos de
@@ -107,14 +114,20 @@ observado → casos de uso → CLI, sin configuración persistente.
 - [x] Casos de uso Connect, Disconnect, Música (A2DP) y Micrófono (HFP)
   (Incremento 3): CLI `connect`/`disconnect`/`music`/`mic` con confirmación
   previa (`-y` para scripting); perfil runtime vía `pw-cli`/`wpctl`
-  (resolución dinámica, nada hardcodeado); pruebas reales de sesión con
-  hardware pendientes de aprobación (ver
-  [`docs/cli/session-commands.md`](cli/session-commands.md)).
+  (resolución dinámica, nada hardcodeado; los ids de objeto de PipeWire
+  cambian entre sesiones y la resolución dinámica funcionó); **validación
+  física completa contra hardware real el 2026-08-11** (ver
+  [`docs/cli/session-commands.md`](cli/session-commands.md) y
+  [`docs/research/redmi-buds-6-lite-passive-characterization.md`](research/redmi-buds-6-lite-passive-characterization.md)).
 
 Connect/Disconnect usan las APIs oficiales BlueZ detrás de interfaces y con
-fakes. La Etapa 2 queda así: **implementación software completa; validación
-física de las mutaciones pendiente** (requiere una reconexión aprobada; antes
-se mostrará método, riesgos y reversibilidad).
+fakes. La Etapa 2 queda así: **implementación software completa + validación
+física completa (2026-08-11, sesión 2)** — `status`, `watch`,
+`connect`/`disconnect`/`music`/`mic` probados contra hardware real; sesión con
+verificación de solo lectura primero y mutaciones controladas ejecutadas solo
+con aprobación (método, riesgos y reversibilidad mostrados antes de cada
+mutación; emparejamiento intacto, cambios runtime reversibles). **Etapa 2
+cerrada.**
 
 **Salida:** estado completo por CLI; errores claros; A2DP/HFP solo si el sistema
 los ofrece; ningún cambio persistente.

@@ -1,10 +1,16 @@
-# Caracterización física pasiva — Redmi Buds 6 Lite
+# Caracterización física — Redmi Buds 6 Lite
 
 > **Registro de evidencia empírica** con el dispositivo real conectado.
-> Método **pasivo**: OpenBuds únicamente leyó; ninguna mutación de OpenBuds.
-> Fecha: **2026-08-11**.
-> Política de redacción: sin MAC, object paths, IDs runtime, payloads crudos,
-> nombres de otros dispositivos ni logs AT vendor.
+> Dos sesiones el **2026-08-11**:
+>
+> - **Sesión 1 (pasiva):** OpenBuds únicamente leyó; ninguna mutación de
+>   OpenBuds (§1–§7).
+> - **Sesión 2 (mutaciones controladas aprobadas):** verificación de solo
+>   lectura primero y después mutaciones controladas bajo protocolo
+>   previamente aprobado por el usuario (§8).
+>
+> Política de redacción (ambas sesiones): sin MAC, object paths, IDs runtime,
+> payloads crudos, nombres de otros dispositivos ni logs AT vendor.
 
 ## 1. Alcance
 
@@ -87,8 +93,9 @@
 - HSP/HFP mSBC
 - `A2DP Sink` (SBC) **activo**
 
-> La oferta de perfiles HSP/HFP es **runtime observada** del sistema; **no** es
-> prueba funcional de HFP.
+> La oferta de perfiles HSP/HFP es **runtime observada** del sistema (sesión 1);
+> **no** es prueba funcional de HFP (la prueba funcional llegó en la sesión 2;
+> ver §8).
 
 ### Estabilidad
 
@@ -122,41 +129,44 @@ dispositivo conectado. Lista funcional:
 
 ## 5. Límites (no probado / pendiente)
 
+Estado al cierre de la **sesión 1 (pasiva)**. Los puntos resueltos en la
+sesión 2 se marcan con **[sesión 2]** (detalle en §8).
+
+- [sesión 2] **HFP / micrófono** (Etapa 1, estado 4): en la sesión 1 solo se
+  observó la oferta de perfiles HSP/HFP, sin prueba funcional.
+- [sesión 2] **Desconexión/reconexión manual** como escenario de Etapa 1
+  (estado 5).
 - **Desconectado estable** bajo el protocolo (Etapa 1, estado 1).
 - **Conectado idle formal** sin reproducir (Etapa 1, estado 2).
-- **HFP / micrófono** (Etapa 1, estado 4): solo se observó la oferta de
-  perfiles HSP/HFP; sin prueba funcional.
-- **Señales por cambio físico real**: la validación de señales/polling fue de
-  **lifecycle**, no de un evento físico.
-- **Desconexión/reconexión manual** como escenario de Etapa 1 (estado 5).
 - **Suspensión/reanudación** de Ubuntu (estado 6).
+- **Señales por cambio físico real**: la validación de señales/polling fue de
+  **lifecycle** (sesión 1) y de suscripción correcta con hardware conectado
+  (sesión 2); en esta sesión no se indujeron cambios durante `watch`.
 - **RSSI positivo**: no disponible en esta sesión.
 - **`api.bluez5.transport` con valor no vacío**: no observado.
 - **AAC**: fuera del alcance aprobado; no probado.
 - **Asociación robusta genérica** `Device1` ↔ nodos PipeWire: sin validar.
 
-La Etapa 1 **no está completa**: solo el estado 3 (A2DP/SBC reproduciendo)
-cuenta con evidencia parcial.
+La Etapa 1 **no está completa**: los estados 3 (sesión 1), 4 y 5 (sesión 2)
+cuentan con evidencia; los estados 1, 2 y 6 siguen pendientes.
 
 ## 6. Sesiones adicionales (diferidas)
 
-La evidencia del estado 3 (A2DP/SBC reproduciendo) es **suficiente** para
+La evidencia del estado 3 (A2DP/SBC reproduciendo) fue **suficiente** para
 continuar el desarrollo de Etapa 2 — detección, estado agregado, asociación
-sink y reporte de A2DP/SBC — **sin reconectar** el dispositivo. La Etapa 1
-**no está completa**: los estados restantes siguen **pendientes / diferidos**.
+sink y reporte de A2DP/SBC. La **sesión 2** validó además los estados 4 y 5 y
+la Etapa 2 completa contra hardware real. La Etapa 1 **no está completa**: los
+estados 1, 2 y 6 siguen **pendientes / diferidos**.
 
 Estas sesiones se difieren y solo se harán cuando una capacidad avanzada las
-requiera (con aprobación y método pasivo): HFP/mic, transiciones/señales,
-suspensión, etc.
+requiera (con aprobación):
 
 1. Emparejados y desconectados (estado estable bajo protocolo).
 2. Conectados sin reproducir (idle formal).
-3. Micrófono HFP (validación funcional; requiere escenario aprobado).
-4. Desconexión y reconexión manuales.
-5. Suspensión y reanudación de Ubuntu.
-6. Observación de señales ante cambios físicos reales.
-7. RSSI positivo, si el sistema lo expone.
-8. `api.bluez5.transport` con valor no vacío, si el sistema lo expone.
+3. Suspensión y reanudación de Ubuntu.
+4. Observación de señales ante cambios físicos reales.
+5. RSSI positivo, si el sistema lo expone.
+6. `api.bluez5.transport` con valor no vacío, si el sistema lo expone.
 
 ## 7. Fuentes oficiales
 
@@ -169,3 +179,71 @@ suspensión, etc.
 
 > Las fuentes oficiales contextualizan las propiedades observadas; la evidencia
 > local de este registro (2026-08-11) es el dato fechado que prevalece.
+
+## 8. Sesión 2 (2026-08-11) — validación de Etapa 2 con mutaciones controladas
+
+> **Método:** verificación de solo lectura y estado inicial primero; después,
+> mutaciones controladas (`connect`/`disconnect`/`music`/`mic` de OpenBuds)
+> ejecutadas **exclusivamente bajo protocolo previamente aprobado por el
+> usuario**. Ninguna mutación se ejecutó sin aprobación. La suite de gates
+> completa pasó en verde antes de la sesión. Política de redacción idéntica a
+> la sesión 1.
+>
+> Distinción metodológica: **sesión 1 = pasiva** (solo lectura); **sesión 2 =
+> mutaciones controladas aprobadas** (interfaces estándar BlueZ D-Bus y perfil
+> runtime de PipeWire; sin comandos propietarios).
+
+**Objetivo:** validar físicamente la Etapa 2 (status, watch,
+connect/disconnect/music/mic) y completar los estados 4 (HFP/mic) y 5
+(desconexión/reconexión) de Etapa 1.
+
+**Estado inicial:** conectado (el usuario reconectó manualmente, sin cambios de
+sistema); `Battery1` 100 %; perfil `a2dp-sink`; códec `sbc`; RSSI no disponible;
+transport vacío; perfiles ofrecidos (`pw-cli EnumProfile`): `off`,
+`headset-head-unit`, `a2dp-sink`, `headset-head-unit-cvsd`,
+`headset-head-unit-msbc`.
+
+### Resolución dinámica de objetos PipeWire (hallazgo)
+
+Los ids de objeto de PipeWire **cambian entre sesiones**; no son estables. La
+resolución dinámica por `pw-dump`/`pw-cli` fue **necesaria y funcionó** (nada
+hardcodeado). No se documentan números concretos (política de redacción).
+
+### Prueba 1 — Estado 5: desconexión/reconexión (`disconnect`/`connect`)
+
+- `openbuds disconnect` (org.bluez.Device1.Disconnect): exit 0; BlueZ
+  `Connected=no`, `Paired=yes` (emparejamiento intacto); `openbuds status`
+  reporta «emparejado» y batería/RSSI/perfil/códec/sink/source **«No
+  disponible»** (correcto: no se inventan datos sin conexión).
+- `openbuds connect` (org.bluez.Device1.Connect): exit 0; BlueZ
+  `Connected=yes`; batería 100 %; `status` restaura perfil `a2dp` / códec
+  `sbc`.
+
+### Prueba 2 — Estado 4: micrófono HFP (`mic`/`music`)
+
+- `openbuds mic`: exit 0; muestra la advertencia de degradación **antes** de
+  aplicar; perfil HFP activo con códec **mSBC** (el caso de uso priorizó
+  `headset-head-unit-msbc`, el códec HFP ofrecido de mayor calidad; PipeWire
+  reporta en los nodos profile `headset-head-unit` + codec `msbc`); aparece el
+  source Bluetooth; `status` → perfil `hfp`, códec `msbc (hfp)`, Source
+  visible.
+- `openbuds music`: exit 0; restaura perfil `a2dp-sink` + códec `sbc`; el
+  source desaparece; `status` → `a2dp`/`sbc`, Source «No disponible».
+
+### `watch` en esta sesión
+
+La suscripción lifecycle ya estaba validada (sesión 1). Con hardware
+conectado, `watch` **suscribe correctamente**; en esta sesión **no se
+inducieron cambios durante `watch`**, por lo que **no** se afirma un evento
+físico observado en vivo.
+
+### Resultado y estado final
+
+- Validación de Etapa 2 **completa**: `status` (Incremento 1), `watch`
+  (Incremento 2) y `connect`/`disconnect`/`music`/`mic` (Incremento 3)
+  probados contra hardware real con éxito.
+- El dispositivo quedó en **A2DP** (estado óptimo); batería 100 % al cierre.
+- RSSI y `api.bluez5.transport` siguen **no disponibles** — consistente con la
+  sesión 1.
+- Emparejamiento intacto durante toda la sesión: solo se mutó estado de
+  conexión y perfil runtime, ambos reversibles.
