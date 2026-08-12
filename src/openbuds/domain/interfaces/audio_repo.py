@@ -6,7 +6,7 @@ y ``openbuds.infrastructure.wireplumber.wpctl_adapter``.
 
 from __future__ import annotations
 
-from openbuds.domain.models import CodecInfo
+from openbuds.domain.models import BluetoothAudioNode, CodecInfo
 
 
 class IAudioRepository:
@@ -31,13 +31,16 @@ class IAudioRepository:
         """
         raise NotImplementedError
 
-    def list_bluetooth_audio_nodes(self) -> list[dict[str, str]]:
+    def list_bluetooth_audio_nodes(self) -> list[BluetoothAudioNode]:
         """Devuelve los nodos de audio Bluetooth (sinks/sources) registrados.
 
-        Cada nodo se devuelve como un diccionario con propiedades clave:
-        ``node.name``, ``media.class``, ``device.profile``, etc. Se mantiene
-        como dict genérico porque el esquema de propiedades PipeWire es abierto.
+        Las propiedades runtime se conservan como valores observados en el
+        modelo tipado, sin inferir capacidades.
         """
+        raise NotImplementedError
+
+    def list_device_audio_nodes(self, device_address: str) -> list[BluetoothAudioNode]:
+        """Devuelve los nodos Bluetooth asociados a una dirección de dispositivo."""
         raise NotImplementedError
 
     def get_default_audio_sink(self) -> str | None:

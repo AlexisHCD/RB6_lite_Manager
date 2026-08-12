@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 
 from openbuds.core.errors import PipeWireParseError, PipeWireUnavailableError
+from openbuds.domain.enums import BluetoothProfile, CodecType
+from openbuds.domain.models import BluetoothAudioNode
 from openbuds.infrastructure.pipewire import pipewire_repository as repository_module
 from openbuds.infrastructure.pipewire.pipewire_repository import PipeWireRepository
 
@@ -43,7 +45,9 @@ def _node(node_id: int, node_name: str, media_class: str = "Audio/Sink") -> dict
             "props": {
                 "media.class": media_class,
                 "node.name": node_name,
-                "device.profile": "a2dp-sink",
+                "api.bluez5.profile": "a2dp-sink",
+                "api.bluez5.codec": "sbc",
+                "api.bluez5.address": "00:11:22:33:44:55",
                 "enabled": True,
             }
         },
@@ -67,20 +71,8 @@ def test_list_nodes_uses_injected_falsy_runner_and_normalizes_payload() -> None:
     result = PipeWireRepository(runner).list_bluetooth_audio_nodes()
 
     assert result == [
-        {
-            "object.id": "3",
-            "media.class": "Audio/Source",
-            "node.name": "bluez_input.AA",
-            "device.profile": "a2dp-sink",
-            "enabled": "true",
-        },
-        {
-            "object.id": "7",
-            "media.class": "Audio/Sink",
-            "node.name": "bluez_output.AA",
-            "device.profile": "a2dp-sink",
-            "enabled": "true",
-        },
+        BluetoothAudioNode("bluez_input.AA", "Audio/Source", "a2dp-sink", "sbc", None),
+        BluetoothAudioNode("bluez_output.AA", "Audio/Sink", "a2dp-sink", "sbc", None),
     ]
     assert runner.dump_calls == 1
 
@@ -103,7 +95,7 @@ def test_default_runner_is_created_once_and_used(monkeypatch: pytest.MonkeyPatch
     assert runner.dump_calls == 1
 
 
-def test_list_nodes_dumps_fresh_data_without_cache_and_returns_independent_dicts() -> None:
+def test_list_nodes_dumps_fresh_data_without_cache() -> None:
     runner = FakeRunner(
         [
             _payload(_node(1, "bluez_output.FIRST")),
@@ -113,19 +105,11 @@ def test_list_nodes_dumps_fresh_data_without_cache_and_returns_independent_dicts
     repository = PipeWireRepository(runner)
 
     first = repository.list_bluetooth_audio_nodes()
-    first[0]["mutated"] = "only-first"
     second = repository.list_bluetooth_audio_nodes()
 
-    assert first[0]["node.name"] == "bluez_output.FIRST"
-    assert "mutated" not in second[0]
+    assert first[0].node_name == "bluez_output.FIRST"
     assert second == [
-        {
-            "object.id": "2",
-            "media.class": "Audio/Sink",
-            "node.name": "bluez_output.SECOND",
-            "device.profile": "a2dp-sink",
-            "enabled": "true",
-        }
+        BluetoothAudioNode("bluez_output.SECOND", "Audio/Sink", "a2dp-sink", "sbc", None)
     ]
     assert runner.dump_calls == 2
 
@@ -157,13 +141,17 @@ def test_runner_unavailable_error_is_propagated_identically() -> None:
     assert raised.value.__cause__ is error.__cause__
 
 
-@pytest.mark.parametrize(
-    "query",
-    [
-        lambda repository: repository.get_active_codec("AA:BB:CC:DD:EE:FF"),
-        lambda repository: repository.get_default_audio_sink(),
-    ],
-)
-def test_unimplemented_queries_remain_explicit(query: Any) -> None:
+def test_default_sink_remains_explicit() -> None:
     with pytest.raises(NotImplementedError):
-        query(PipeWireRepository(FakeRunner([])))
+        PipeWireRepository(FakeRunner([])).get_default_audio_sink()
+
+
+def test_active_codec_maps_observed_profile_and_codec() -> None:
+    repository = PipeWireRepository(FakeRunner([_payload(_node(1, "bluez_output.X"))]))
+
+    result = repository.get_active_codec("00_11_22_33_44_55")
+
+    assert result is not None
+    assert result.codec is CodecType.SBC
+    assert result.profile is BluetoothProfile.A2DP
+    assert result.verified is True

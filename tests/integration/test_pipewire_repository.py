@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+from openbuds.domain.models import BluetoothAudioNode
 from openbuds.infrastructure.pipewire.pipewire_repository import PipeWireRepository
 
 
@@ -18,9 +19,4 @@ def test_real_pipewire_repository_lists_nodes_without_assuming_devices() -> None
     nodes = PipeWireRepository().list_bluetooth_audio_nodes()
 
     assert isinstance(nodes, list)
-    assert all(isinstance(node, dict) for node in nodes)
-    assert all(
-        isinstance(key, str) and isinstance(value, str)
-        for node in nodes
-        for key, value in node.items()
-    )
+    assert all(isinstance(node, BluetoothAudioNode) for node in nodes)
