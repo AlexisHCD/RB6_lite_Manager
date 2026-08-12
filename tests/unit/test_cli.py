@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
@@ -18,9 +20,16 @@ from openbuds.domain.enums import (
     BluetoothProfile,
     CodecType,
     ConnectionState,
+    DeviceChangeKind,
     DeviceIcon,
 )
-from openbuds.domain.models import BluetoothAudioNode, CodecInfo, DeviceInfo, SystemInfo
+from openbuds.domain.models import (
+    BluetoothAudioNode,
+    CodecInfo,
+    DeviceChangeEvent,
+    DeviceInfo,
+    SystemInfo,
+)
 
 
 def _system_info(supported: bool = True) -> SystemInfo:
@@ -304,3 +313,86 @@ def test_status_error_propagates(
 
     assert result == 1
     assert error == "Error: status failed\n"
+
+
+class _WatchUseCase:
+    def __init__(self, stop: threading.Event, emit: bool = True) -> None:
+        self.stop = stop
+        self.unsubscribed = False
+        self.emit = emit
+
+    def subscribe(self, callback: object) -> object:
+        if not self.emit:
+            return lambda: setattr(self, "unsubscribed", True)
+
+        def notify() -> None:
+            time.sleep(0.05)
+            assert callable(callback)
+            current = replace(
+                _status_device(), connected=True, connection_state=ConnectionState.CONNECTED
+            )
+            previous = replace(
+                _status_device(),
+                paired=False,
+                connected=False,
+                connection_state=ConnectionState.DISCONNECTED,
+            )
+            callback(DeviceChangeEvent(DeviceChangeKind.UPDATED, current, previous))
+            self.stop.set()
+
+        threading.Thread(target=notify, daemon=True).start()
+
+        def unsubscribe() -> None:
+            self.unsubscribed = True
+
+        return unsubscribe
+
+
+def test_watch_prints_changes_and_unsubscribes(capsys: pytest.CaptureFixture[str]) -> None:
+    stop = threading.Event()
+    use_case = _WatchUseCase(stop)
+    context = cli.CliContext(config=default_config(), watch_devices_use_case=use_case)  # type: ignore[arg-type]
+    args = cli.build_parser().parse_args(["watch"])
+
+    result = cli._cmd_watch(context, args, stop=stop)
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert "[cambio]" in output
+    assert "conectado" in output
+    assert "(conexión: desconectado → conectado)" in output
+    assert use_case.unsubscribed is True
+    assert "00:11:22:33:44:55" not in output
+    assert "/org/bluez/" not in output
+
+
+def test_watch_stop_event_terminates_without_events(capsys: pytest.CaptureFixture[str]) -> None:
+    stop = threading.Event()
+    stop.set()
+    use_case = _WatchUseCase(stop, emit=False)
+    context = cli.CliContext(config=default_config(), watch_devices_use_case=use_case)  # type: ignore[arg-type]
+    args = cli.build_parser().parse_args(["watch"])
+
+    result = cli._cmd_watch(context, args, stop=stop)
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert "Observando cambios" in output
+    assert "Watch finalizado." in output
+    assert use_case.unsubscribed is True
+
+
+def test_watch_error_propagates(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    monkeypatch.setattr(cli._LOGGER, "error", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        cli,
+        "_build_watch_devices_use_case",
+        lambda: (_ for _ in ()).throw(OpenBudsError("watch failed")),
+    )
+
+    assert cli.main(["watch"]) == 1
+    assert capsys.readouterr().err == "Error: watch failed\n"

@@ -5,21 +5,23 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import threading
 from dataclasses import dataclass
 from typing import Final
 
 from openbuds import __version__
 from openbuds.application.get_device_info import DeviceAggregate, GetDeviceInfoUseCase
 from openbuds.application.scan_devices import ScanDevicesRequest, ScanDevicesUseCase
+from openbuds.application.watch_devices import WatchDevicesUseCase
 from openbuds.core.config import CONFIG_FILE, AppConfig, load_config
 from openbuds.core.errors import OpenBudsError
 from openbuds.core.logging_setup import get_logger, setup_logging_from_config
-from openbuds.domain.enums import ConnectionState
-from openbuds.domain.models import DeviceInfo
+from openbuds.domain.enums import ConnectionState, DeviceChangeKind
+from openbuds.domain.models import DeviceChangeEvent, DeviceInfo
 from openbuds.infrastructure.system import environment_detector
 
 _LOGGER = get_logger(__name__)
-_BOOTSTRAP_COMMANDS: Final = frozenset({"doctor", "config", "devices", "status"})
+_BOOTSTRAP_COMMANDS: Final = frozenset({"doctor", "config", "devices", "status", "watch"})
 _ADAPTER_NAME = re.compile(r"hci[0-9]+")
 _ADDRESS = re.compile(r"[0-9A-Fa-f]{2}(?:[:_. ]?[0-9A-Fa-f]{2}){5}")
 
@@ -31,6 +33,7 @@ class CliContext:
     config: AppConfig | None = None
     scan_devices_use_case: ScanDevicesUseCase | None = None
     get_device_info_use_case: GetDeviceInfoUseCase | None = None
+    watch_devices_use_case: WatchDevicesUseCase | None = None
 
 
 def _cmd_doctor(_context: CliContext) -> int:
@@ -106,6 +109,65 @@ def _cmd_status(context: CliContext, args: argparse.Namespace) -> int:
             print()
         print(_format_status(aggregate))
     return 0
+
+
+def _cmd_watch(
+    context: CliContext,
+    args: argparse.Namespace,
+    stop: threading.Event | None = None,
+) -> int:
+    """Observe read-only Bluetooth device changes until interrupted."""
+    if context.watch_devices_use_case is None:
+        raise RuntimeError("caso de uso de watch no disponible")
+    stop_event = stop if stop is not None else threading.Event()
+
+    def _on_change(event: DeviceChangeEvent) -> None:
+        if args.adapter is not None:
+            device = event.current if event.current is not None else event.previous
+            if device is None or device.adapter_path != args.adapter:
+                return
+        print(_format_watch_event(event), flush=True)
+
+    unsubscribe = context.watch_devices_use_case.subscribe(_on_change)
+    print("Observando cambios de dispositivos... (Ctrl+C para salir)", flush=True)
+    try:
+        while not stop_event.wait(0.2):
+            pass
+    except KeyboardInterrupt:
+        pass
+    finally:
+        unsubscribe()
+    print("Watch finalizado.", flush=True)
+    return 0
+
+
+def _device_connection_status(device: DeviceInfo) -> str:
+    """Return the privacy-safe connection status used by status and watch."""
+    if device.connected:
+        return "conectado"
+    if device.paired:
+        return "emparejado"
+    return "desconectado"
+
+
+def _format_watch_event(event: DeviceChangeEvent) -> str:
+    """Format a device event without MAC addresses or object paths."""
+    device = event.current if event.current is not None else event.previous
+    assert device is not None
+    name = _sanitize_display_field(device.alias or device.name or "Dispositivo sin nombre")
+    if event.kind is DeviceChangeKind.ADDED:
+        return f"[apareció] {name}: {_device_connection_status(device)}"
+    if event.kind is DeviceChangeKind.REMOVED:
+        return f"[desapareció] {name}"
+
+    status = _device_connection_status(device)
+    connection_change = ""
+    if event.previous is not None and event.current is not None:
+        previous_status = _device_connection_status(event.previous)
+        current_status = _device_connection_status(event.current)
+        if event.current.connected != event.previous.connected:
+            connection_change = f" (conexión: {previous_status} → {current_status})"
+    return f"[cambio] {name}: {status}{connection_change}"
 
 
 def _format_status(aggregate: DeviceAggregate) -> str:
@@ -203,6 +265,13 @@ def _build_get_device_info_use_case() -> GetDeviceInfoUseCase:
     return GetDeviceInfoUseCase(BlueZRepository(), PipeWireRepository())
 
 
+def _build_watch_devices_use_case() -> WatchDevicesUseCase:
+    """Compose the read-only BlueZ repository for ``watch``."""
+    from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
+
+    return WatchDevicesUseCase(BlueZRepository())
+
+
 def _cmd_version(_context: CliContext) -> int:
     """Muestra la versión sin cargar configuración ni inicializar logging."""
     print(f"OpenBuds Manager {__version__}")
@@ -256,6 +325,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=_adapter_path,
         help="Adaptador hciN o /org/bluez/hciN.",
     )
+    watch = sub.add_parser(
+        "watch", help="Observa en vivo los cambios de estado de los dispositivos emparejados."
+    )
+    watch.add_argument(
+        "-a",
+        "--adapter",
+        type=_adapter_path,
+        help="Adaptador hciN o /org/bluez/hciN.",
+    )
     sub.add_parser("codec", help="Muestra el códec activo.")
     sub.add_parser("health", help="Ejecuta un Health Check.")
     sub.add_parser("bench", help="Ejecuta un benchmark de enlace.")
@@ -290,6 +368,11 @@ def main(argv: list[str] | None = None) -> int:
                 get_device_info_use_case=_build_get_device_info_use_case(),
             )
             return _cmd_status(context, args)
+        if command == "watch":
+            context = CliContext(
+                config=config, watch_devices_use_case=_build_watch_devices_use_case()
+            )
+            return _cmd_watch(context, args)
         context = CliContext(config=config)
         handler = _cmd_doctor if command == "doctor" else _cmd_config
         return handler(context)
