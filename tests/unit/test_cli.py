@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 import threading
 import time
+import types
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
@@ -139,6 +141,23 @@ def test_config_error_from_load_is_reported(
 
     assert cli.main(["config"]) == 1
     assert capsys.readouterr().err == "Error: config inválida\n"
+
+
+def test_gui_parser_and_handler_use_lazy_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parser = cli.build_parser()
+    assert parser.parse_args(["gui"]).command == "gui"
+
+    calls: list[str] = []
+    fake_module = types.ModuleType("openbuds.presentation.qt.main_window")
+    fake_module.run_app = lambda: calls.append("run") or 0  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "openbuds.presentation.qt.main_window", fake_module)
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+
+    assert cli.main(["gui"]) == 0
+    assert calls == ["run"]
 
 
 def test_handler_openbuds_error_is_reported(

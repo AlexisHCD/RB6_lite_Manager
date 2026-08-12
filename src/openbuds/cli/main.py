@@ -24,16 +24,34 @@ from openbuds.application.watch_devices import WatchDevicesUseCase
 from openbuds.core.config import CONFIG_FILE, AppConfig, load_config
 from openbuds.core.errors import OpenBudsError
 from openbuds.core.logging_setup import get_logger, setup_logging_from_config
-from openbuds.domain.enums import BluetoothProfile, ConnectionState, DeviceChangeKind
+from openbuds.domain.enums import BluetoothProfile, DeviceChangeKind
 from openbuds.domain.models import DeviceChangeEvent, DeviceInfo
 from openbuds.infrastructure.system import environment_detector
+from openbuds.presentation.formatting import (
+    REDACT_ADDRESS,
+    connection_label,
+    device_display_name,
+    format_aggregate,
+    sanitize_display_field,
+)
 
 _LOGGER = get_logger(__name__)
 _BOOTSTRAP_COMMANDS: Final = frozenset(
-    {"doctor", "config", "devices", "status", "watch", "connect", "disconnect", "music", "mic"}
+    {
+        "doctor",
+        "config",
+        "devices",
+        "status",
+        "watch",
+        "connect",
+        "disconnect",
+        "music",
+        "mic",
+        "gui",
+    }
 )
 _ADAPTER_NAME = re.compile(r"hci[0-9]+")
-_ADDRESS = re.compile(r"[0-9A-Fa-f]{2}(?:[:_. ]?[0-9A-Fa-f]{2}){5}")
+_ADDRESS = REDACT_ADDRESS
 
 
 class _ConfirmationCancelledError(Exception):
@@ -84,6 +102,13 @@ def _cmd_config(context: CliContext) -> int:
     print(f"Funciones experimentales: {'sí' if config.experimental_features else 'no'}")
     print(f"CONFIG_FILE: {CONFIG_FILE}")
     return 0
+
+
+def _cmd_gui(_context: CliContext) -> int:
+    """Launch the Qt GUI; a graphical display is required."""
+    from openbuds.presentation.qt.main_window import run_app
+
+    return run_app()
 
 
 def _cmd_devices(context: CliContext, args: argparse.Namespace) -> int:
@@ -172,7 +197,7 @@ def _confirm(action: str, yes: bool) -> None:
 
 def _device_display_name(device: DeviceInfo) -> str:
     """Return a privacy-safe display name for a device."""
-    return _sanitize_display_field(device.alias or device.name or "Dispositivo sin nombre")
+    return device_display_name(device)
 
 
 def _cmd_connect(context: CliContext, args: argparse.Namespace) -> int:
@@ -300,11 +325,7 @@ def _cmd_watch(
 
 def _device_connection_status(device: DeviceInfo) -> str:
     """Return the privacy-safe connection status used by status and watch."""
-    if device.connected:
-        return "conectado"
-    if device.paired:
-        return "emparejado"
-    return "desconectado"
+    return connection_label(device)
 
 
 def _format_watch_event(event: DeviceChangeEvent) -> str:
@@ -329,62 +350,19 @@ def _format_watch_event(event: DeviceChangeEvent) -> str:
 
 def _format_status(aggregate: DeviceAggregate) -> str:
     """Format an aggregate without displaying identifiers."""
-    device = aggregate.device
-    display_name = _sanitize_display_field(device.alias or device.name or "Dispositivo sin nombre")
-    if device.connected:
-        connection = "conectado"
-    elif device.paired:
-        connection = "emparejado"
-    else:
-        connection = "desconectado"
-    battery = (
-        f"{aggregate.battery.percentage}%"
-        if aggregate.battery is not None and aggregate.battery.percentage is not None
-        else "No disponible"
-    )
-    rssi = (
-        f"{aggregate.rssi.rssi_dbm} dBm"
-        if aggregate.rssi is not None and aggregate.rssi.rssi_dbm is not None
-        else "No disponible"
-    )
-    profile = "No disponible"
-    codec = "No disponible"
-    if aggregate.codec is not None and aggregate.codec.verified:
-        profile = aggregate.codec.profile.value
-        codec = f"{aggregate.codec.codec.value} ({aggregate.codec.profile.value})"
-
-    sinks = [node.node_name for node in aggregate.audio_nodes if node.media_class == "Audio/Sink"]
-    sources = [
-        node.node_name for node in aggregate.audio_nodes if node.media_class == "Audio/Source"
-    ]
-    sink = _sanitize_display_field(sinks[0]) if sinks else "No disponible"
-    source = _sanitize_display_field(sources[0]) if sources else "No disponible"
-    return "\n".join(
-        (
-            f"Dispositivo: {display_name}",
-            f"Estado: {connection}",
-            f"Batería: {battery}",
-            f"RSSI: {rssi}",
-            f"Perfil: {profile}",
-            f"Códec: {codec}",
-            f"Sink: {sink}",
-            f"Source: {source}",
-        )
-    )
+    return format_aggregate(aggregate)
 
 
 def _format_device(device: DeviceInfo) -> str:
     """Convierte un dispositivo en una fila TSV sin identificadores sensibles."""
-    display_name = device.alias or device.name or "Dispositivo sin nombre"
-    connection = (
-        "conectado" if device.connection_state is ConnectionState.CONNECTED else "desconectado"
-    )
+    display_name = device_display_name(device)
+    connection = connection_label(device)
     pairing = "emparejado" if device.paired else "no emparejado"
     adapter_name = device.adapter_path.rsplit("/", 1)[-1]
     adapter = adapter_name if _ADAPTER_NAME.fullmatch(adapter_name) else "desconocido"
     return "\t".join(
         (
-            _sanitize_display_field(display_name),
+            display_name,
             connection,
             pairing,
             _sanitize_display_field(adapter),
@@ -394,8 +372,7 @@ def _format_device(device: DeviceInfo) -> str:
 
 def _sanitize_display_field(value: str) -> str:
     """Sustituye caracteres no imprimibles y limita el campo a 80 caracteres."""
-    sanitized = _ADDRESS.sub("<redacted>", value)
-    return "".join(character if character.isprintable() else "?" for character in sanitized)[:80]
+    return sanitize_display_field(value)
 
 
 def _adapter_path(value: str) -> str:
@@ -480,6 +457,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("doctor", help="Diagnostica sistema, runtime y hardware Bluetooth.")
     sub.add_parser("config", help="Muestra la configuración efectiva.")
+    sub.add_parser("gui", help="Abre la interfaz gráfica; requiere un display.")
     sub.add_parser("version", help="Muestra la versión de OpenBuds Manager.")
     devices = sub.add_parser("devices", help="Lista dispositivos Bluetooth.")
     devices.add_argument(
@@ -581,6 +559,8 @@ def main(argv: list[str] | None = None) -> int:
                 "mic": _cmd_mic,
             }
             return handlers[command](context, args)
+        if command == "gui":
+            return _cmd_gui(CliContext(config=config))
         context = CliContext(config=config)
         handler = _cmd_doctor if command == "doctor" else _cmd_config
         return handler(context)
