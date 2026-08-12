@@ -300,6 +300,13 @@ make test       # pytest (suite completa)
 make test-quick # pytest solo tests unitarios
 ```
 
+**CI:** el workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) ejecuta
+la suite de calidad en **Python 3.12** en push/PR a `main` y por invocación
+manual (`workflow_dispatch`): Ruff check y format, mypy y unit tests
+(`pytest tests/unit -m "not slow"`). No ejecuta integraciones reales ni toca
+hardware o PyGObject/Gio: es una validación unitaria de los gates, no un
+sustituto de la integración local con `/usr/bin/python3`.
+
 Las pruebas unitarias se ejecutan en el venv de desarrollo. Las integraciones
 BlueZ deben ejecutarse con un venv creado desde `/usr/bin/python3`, con acceso a
 PyGObject/Gio, y requieren `OPENBUDS_RUN_INTEGRATION=1`. No se mantienen conteos

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install development tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=8.0" "pytest-cov>=5.0" "ruff>=0.5" "mypy>=1.10"
+
+      - name: Run Ruff check
+        run: python -m ruff check src tests
+
+      - name: Check Ruff formatting
+        run: python -m ruff format --check src tests
+
+      - name: Run mypy
+        run: python -m mypy src
+
+      - name: Run unit tests
+        run: python -m pytest tests/unit -m "not slow"

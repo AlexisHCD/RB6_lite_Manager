@@ -22,7 +22,10 @@ ausentes ni se ejecutan acciones de hardware sin aprobación explícita.
   normativa/técnica y metadatos fuente alineados con las etapas; `MASTER_DOC`
   etiquetado como histórico.
 - [x] Añadir `LICENSE` GPL-3.0-or-later.
-- [ ] Diseñar CI básica para unit tests, Ruff y mypy.
+- [x] Diseñar CI básica para unit tests, Ruff y mypy: workflow GitHub Actions
+  en push/PR a `main` y manual (`workflow_dispatch`), **Python 3.12**, gates
+  unitarios (unit tests + Ruff check/format + mypy) sin hardware ni
+  PyGObject/Gio; ver `.github/workflows/ci.yml`.
 - [ ] Mantener WirePlumber en modo de solo lectura.
 
 **Salida:** unit tests, Ruff y mypy pasan; `doctor` detecta un runtime inválido;
