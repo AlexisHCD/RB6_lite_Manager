@@ -104,12 +104,17 @@ observado → casos de uso → CLI, sin configuración persistente.
   `status`/Health posterior.
 - [x] Batería agregada estándar (`Battery1`) en status; L/R/estuche solo si
   existe una fuente identificable (ya documentado en Etapa 1).
-- [ ] Casos de uso Connect, Disconnect, Música (A2DP) y Micrófono (HFP) — sin
-  cambios.
+- [x] Casos de uso Connect, Disconnect, Música (A2DP) y Micrófono (HFP)
+  (Incremento 3): CLI `connect`/`disconnect`/`music`/`mic` con confirmación
+  previa (`-y` para scripting); perfil runtime vía `pw-cli`/`wpctl`
+  (resolución dinámica, nada hardcodeado); pruebas reales de sesión con
+  hardware pendientes de aprobación (ver
+  [`docs/cli/session-commands.md`](cli/session-commands.md)).
 
-No se hardcodean índices ni nombres de perfiles. Connect/Disconnect usarán APIs
-oficiales BlueZ detrás de interfaces y con fakes. Antes de una prueba real se
-mostrarán método/comando, riesgos y reversibilidad, y se esperará aprobación.
+Connect/Disconnect usan las APIs oficiales BlueZ detrás de interfaces y con
+fakes. La Etapa 2 queda así: **implementación software completa; validación
+física de las mutaciones pendiente** (requiere una reconexión aprobada; antes
+se mostrará método, riesgos y reversibilidad).
 
 **Salida:** estado completo por CLI; errores claros; A2DP/HFP solo si el sistema
 los ofrece; ningún cambio persistente.
