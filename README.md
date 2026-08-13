@@ -32,6 +32,13 @@ identificadores redactados (MAC y object paths → `<redacted>`), solo lectura.
 Ver [`docs/cli/health-command.md`](docs/cli/health-command.md) y
 [`docs/cli/logs-command.md`](docs/cli/logs-command.md).
 
+✅ **Auto-fix de Health disponible (post-Etapa 4).** `openbuds fix <id>`
+repara problemas detectados por el Health Check con **confirmación explícita**
+(`[s/N]`, o `-y` para scripting) y **sin sudo**: `start.audio` inicia las
+unidades de usuario pipewire+wireplumber (reversible) y `profile.a2dp`
+restaura el perfil A2DP runtime; la verificación post-fix re-ejecuta el Health
+Check de forma honesta. Ver [`docs/cli/fix-command.md`](docs/cli/fix-command.md).
+
 La **GUI MVP de la Etapa 3** sigue operativa: `openbuds gui` lanza la ventana
 única PySide6 (estado, controles de sesión y diagnóstico informativo);
 funciona con estados reales y sin audífonos. Ver
@@ -293,6 +300,7 @@ con 1 si el sistema o el runtime son inválidos.
 .venv/bin/openbuds gui          # lanza la ventana única PySide6 (MVP); requiere display
 .venv/bin/openbuds health        # Health Check etiquetado por evidencia; solo lectura
 .venv/bin/openbuds logs          # logs de bluez/wireplumber/pipewire con identificadores redactados; solo lectura
+.venv/bin/openbuds fix <id>      # auto-fix seguro del Health Check: confirmación previa; start.audio y profile.a2dp; sin sudo
 .venv/bin/openbuds codec         # futuro: muestra el códec activo (Etapa 2, sujeto a evidencia de Etapa 1)
 .venv/bin/openbuds bench         # futuro: benchmark de enlace (posterior)
 ```

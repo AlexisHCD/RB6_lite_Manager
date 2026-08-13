@@ -129,15 +129,17 @@ dispositivo conectado. Lista funcional:
 
 ## 5. Límites (no probado / pendiente)
 
-Estado al cierre de la **sesión 1 (pasiva)**. Los puntos resueltos en la
-sesión 2 se marcan con **[sesión 2]** (detalle en §8).
+Estado histórico al cierre de la **sesión 1 (pasiva)**. Los puntos resueltos en
+las sesiones posteriores se marcan con **[sesión 2]** o **[sesión 3]** (detalles
+en §6 y §9).
 
 - [sesión 2] **HFP / micrófono** (Etapa 1, estado 4): en la sesión 1 solo se
   observó la oferta de perfiles HSP/HFP, sin prueba funcional.
 - [sesión 2] **Desconexión/reconexión manual** como escenario de Etapa 1
   (estado 5).
-- **Desconectado estable** bajo el protocolo (Etapa 1, estado 1).
-- **Conectado idle formal** sin reproducir (Etapa 1, estado 2).
+- [sesión 3] **Desconectado estable** bajo el protocolo (Etapa 1, estado 1).
+- [sesión 3] **Conectado sin reproducción dirigida al sink Bluetooth** (Etapa 1,
+  estado 2); no equivale a silencio absoluto de todos los streams.
 - **Suspensión/reanudación** de Ubuntu (estado 6).
 - **Señales por cambio físico real**: la validación de señales/polling fue de
   **lifecycle** (sesión 1) y de suscripción correcta con hardware conectado
@@ -147,28 +149,63 @@ sesión 2 se marcan con **[sesión 2]** (detalle en §8).
 - **AAC**: fuera del alcance aprobado; no probado.
 - **Asociación robusta genérica** `Device1` ↔ nodos PipeWire: sin validar.
 
-La Etapa 1 **no está completa**: los estados 3 (sesión 1), 4 y 5 (sesión 2)
-cuentan con evidencia; los estados 1, 2 y 6 siguen pendientes.
+La Etapa 1 **no está completa**: los estados 1 y 2 (sesión 3), 3 (sesión 1),
+4 y 5 (sesión 2) cuentan con evidencia; el estado 6 sigue pendiente.
 
-## 6. Sesiones adicionales (diferidas)
+## 6. Sesión 3 (2026-08-13) — estados desconectado e idle
 
-La evidencia del estado 3 (A2DP/SBC reproduciendo) fue **suficiente** para
+> **Método:** el usuario conectó manualmente los audífonos y autorizó una
+> captura de solo lectura. No se reprodujo audio mediante OpenBuds ni se
+> cambiaron perfiles, volumen, emparejamiento, configuración o servicios.
+> No se indujo ninguna transición física durante `watch`.
+
+### Estado 1 — emparejados y desconectados
+
+- Antes de conectar: `openbuds devices` mostró el Redmi Buds 6 Lite como
+  `desconectado / emparejado`.
+- Tres muestras de `openbuds status`, separadas por aproximadamente 2 s,
+  mantuvieron `Estado: emparejado` y todos los campos dependientes de conexión
+  como `No disponible`.
+- Resultado: **estable bajo el protocolo**.
+
+### Estado 2 — conectados sin reproducción dirigida al dispositivo
+
+- Pre-flight: servicio Bluetooth activo y adaptador sin bloqueo RF.
+- Tres muestras de `openbuds status`, separadas por aproximadamente 2 s,
+  mantuvieron `conectado`, batería agregada `100 %`, perfil `a2dp`, códec
+  runtime `sbc`, un sink Bluetooth y ningún source Bluetooth.
+- `openbuds health` terminó en `Estado global: OK`; la integración opt-in de
+  solo lectura pasó completa.
+- `pw-dump` mostró el nodo Bluetooth `Audio/Sink` en estado `running` y un
+  `Stream/Output/Audio` del sistema también en `running`. Ese stream no expuso
+  un destino Bluetooth identificable en las propiedades observadas.
+- Resultado: **conectado sin reproducción dirigida al sink Bluetooth**, no
+  silencio absoluto del sistema. La aplicación no inició reproducción ni
+  modificó el perfil.
+
+### Validaciones de software durante la sesión
+
+- Suite de integraciones opt-in, sin mutaciones: pasada completa.
+- No se guardaron MAC, object paths, IDs runtime ni payloads crudos.
+
+## 7. Sesiones adicionales (diferidas)
+
+La evidencia de los estados 1 y 2 (sesión 3), junto con el estado 3 (A2DP/SBC
+reproduciendo), fue **suficiente** para
 continuar el desarrollo de Etapa 2 — detección, estado agregado, asociación
 sink y reporte de A2DP/SBC. La **sesión 2** validó además los estados 4 y 5 y
-la Etapa 2 completa contra hardware real. La Etapa 1 **no está completa**: los
-estados 1, 2 y 6 siguen **pendientes / diferidos**.
+la Etapa 2 completa contra hardware real. La Etapa 1 **no está completa**:
+solo queda pendiente el estado 6.
 
 Estas sesiones se difieren y solo se harán cuando una capacidad avanzada las
 requiera (con aprobación):
 
-1. Emparejados y desconectados (estado estable bajo protocolo).
-2. Conectados sin reproducir (idle formal).
-3. Suspensión y reanudación de Ubuntu.
-4. Observación de señales ante cambios físicos reales.
-5. RSSI positivo, si el sistema lo expone.
-6. `api.bluez5.transport` con valor no vacío, si el sistema lo expone.
+1. Suspensión y reanudación de Ubuntu.
+2. Observación de señales ante cambios físicos reales.
+3. RSSI positivo, si el sistema lo expone.
+4. `api.bluez5.transport` con valor no vacío, si el sistema lo expone.
 
-## 7. Fuentes oficiales
+## 8. Fuentes oficiales
 
 - BlueZ D-Bus Device API:
   <https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/org.bluez.Device.rst>
@@ -178,9 +215,10 @@ requiera (con aprobación):
   <https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/org.bluez.MediaTransport.rst>
 
 > Las fuentes oficiales contextualizan las propiedades observadas; la evidencia
-> local de este registro (2026-08-11) es el dato fechado que prevalece.
+> local de este registro (sesiones 2026-08-11 y 2026-08-13) es el dato fechado
+> que prevalece.
 
-## 8. Sesión 2 (2026-08-11) — validación de Etapa 2 con mutaciones controladas
+## 9. Sesión 2 (2026-08-11) — validación de Etapa 2 con mutaciones controladas
 
 > **Método:** verificación de solo lectura y estado inicial primero; después,
 > mutaciones controladas (`connect`/`disconnect`/`music`/`mic` de OpenBuds)

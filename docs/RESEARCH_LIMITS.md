@@ -108,9 +108,10 @@ y [org.bluez.Battery.rst](https://github.com/bluez/bluez/blob/master/doc/org.blu
 ## 4. Fiabilidad de señales D-Bus
 
 **Estado:** señal primaria y **respaldo por polling implementados y verificados
-(2026-08-10)**; con hardware conectado (2026-08-11) la validación fue de
-**lifecycle A/B** (sesión 1) y de **suscripción correcta con hardware
-conectado** (sesión 2); **ningún evento físico real observado durante `watch`**.
+(2026-08-10)**; con hardware conectado (2026-08-11 y 2026-08-13) se verificaron
+el **lifecycle A/B** (sesión 1), la **suscripción correcta con hardware
+conectado** (sesión 2) y las lecturas estables de la sesión 3; **ningún evento
+físico real fue observado durante `watch`**.
 
 En ciertas situaciones, la señal `PropertiesChanged` de BlueZ puede no llegar.
 Como respaldo, se implementó **polling periódico** de propiedades críticas
@@ -147,7 +148,8 @@ PyGObject/Gio, que es parte del stack GNOME y sí está verificada).
 
 ## 6. Perfil Redmi Buds 6 Lite
 
-**Estado:** descriptivo con **evidencia runtime (2026-08-11, dos sesiones)**.
+**Estado:** descriptivo con **evidencia runtime (2026-08-11, dos sesiones, y
+2026-08-13, sesión 3)**.
 
 Los datos del perfil `redmi_buds_6_lite.yaml` (versión Bluetooth, códecs,
 capacidades) provienen de **fuentes públicas no oficiales**. Cada campo no
@@ -168,10 +170,12 @@ contrato (ver el gate en [`ROADMAP.md`](ROADMAP.md)).
   menos **HFP + mSBC quedó probado funcionalmente**. El **HSP genérico y CVSD
   no se probaron funcionalmente**; no se asume su comportamiento.
 
-Siguen pendientes: desconectado estable (estado 1), idle formal (estado 2),
-suspensión/reanudación (estado 6), RSSI positivo, `api.bluez5.transport` con
+Siguen pendientes: suspensión/reanudación (estado 6), RSSI positivo,
+`api.bluez5.transport` con
 valor, AAC (fuera del alcance aprobado) y un evento físico real durante
-`watch`. Evidencia en
+`watch`. Los estados 1 y 2 quedaron observados en la sesión 2026-08-13; para
+el estado 2 la evidencia es «conectado sin reproducción dirigida al sink
+Bluetooth», no silencio absoluto de todos los streams. Evidencia en
 [`research/redmi-buds-6-lite-passive-characterization.md`](research/redmi-buds-6-lite-passive-characterization.md).
 
 **Importante:** el proyecto **nunca** envía comandos propietarios o

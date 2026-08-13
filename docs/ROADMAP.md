@@ -52,9 +52,10 @@ En cada estado se observarán `Device1`, `Battery1` si aparece, RSSI,
 `ServicesResolved`, nodos de `pw-dump`, `wpctl status`, `wpctl inspect`, perfiles
 ofrecidos, propiedades de códec/transporte si existen, señales y polling.
 
-**Estado de caracterización (2026-08-11):** registro **parcial**. Con
-evidencia: estado 3 (sesión 1, pasiva) y estados 4 y 5 (sesión 2, mutaciones
-controladas aprobadas). Pendientes: 1, 2 y 6.
+**Estado de caracterización (2026-08-13):** registro **parcial**. Con
+evidencia: estados 1 y 2 (sesión 3, solo lectura), estado 3 (sesión 1,
+pasiva) y estados 4 y 5 (sesión 2, mutaciones controladas aprobadas).
+Pendiente: 6.
 
 - [x] Estado 3: **A2DP/SBC reproduciendo** — evidencia pasiva 2026-08-11
   (sesión 1): perfil `a2dp-sink`, códec runtime `sbc`, un único `Audio/Sink`,
@@ -62,8 +63,12 @@ controladas aprobadas). Pendientes: 1, 2 y 6.
   **sin prueba funcional**), 3 muestras estables; reconfirmado en la sesión 2
   (restauración A2DP/SBC tras `mic`). Ver
   [`docs/research/redmi-buds-6-lite-passive-characterization.md`](research/redmi-buds-6-lite-passive-characterization.md).
-- [ ] Estado 1: emparejados y desconectados (estable bajo protocolo).
-- [ ] Estado 2: conectados sin reproducir (idle formal).
+- [x] Estado 1: **emparejados y desconectados**, estable bajo protocolo
+  (sesión 3, 2026-08-13; tres muestras de `openbuds status` separadas por 2 s).
+- [x] Estado 2: **conectados sin reproducción dirigida al dispositivo** (sesión
+  3, 2026-08-13; tres muestras estables en A2DP/SBC, sin micrófono; el stream
+  de sistema observado no expuso destino Bluetooth identificable, por lo que
+  no se afirma silencio absoluto de todo el sistema).
 - [x] Estado 4: **micrófono HFP — funcional**, validado 2026-08-11 (sesión 2,
   mutaciones controladas aprobadas): `openbuds mic` aplicó HFP con códec
   **mSBC** (el de mayor calidad de los ofrecidos) y source Bluetooth;
@@ -73,11 +78,12 @@ controladas aprobadas). Pendientes: 1, 2 y 6.
   emparejamiento intacto; sin conexión no se inventan datos («No disponible»).
 - [ ] Estado 6: suspensión y reanudación de Ubuntu.
 
-**La Etapa 1 no está completa:** quedan los estados 1 (desconectado estable),
-2 (idle formal) y 6 (suspensión/reanudación), que **no** se validaron en la
-sesión 2. El gate físico se mantiene para las sesiones restantes (protocolo y
-política de redacción aprobados antes de cada una); se validarán cuando su
-funcionalidad consumidora los requiera, con gate.
+**La Etapa 1 no está completa:** queda el estado 6 (suspensión/reanudación).
+El estado 2 queda validado con la limitación indicada: se observó conexión
+estable sin reproducción dirigida al sink Bluetooth, pero no se promete
+silencio absoluto de todos los streams de PipeWire. El gate físico se mantiene
+para la sesión restante (protocolo y política de redacción aprobados antes de
+ella); se validará cuando su funcionalidad consumidora lo requiera, con gate.
 
 **Gate físico:** antes de comenzar se presentará el protocolo exacto, comandos de
 solo lectura y política de redacción; se esperará confirmación de que el usuario
@@ -171,6 +177,14 @@ object paths). Ver [`docs/cli/health-command.md`](cli/health-command.md).
 sin hardware: líneas de los 3 servicios con MAC/object paths redactados. Ver
 [`docs/cli/logs-command.md`](cli/logs-command.md).
 
+**Incremento 3 completado (posterior a la Etapa 4):** **auto-fix seguro** —
+`openbuds fix <id> [--yes]` repara problemas del Health Check con confirmación
+explícita: `start.audio` (unidades de usuario pipewire+wireplumber vía
+`systemctl --user`, sin sudo) y `profile.a2dp` (perfil A2DP runtime); ningún
+fix se ejecuta sin confirmación (`[s/N]`/`-y`), verificación post-fix honesta
+con re-Health y salida 1 sin mutar si el fix no aplica. Ver
+[`docs/cli/fix-command.md`](cli/fix-command.md).
+
 - [x] Runtime Python/Gio, BlueZ/D-Bus, PipeWire, WirePlumber y adaptador —
   checks `system.*`, `runtime.gio` y `hardware.adapter` (incremento 1).
 - [x] Dispositivo, perfil, códec, sink/source, micrófono y configuración
@@ -197,10 +211,11 @@ el incremento 1: el Health Check no promete ni estima esas métricas).
 **Etapa 4 cerrada:** incrementos 1 y 2 completados — Health Check con
 evidencia etiquetada y logs redactados, ambos verificados reales sin hardware.
 
-**Diferido/post-MVP (no forma parte del cierre de Etapa 4):** **auto-fix
-seguro** (aplicar recomendaciones automáticamente; requiere la Etapa 5 con
-backup y rollback) y **benchmark de enlace** (`openbuds bench`). No se marcan
-como completados.
+**Diferido/post-MVP (no forma parte del cierre de Etapa 4):** **benchmark de
+enlace** (`openbuds bench`). No se marca como completado. El **auto-fix
+seguro** dejó de estar diferido: quedó **implementado** en el incremento
+posterior a la Etapa 4 (`openbuds fix` con `start.audio` y `profile.a2dp`;
+confirmación explícita y verificación, sin sudo ni unidades de sistema).
 
 **Salida:** informe CLI de solo lectura con los 14 checks en orden fijo y
 cada dato etiquetado por evidencia; exit 0/1 según el estado global; volcado
