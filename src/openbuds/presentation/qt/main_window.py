@@ -35,6 +35,7 @@ try:
 except ImportError as exc:  # pragma: no cover - exercised only without the optional GUI runtime
     _QT_IMPORT_ERROR = exc
 else:
+    from openbuds.presentation.qt.health_dialog import HealthDialog
     from openbuds.presentation.qt.view_models.device_view_model import DeviceViewModel
 
 _FIELD_NAMES = (
@@ -87,6 +88,7 @@ def build_default_view_model() -> DeviceViewModel:
     """Compose the real read-only and approved session use cases for the GUI."""
     _require_qt()
     from openbuds.application.get_device_info import GetDeviceInfoUseCase
+    from openbuds.application.run_health_check import RunHealthCheckUseCase
     from openbuds.application.scan_devices import ScanDevicesUseCase
     from openbuds.application.session_control import (
         ConnectDeviceUseCase,
@@ -94,18 +96,21 @@ def build_default_view_model() -> DeviceViewModel:
         SetAudioProfileUseCase,
     )
     from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
+    from openbuds.infrastructure.diagnostics.health_check_repository import HealthCheckRepository
     from openbuds.infrastructure.pipewire.pipewire_control_repository import (
         PipeWireControlRepository,
     )
     from openbuds.infrastructure.pipewire.pipewire_repository import PipeWireRepository
 
     bluetooth = BlueZRepository()
+    pipewire_repository = PipeWireRepository()
     return DeviceViewModel(
         scan=ScanDevicesUseCase(bluetooth),
-        info=GetDeviceInfoUseCase(bluetooth, PipeWireRepository()),
+        info=GetDeviceInfoUseCase(bluetooth, pipewire_repository),
         connect_uc=ConnectDeviceUseCase(bluetooth),
         disconnect_uc=DisconnectDeviceUseCase(bluetooth),
         profile_uc=SetAudioProfileUseCase(PipeWireControlRepository()),
+        health_uc=RunHealthCheckUseCase(HealthCheckRepository(bluetooth, pipewire_repository)),
     )
 
 
@@ -124,6 +129,9 @@ if _QT_IMPORT_ERROR is None:
 
             self.view_model.state_changed.connect(self._render_state)
             self.view_model.warning.connect(self._show_warning)
+            self.view_model.health_report.connect(self._on_health_report)
+            self.view_model.health_error.connect(self._on_health_error)
+            self._health_dialog: HealthDialog | None = None
             self._refresh_timer = QTimer(self)
             self._refresh_timer.setInterval(2000)
             self._refresh_timer.timeout.connect(self.view_model.refresh)
@@ -259,11 +267,19 @@ if _QT_IMPORT_ERROR is None:
                     cancel_warning()
 
         def _on_diagnostic(self) -> None:
-            QMessageBox.information(
-                self,
-                "Diagnóstico",
-                "Ejecuta openbuds doctor en la terminal",
-            )
+            if self._busy_value():
+                return
+            self._health_dialog = HealthDialog(self)
+            self._health_dialog.show()
+            self.view_model.run_health_check()
+
+        def _on_health_report(self, report: object) -> None:
+            if self._health_dialog is not None:
+                self._health_dialog.show_report(report)  # type: ignore[arg-type]
+
+        def _on_health_error(self, message: str) -> None:
+            if self._health_dialog is not None:
+                self._health_dialog.show_error(message)
 
         def _show_warning(self, message: str) -> None:
             QMessageBox.warning(self, "Advertencia", message)
@@ -271,6 +287,8 @@ if _QT_IMPORT_ERROR is None:
         def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
             """Stop the refresh loop and background worker before closing."""
             self._refresh_timer.stop()
+            if self._health_dialog is not None:
+                self._health_dialog.close()
             self.view_model.close()
             super().closeEvent(event)
 

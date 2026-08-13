@@ -11,6 +11,7 @@ from typing import Literal
 from PySide6.QtCore import Property, QObject, Qt, QThread, Signal, Slot
 
 from openbuds.application.get_device_info import DeviceAggregate, GetDeviceInfoUseCase
+from openbuds.application.run_health_check import RunHealthCheckUseCase
 from openbuds.application.scan_devices import ScanDevicesRequest, ScanDevicesUseCase
 from openbuds.application.session_control import (
     ConnectDeviceRequest,
@@ -22,14 +23,14 @@ from openbuds.application.session_control import (
 )
 from openbuds.core.errors import OpenBudsError
 from openbuds.domain.enums import BluetoothProfile
-from openbuds.domain.models import DeviceInfo
+from openbuds.domain.models import DeviceInfo, HealthReport
 from openbuds.presentation.formatting import aggregate_fields, sanitize_display_field
 
 _NO_DEVICES = "Sin dispositivos emparejados"
 _NO_DATA = "No disponible"
 _MIC_WARNING = "Activar el micrófono Bluetooth (HFP) puede reducir la calidad de reproducción."
 _Action = Literal["connect", "disconnect", "music", "mic"]
-_Operation = Literal["refresh", "connect", "disconnect", "music", "mic"]
+_Operation = Literal["refresh", "connect", "disconnect", "music", "mic", "health"]
 
 
 def _empty_fields() -> dict[str, str]:
@@ -123,6 +124,8 @@ class DeviceViewModel(QObject):
 
     state_changed = Signal()
     warning = Signal(str)
+    health_report = Signal(object)
+    health_error = Signal(str)
 
     def __init__(
         self,
@@ -131,6 +134,7 @@ class DeviceViewModel(QObject):
         connect_uc: ConnectDeviceUseCase,
         disconnect_uc: DisconnectDeviceUseCase,
         profile_uc: SetAudioProfileUseCase,
+        health_uc: RunHealthCheckUseCase | None = None,
     ) -> None:
         super().__init__()
         self._scan = scan
@@ -138,6 +142,7 @@ class DeviceViewModel(QObject):
         self._connect_uc = connect_uc
         self._disconnect_uc = disconnect_uc
         self._profile_uc = profile_uc
+        self._health_uc = health_uc
         self._worker = DeviceWorker()
         self._worker.finished.connect(self._on_worker_finished)
         self._worker.failed.connect(self._on_worker_failed)
@@ -205,6 +210,16 @@ class DeviceViewModel(QObject):
         if self._busy:
             return
         self._begin_task("refresh", self._refresh_task)
+
+    @Slot()
+    def run_health_check(self) -> None:
+        """Run the read-only Health Check without blocking the Qt thread."""
+        if self._busy:
+            return
+        if self._health_uc is None:
+            self._set_health_error("El Health Check no está disponible.")
+            return
+        self._begin_task("health", self._health_uc.execute)
 
     @Slot()
     def connect_device(self) -> None:
@@ -329,14 +344,32 @@ class DeviceViewModel(QObject):
             self._busy = False
             self.state_changed.emit()
             return
+        if operation == "health":
+            if not isinstance(result, HealthReport):
+                self._on_worker_failed("No se pudo interpretar el resultado del Health Check.")
+                return
+            self.health_report.emit(result)
+            self._operation = None
+            self._busy = False
+            self.state_changed.emit()
+            return
         self._queue_refresh_after_action()
 
     @Slot(str)
     def _on_worker_failed(self, message: str) -> None:
+        if self._operation == "health":
+            self._set_health_error(message, update_state=False)
         self._operation = None
         self._error = _safe_error(message)
         self._busy = False
         self.state_changed.emit()
+
+    def _set_health_error(self, message: str, *, update_state: bool = True) -> None:
+        safe_message = _safe_error(message)
+        self._error = safe_message
+        self.health_error.emit(safe_message)
+        if update_state:
+            self.state_changed.emit()
 
     def _apply_refresh(self, result: _RefreshResult) -> None:
         aggregate = result.aggregate

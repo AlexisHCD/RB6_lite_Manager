@@ -147,14 +147,29 @@ lazy; error claro sin PySide6 o sin display). Smoke real verificado con
 `QT_QPA_PLATFORM=offscreen` y repositorios reales sin hardware. Ver
 [`docs/gui/main-window.md`](gui/main-window.md).
 
+**Incremento 2 completado:** Health Check real integrado en la GUI. El botón
+Diagnóstico abre un diálogo no bloqueante, muestra inicialmente «Analizando...»
+y ejecuta `RunHealthCheckUseCase` mediante `DeviceWorker`/`QThread`. El diálogo
+renderiza el `HealthReport` completo en orden, con estado global, severidad,
+identificador, etiqueta, mensaje, detalle cuando existe, evidencia,
+recomendaciones y `[fix: id]` solo como texto. La información se redacta y los
+errores se sanitizan; no se exponen MAC, object paths ni payloads crudos.
+La GUI permanece en modo diagnóstico read-only: no ejecuta auto-fixes, que
+siguen separados en `openbuds fix` desde la CLI.
+
 - [x] Nombre, estado, batería agregada estándar / RSSI opcionales, perfil,
   códec o «No disponible» (panel de 8 campos, `QFormLayout`); L/R/estuche solo
   si una fuente los identifica (sin fuente por ahora).
 - [x] Sink/source y selector Música/Micrófono con aviso de pérdida de calidad
   (warning HFP antes de confirmar, igual que la CLI).
 - [x] Botón Conectar/Desconectar, estado del sistema (barra con errores
-  sanitizados) y acceso a Diagnóstico (**informativo**: botón remite a
-  `openbuds doctor`; el diagnóstico real es Etapa 4).
+  sanitizados) y acceso a Diagnóstico mediante Health Check real de solo
+  lectura en un diálogo no bloqueante; el auto-fix permanece separado en
+  `openbuds fix` CLI.
+- [x] Health Check en GUI: `RunHealthCheckUseCase` inyectado por
+  `build_default_view_model` con `HealthCheckRepository` y repositorios
+  read-only de BlueZ/PipeWire; ejecución en `DeviceWorker`/`QThread`, checks en
+  orden fijo y contenido redactado/seleccionable.
 - [x] Paleta del sistema y accesibilidad (`accessibleName`, texto
   seleccionable).
 - [x] Operaciones no bloqueantes: `DeviceWorker` (QThread) + `QTimer` 2 s;
