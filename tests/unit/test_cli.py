@@ -389,6 +389,29 @@ def test_health_prints_evidence_recommendations_and_private_fields(
     assert "/org/bluez/" not in output
 
 
+def test_health_prints_available_fix_id(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = _health_report(HealthStatus.WARNING)
+    checks = tuple(
+        replace(
+            check,
+            auto_fix_available=True,
+            auto_fix_id="start.audio",
+        )
+        if check.check_id == "audio.sink_default"
+        else check
+        for check in report.checks
+    )
+    result = _run_health(
+        monkeypatch,
+        _HealthUseCase(replace(report, checks=checks)),
+    )
+
+    assert result == 0
+    assert "[fix: start.audio]" in capsys.readouterr().out
+
+
 def test_health_error_returns_one(
     capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -405,6 +428,148 @@ def test_health_openbuds_error_uses_cli_error_contract(
 
     assert result == 1
     assert capsys.readouterr().err == "Error: health failed\n"
+
+
+class _FixHealthUseCase:
+    def __init__(self, reports: list[HealthReport]) -> None:
+        self.reports = reports
+        self.calls = 0
+
+    def execute(self) -> HealthReport:
+        report = self.reports[min(self.calls, len(self.reports) - 1)]
+        self.calls += 1
+        return report
+
+
+class _FixUseCase:
+    def __init__(self) -> None:
+        self.requests: list[object] = []
+
+    def execute(self, request: object) -> str:
+        self.requests.append(request)
+        return "fix applied"
+
+
+class _FixScan:
+    def __init__(self, devices: list[DeviceInfo]) -> None:
+        self.devices = devices
+
+    def execute(self, _request: object) -> list[DeviceInfo]:
+        return self.devices
+
+
+def _fix_report(
+    fix_id: str,
+    *,
+    check_id: str = "audio.sink_default",
+    message: str = "sin sink por defecto",
+) -> HealthReport:
+    return HealthReport(
+        overall_status=HealthStatus.WARNING,
+        checks=(
+            CheckResult(
+                check_id,
+                "Check de audio",
+                CheckSeverity.WARNING,
+                message,
+                auto_fix_available=True,
+                auto_fix_id=fix_id,
+                evidence=EvidenceKind.NOT_AVAILABLE,
+            ),
+        ),
+    )
+
+
+def _run_fix(
+    monkeypatch: pytest.MonkeyPatch,
+    health: _FixHealthUseCase,
+    fix: _FixUseCase,
+    scan: _FixScan,
+    argv: list[str],
+) -> int:
+    monkeypatch.setattr(cli, "load_config", lambda: default_config())
+    monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    monkeypatch.setattr(cli._LOGGER, "error", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(cli, "_build_health_check_use_case", lambda: health)
+    monkeypatch.setattr(cli, "_build_fix_use_case", lambda: fix)
+    monkeypatch.setattr(cli, "_build_scan_devices_use_case", lambda: scan)
+    return cli.main(argv)
+
+
+def test_fix_unknown_or_unavailable_id_returns_one(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fix = _FixUseCase()
+
+    result = _run_fix(
+        monkeypatch,
+        _FixHealthUseCase([_health_report(HealthStatus.OK)]),
+        fix,
+        _FixScan([]),
+        ["fix", "no-existe"],
+    )
+
+    assert result == 1
+    assert "No hay auto-fix disponible ahora: no-existe" in capsys.readouterr().out
+    assert fix.requests == []
+
+
+def test_fix_start_audio_executes_and_rechecks_health(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    health = _FixHealthUseCase(
+        [
+            _fix_report("start.audio"),
+            _fix_report("start.audio", message="sink por defecto disponible"),
+        ]
+    )
+    fix = _FixUseCase()
+    monkeypatch.setattr("builtins.input", lambda _prompt: pytest.fail("input must not be called"))
+
+    result = _run_fix(monkeypatch, health, fix, _FixScan([]), ["fix", "start.audio", "--yes"])
+    output = capsys.readouterr().out
+
+    assert result == 0
+    assert health.calls == 2
+    assert len(fix.requests) == 1
+    assert "Verificación:" in output
+
+
+def test_fix_profile_requires_a_connected_device(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fix = _FixUseCase()
+
+    result = _run_fix(
+        monkeypatch,
+        _FixHealthUseCase([_fix_report("profile.a2dp", check_id="audio.profile")]),
+        fix,
+        _FixScan([_session_device(connected=False)]),
+        ["fix", "profile.a2dp", "--yes"],
+    )
+
+    assert result == 1
+    assert "requiere un dispositivo conectado" in capsys.readouterr().err
+    assert fix.requests == []
+
+
+def test_fix_declining_confirmation_cancels_without_execution(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fix = _FixUseCase()
+    monkeypatch.setattr("builtins.input", lambda _prompt: "n")
+
+    result = _run_fix(
+        monkeypatch,
+        _FixHealthUseCase([_fix_report("start.audio")]),
+        fix,
+        _FixScan([]),
+        ["fix", "start.audio"],
+    )
+
+    assert result == 0
+    assert "Cancelado." in capsys.readouterr().out
+    assert fix.requests == []
 
 
 class _LogsUseCase:

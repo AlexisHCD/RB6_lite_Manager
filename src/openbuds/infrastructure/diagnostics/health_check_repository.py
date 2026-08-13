@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from openbuds.core.errors import BluetoothError, WirePlumberUnavailableError
 from openbuds.domain.enums import (
+    AutoFixId,
     BluetoothProfile,
     CheckSeverity,
     CodecType,
@@ -389,6 +390,7 @@ class HealthCheckRepository(IDiagnosticsRepository):
                     "Perfil de audio activo",
                     CheckSeverity.WARNING,
                     "HFP activo: calidad de reproducción degradada",
+                    auto_fix_id=AutoFixId.PROFILE_A2DP,
                 )
             return self._result(
                 "audio.profile",
@@ -445,6 +447,7 @@ class HealthCheckRepository(IDiagnosticsRepository):
                         CheckSeverity.INFO,
                         "sin sink por defecto",
                         evidence=EvidenceKind.NOT_AVAILABLE,
+                        auto_fix_id=AutoFixId.START_AUDIO,
                     ),
                     evaluated=False,
                 )
@@ -456,6 +459,7 @@ class HealthCheckRepository(IDiagnosticsRepository):
                     CheckSeverity.INFO,
                     "sin sink por defecto",
                     evidence=EvidenceKind.NOT_AVAILABLE,
+                    auto_fix_id=AutoFixId.START_AUDIO,
                 )
             return self._result(
                 "audio.sink_default",
@@ -588,6 +592,7 @@ class HealthCheckRepository(IDiagnosticsRepository):
         *,
         detail: str = "",
         evidence: EvidenceKind = EvidenceKind.OBSERVED,
+        auto_fix_id: str = "",
     ) -> CheckResult:
         return CheckResult(
             check_id=check_id,
@@ -595,6 +600,8 @@ class HealthCheckRepository(IDiagnosticsRepository):
             severity=severity,
             message=message,
             detail=detail,
+            auto_fix_available=bool(auto_fix_id),
+            auto_fix_id=auto_fix_id,
             evidence=evidence,
         )
 

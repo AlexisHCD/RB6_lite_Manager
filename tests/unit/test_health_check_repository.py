@@ -10,6 +10,7 @@ import pytest
 from openbuds.core.errors import BluetoothError
 from openbuds.domain.enums import (
     AddressType,
+    AutoFixId,
     BluetoothProfile,
     CheckSeverity,
     CodecType,
@@ -197,6 +198,8 @@ def test_hfp_and_bluetooth_source_warn_and_recommend_a2dp() -> None:
     assert report.overall_status is HealthStatus.WARNING
     assert checks["audio.profile"].severity is CheckSeverity.WARNING
     assert checks["audio.profile"].evidence is EvidenceKind.OBSERVED
+    assert checks["audio.profile"].auto_fix_available is True
+    assert checks["audio.profile"].auto_fix_id == AutoFixId.PROFILE_A2DP
     assert checks["audio.mic"].severity is CheckSeverity.WARNING
     assert checks["audio.mic"].evidence is EvidenceKind.OBSERVED
     assert "openbuds music" in report.recommendations[0]
@@ -263,6 +266,39 @@ def test_default_sink_is_optional_and_redacts_identifiers() -> None:
 
     no_sink = _repository(audio=FakeAudioRepository(sink=None)).run_health_check()
     assert _checks(no_sink)["audio.sink_default"].evidence is EvidenceKind.NOT_AVAILABLE
+    assert _checks(no_sink)["audio.sink_default"].auto_fix_available is True
+    assert _checks(no_sink)["audio.sink_default"].auto_fix_id == AutoFixId.START_AUDIO
+
+
+def test_only_supported_health_checks_offer_auto_fix() -> None:
+    report = _repository(
+        audio=FakeAudioRepository(
+            codec=CodecInfo(CodecType.MSBC, BluetoothProfile.HFP),
+            sink=None,
+        )
+    ).run_health_check()
+
+    checks = _checks(report)
+    assert {check.auto_fix_id for check in checks.values() if check.auto_fix_available} == {
+        AutoFixId.PROFILE_A2DP,
+        AutoFixId.START_AUDIO,
+    }
+    assert all(
+        check.auto_fix_available is False
+        for check in checks.values()
+        if check.check_id not in {"audio.profile", "audio.sink_default"}
+    )
+
+
+def test_disconnected_device_does_not_offer_profile_auto_fix() -> None:
+    report = _repository(
+        bluetooth=FakeBluetoothRepository([_device(connected=False)]),
+        audio=FakeAudioRepository(sink="default"),
+    ).run_health_check()
+
+    profile = _checks(report)["audio.profile"]
+    assert profile.auto_fix_available is False
+    assert profile.auto_fix_id == ""
 
 
 def test_read_logs_delegates_supported_services_and_skips_unknown() -> None:

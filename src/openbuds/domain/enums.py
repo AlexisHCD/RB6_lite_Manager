@@ -123,6 +123,14 @@ class EvidenceKind(StrEnum):
 
 
 @unique
+class AutoFixId(StrEnum):
+    """Stable identifiers for safe Health Check repairs in Stage 4."""
+
+    START_AUDIO = "start.audio"
+    PROFILE_A2DP = "profile.a2dp"
+
+
+@unique
 class AddressType(StrEnum):
     """Tipo de dirección Bluetooth (``Device1.AddressType``)."""
 

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 from openbuds import __version__
+from openbuds.application.auto_fix import ApplyAutoFixUseCase, AutoFixRequest
 from openbuds.application.get_device_info import DeviceAggregate, GetDeviceInfoUseCase
 from openbuds.application.read_logs import ReadLogsRequest, ReadLogsUseCase
 from openbuds.application.run_health_check import RunHealthCheckUseCase
@@ -37,7 +38,13 @@ from openbuds.core.config import (
 )
 from openbuds.core.errors import ConfigError, OpenBudsError
 from openbuds.core.logging_setup import get_logger, setup_logging_from_config
-from openbuds.domain.enums import BluetoothProfile, CheckSeverity, DeviceChangeKind, HealthStatus
+from openbuds.domain.enums import (
+    AutoFixId,
+    BluetoothProfile,
+    CheckSeverity,
+    DeviceChangeKind,
+    HealthStatus,
+)
 from openbuds.domain.models import CheckResult, DeviceChangeEvent, DeviceInfo
 from openbuds.infrastructure.system import environment_detector
 from openbuds.presentation.formatting import (
@@ -61,6 +68,7 @@ _BOOTSTRAP_COMMANDS: Final = frozenset(
         "music",
         "mic",
         "health",
+        "fix",
         "logs",
         "gui",
     }
@@ -78,6 +86,10 @@ _CONFIG_BOOL_VALUES: Final = {
 }
 _ADAPTER_NAME = re.compile(r"hci[0-9]+")
 _ADDRESS = REDACT_ADDRESS
+_AUTO_FIX_DESCRIPTIONS: Final = {
+    AutoFixId.START_AUDIO.value: "Inicia las unidades de audio de usuario (pipewire, wireplumber)",
+    AutoFixId.PROFILE_A2DP.value: "Cambia al perfil A2DP (mejor calidad de reproducción)",
+}
 
 
 class _ConfirmationCancelledError(Exception):
@@ -97,6 +109,7 @@ class CliContext:
     disconnect_use_case: DisconnectDeviceUseCase | None = None
     set_audio_profile_use_case: SetAudioProfileUseCase | None = None
     health_check_use_case: RunHealthCheckUseCase | None = None
+    fix_use_case: ApplyAutoFixUseCase | None = None
     logs_use_case: ReadLogsUseCase | None = None
 
 
@@ -268,7 +281,7 @@ def _cmd_status(context: CliContext, args: argparse.Namespace) -> int:
 
 
 def _cmd_health(context: CliContext, _args: argparse.Namespace) -> int:
-    """Print the stable, evidence-labelled read-only Health Check order."""
+    """Print Health Check results with evidence and available fix ids."""
     if context.health_check_use_case is None:
         raise RuntimeError("caso de uso de Health Check no disponible")
 
@@ -287,6 +300,68 @@ def _cmd_health(context: CliContext, _args: argparse.Namespace) -> int:
         for recommendation in report.recommendations:
             print(f" - {_sanitize_display_field(recommendation)}")
     return 0 if report.overall_status in {HealthStatus.OK, HealthStatus.WARNING} else 1
+
+
+def _cmd_fix(context: CliContext, args: argparse.Namespace) -> int:
+    """Apply one currently available Health Check repair after confirmation."""
+    if context.health_check_use_case is None:
+        raise RuntimeError("caso de uso de Health Check no disponible")
+
+    health_report = context.health_check_use_case.execute()
+    check = next(
+        (
+            item
+            for item in health_report.checks
+            if item.auto_fix_available and item.auto_fix_id == args.fix_id
+        ),
+        None,
+    )
+    safe_fix_id = _sanitize_display_field(args.fix_id)
+    if check is None:
+        print(f"No hay auto-fix disponible ahora: {safe_fix_id}")
+        return 1
+
+    print(
+        f"Acción: {_sanitize_display_field(check.label)} — {_sanitize_display_field(check.message)}"
+    )
+    description = _AUTO_FIX_DESCRIPTIONS.get(args.fix_id, "Reparación segura disponible")
+    print(f"Descripción: {_sanitize_display_field(description)}")
+
+    device_address: str | None = None
+    if args.fix_id == AutoFixId.PROFILE_A2DP:
+        if context.scan_devices_use_case is None:
+            raise OpenBudsError("requiere un dispositivo conectado")
+        devices = context.scan_devices_use_case.execute(
+            ScanDevicesRequest(include_paired_only=True)
+        )
+        connected = next((device for device in devices if device.connected), None)
+        if connected is None:
+            raise OpenBudsError("requiere un dispositivo conectado")
+        device_address = connected.address
+
+    try:
+        _confirm(f"¿Aplicar {safe_fix_id}?", args.yes)
+    except _ConfirmationCancelledError:
+        return 0
+
+    if context.fix_use_case is None:
+        raise RuntimeError("caso de uso de auto-fix no disponible")
+    result = context.fix_use_case.execute(AutoFixRequest(args.fix_id, device_address))
+    print(_sanitize_display_field(result))
+
+    verification_report = context.health_check_use_case.execute()
+    verified = next(
+        (item for item in verification_report.checks if item.check_id == check.check_id), None
+    )
+    if verified is None:
+        print(f"Verificación: {_sanitize_display_field(check.check_id)} — no disponible")
+    else:
+        print(
+            f"Verificación: {_sanitize_display_field(verified.check_id)} — "
+            f"{_sanitize_display_field(verified.message)} "
+            f"({_sanitize_display_field(verified.evidence.value)})"
+        )
+    return 0
 
 
 def _cmd_logs(context: CliContext, args: argparse.Namespace) -> int:
@@ -323,8 +398,13 @@ def _format_health_check(check: CheckResult) -> str:
     label = _sanitize_display_field(check.label)
     message = _sanitize_display_field(check.message)
     detail = f" [{_sanitize_display_field(check.detail)}]" if check.detail else ""
+    fix = (
+        f" [fix: {_sanitize_display_field(check.auto_fix_id)}]"
+        if check.auto_fix_available and check.auto_fix_id
+        else ""
+    )
     evidence = _sanitize_display_field(check.evidence.value)
-    return f"{prefix}{check_id} — {label}: {message}{detail} ({evidence})"
+    return f"{prefix}{check_id} — {label}: {message}{detail}{fix} ({evidence})"
 
 
 def _resolve_device(
@@ -582,6 +662,23 @@ def _build_health_check_use_case() -> RunHealthCheckUseCase:
     return RunHealthCheckUseCase(HealthCheckRepository(BlueZRepository(), PipeWireRepository()))
 
 
+def _build_fix_use_case() -> ApplyAutoFixUseCase:
+    """Compose safe Health Check repairs lazily with user-level adapters."""
+    from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
+    from openbuds.infrastructure.diagnostics.health_check_repository import HealthCheckRepository
+    from openbuds.infrastructure.pipewire.pipewire_control_repository import (
+        PipeWireControlRepository,
+    )
+    from openbuds.infrastructure.pipewire.pipewire_repository import PipeWireRepository
+    from openbuds.infrastructure.system.user_service_controller import UserServiceController
+
+    return ApplyAutoFixUseCase(
+        RunHealthCheckUseCase(HealthCheckRepository(BlueZRepository(), PipeWireRepository())),
+        audio_control=PipeWireControlRepository(),
+        services=UserServiceController(),
+    )
+
+
 def _build_logs_use_case() -> ReadLogsUseCase:
     """Compose the read-only diagnostic repositories lazily for ``logs``."""
     from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
@@ -720,6 +817,9 @@ def build_parser() -> argparse.ArgumentParser:
     mic.add_argument("-y", "--yes", action="store_true", help="Omite la confirmación.")
     sub.add_parser("codec", help="Muestra el códec activo.")
     sub.add_parser("health", help="Ejecuta un Health Check.")
+    fix = sub.add_parser("fix", help="Aplica un auto-fix seguro disponible.")
+    fix.add_argument("fix_id", help="Identificador del auto-fix a aplicar.")
+    fix.add_argument("-y", "--yes", action="store_true", help="Omite la confirmación.")
     logs = sub.add_parser("logs", help="Muestra logs relevantes del stack de audio.")
     logs.add_argument(
         "--service",
@@ -782,6 +882,14 @@ def main(argv: list[str] | None = None) -> int:
                 health_check_use_case=_build_health_check_use_case(),
             )
             return _cmd_health(context, args)
+        if command == "fix":
+            context = CliContext(
+                config=config,
+                health_check_use_case=_build_health_check_use_case(),
+                scan_devices_use_case=_build_scan_devices_use_case(),
+                fix_use_case=_build_fix_use_case(),
+            )
+            return _cmd_fix(context, args)
         if command == "logs":
             context = CliContext(
                 config=config,

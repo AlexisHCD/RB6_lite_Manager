@@ -18,6 +18,7 @@ from openbuds.domain.interfaces.bluetooth_repo import IBluetoothRepository
 from openbuds.domain.interfaces.config_repo import IConfigRepository
 from openbuds.domain.interfaces.diagnostics_repo import IDiagnosticsRepository
 from openbuds.domain.interfaces.profile_repo import IDeviceProfileRepository
+from openbuds.domain.interfaces.user_service_controller import IUserServiceController
 
 __all__ = [
     "IAudioRepository",
@@ -26,4 +27,5 @@ __all__ = [
     "IConfigRepository",
     "IDiagnosticsRepository",
     "IDeviceProfileRepository",
+    "IUserServiceController",
 ]
