@@ -79,18 +79,22 @@ ausencias y fallos sin evaluar `no disponible`):
    (ERROR/UNKNOWN).
 7. **Sanitización local:** MAC/object paths → `<redacted>`, imprimibles y
    máx. 80 caracteres; nunca MAC ni paths en la salida.
-8. **Sin `auto_fix` aún:** `auto_fix_available` siempre `False`; solo
-   recomendaciones informativas.
+8. **Health no ejecuta auto-fix:** el informe puede indicar una acción segura
+   disponible, pero `openbuds health` solo diagnostica; las reparaciones se
+   ejecutan por separado mediante `openbuds fix` y su confirmación explícita.
 9. **`doctor` vs `health`:** `doctor` = entorno (sistema, runtime, hardware);
    `health` = stack completo (entorno + dispositivo/audio/batería/sink).
 
 ## 3. Límites
 
-- Sin `auto_fix` aún; sin benchmark; sin jitter, latencia ni packet loss (no
-  se prometen ni se estiman).
+- `openbuds health` no aplica auto-fixes; `openbuds fix` permanece separado y
+  requiere confirmación explícita. Sin benchmark; sin jitter, latencia ni
+  packet loss (no se prometen ni se estiman).
 - `openbuds codec` sigue pendiente (milestone Etapa 2); `openbuds bench`
   pendiente (milestone posterior).
-- La GUI mantiene el botón Diagnóstico **informativo** (post-MVP; remite a
-  `openbuds doctor`); el diagnóstico real está en esta CLI.
+- La GUI ejecuta un Health Check real de solo lectura mediante
+  `RunHealthCheckUseCase` en segundo plano y muestra el informe en un diálogo;
+  `openbuds health` sigue siendo la interfaz CLI equivalente. La GUI no ejecuta
+  auto-fixes.
 - El volcado de logs/journal con redacción se difiere (pendiente parcial de
   Etapa 4); este incremento ya redacta identificadores en todos los mensajes.

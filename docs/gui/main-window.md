@@ -1,6 +1,7 @@
-# Diseño técnico — Ventana principal PySide6 (GUI MVP, Incremento 2 de Etapa 3)
+# Diseño técnico — Ventana principal PySide6 (GUI MVP, slice post-MVP de Etapa 3)
 
-- **Estado:** implementado en la **Etapa 3, Incremento 2**. Conserva la
+- **Estado:** implementado en la **Etapa 3, Incremento 2**, con bandeja opcional
+  y adaptador de notificaciones best-effort como slice post-MVP. Conserva la
   ventana única y los 8 campos de estado del Incremento 1, y añade Health
   Check real de solo lectura dentro de la GUI. Funciona con estados reales y
   **sin audífonos** (smoke verificado con `QT_QPA_PLATFORM=offscreen` y
@@ -13,8 +14,8 @@
   [ADR-0004](../ADR/0004-clean-architecture-dependency-rule.md) y
   [AGENTS.md](../../AGENTS.md) §3/§10.
 
-> **Alcance:** una sola ventana PySide6 útil, sin vistas secundarias ni
-> bandeja. `openbuds gui` la lanza con import lazy: error claro si falta
+> **Alcance:** una sola ventana PySide6 útil, sin vistas secundarias. Incluye
+> una bandeja opcional cuando el entorno la ofrece. `openbuds gui` la lanza con import lazy: error claro si falta
 > PySide6 o no hay display utilizable.
 
 ## 1. Objetivo y descripción de la ventana
@@ -37,6 +38,23 @@
   worker.
 - **Estado del sistema:** barra de estado con errores **sanitizados** (sin
   MAC ni paths), «Actualizando...» durante operaciones y «Listo» en reposo.
+
+La bandeja se crea con `QSystemTrayIcon`, `QMenu` y `QAction` solo si
+`QSystemTrayIcon.isSystemTrayAvailable()` indica que está disponible. Su menú
+contiene **Abrir ventana**, **Actualizar**, **Diagnóstico** y **Salir**; cada
+acción delega en la ventana o el ViewModel. Si no hay bandeja, el arranque
+continúa normalmente con la ventana. El icono es el volumen estándar de Qt, sin
+recurso binario adicional.
+
+Cerrar la ventana conserva la semántica normal de cierre: no la oculta
+silenciosamente para dejar un proceso en segundo plano. El cierre detiene el
+timer, cierra el diálogo de diagnóstico, limpia la bandeja y después cierra el
+worker del ViewModel. La limpieza de la bandeja es idempotente y best-effort.
+
+El adaptador `DesktopNotifier` usa `org.freedesktop.Notifications` mediante
+Gio/GDBus perezoso en el bus de sesión. Sanitiza los campos visibles y no falla
+la aplicación si el servicio no está disponible. No hay dependencia directa de
+Ayatana/AppIndicator.
 
 Sin hardware: Conectar habilitado (emparejado y no conectado), los demás
 controles deshabilitados; con audífonos conectados se habilitan
@@ -81,8 +99,8 @@ separada en `openbuds fix` mediante la CLI y sus propias confirmaciones.
 4. **Confirmación en la UI** (`QMessageBox`) igual que la CLI; el warning de
    degradación HFP se muestra **antes** de preguntar.
 5. **Scaffolding legado eliminado:** se retiró `presentation/qt/views/`
-   (10 archivos) y `tray_indicator.py` (bandeja post-MVP); queda una sola
-   ventana sin vistas secundarias.
+   (10 archivos) y `tray_indicator.py`; queda una sola ventana sin vistas
+   secundarias, con el controlador de bandeja opcional actual.
 6. **Renombrado `connect_device`/`disconnect_device`:** colisión con
    `QObject.connect`/`disconnect` (antes exigía `type: ignore`); mypy ya no
    requiere excepción.
@@ -98,6 +116,10 @@ separada en `openbuds fix` mediante la CLI y sus propias confirmaciones.
   de reparaciones sigue separada en `openbuds fix` desde la CLI.
 - No se exponen MAC, object paths ni payloads crudos; el detalle disponible
   depende de la evidencia que entreguen los repositorios y el `HealthReport`.
-- Bandeja GNOME y notificaciones **post-MVP**.
+- La bandeja es opcional y no cambia por sí misma Bluetooth, audio, perfiles,
+  servicios ni configuración.
+- Las notificaciones automáticas desde `DeviceChangeEvent` están diferidas:
+  `MainWindow` no se suscribe a eventos BlueZ y el refresco de 2 s no notifica.
+  Queda pendiente un puente explícito y validado del lifecycle Qt/GLib.
 - Una sola ventana; sin vistas secundarias ni componentes L/R/estuche (no hay
   fuente identificable).

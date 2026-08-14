@@ -16,7 +16,7 @@ del proyecto (el dominio) sea independiente de cualquier tecnología concreta
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     presentation                             │
-│   (PySide6 / Qt, notificaciones, tray indicator)            │
+│   (PySide6 / Qt, bandeja opcional, notificaciones Gio)       │
 │                         │                                     │
 │                         │ invoca casos de uso                │
 │                         ▼                                     │
@@ -79,8 +79,8 @@ Cada caso de uso modela **una intención del usuario** y orquesta repositorios:
 
 | Subpaquete | Contenido |
 |------------|-----------|
-| `qt/` | GUI MVP de una ventana (Etapa 3), ViewModels; bandeja y notificaciones después del MVP |
-| `notifications/` | Notificaciones de escritorio (freedesktop D-Bus) |
+| `qt/` | GUI MVP, ViewModels y adaptador opcional `QSystemTrayIcon` (Etapa 3) |
+| `notifications/` | Adaptador best-effort freedesktop mediante Gio/GDBus en el bus de sesión |
 
 La UI **nunca** contiene lógica de negocio: delega en casos de uso.
 
@@ -117,8 +117,9 @@ excepción del dominio. Nunca queda en estado intermedio.
 
 ## Coordinación de asincronía
 
-- **D-Bus (BlueZ):** Gio/GDBus usa el `GMainLoop` de GLib. En la app Qt, se
-  puentea hacia el `QEventLoop` (mecanismo a definir en la Etapa 3).
+- **D-Bus (BlueZ):** Gio/GDBus usa el `GMainLoop` de GLib. La GUI actual no
+  suscribe `MainWindow` a eventos BlueZ; el puente de lifecycle Qt/GLib para
+  notificaciones automáticas queda pendiente de una decisión posterior.
 - **subprocess (PipeWire/WirePlumber):** llamadas síncronas y cortas; suficiente
   para inspección. No requiere event loop propio.
 - **EventBus (`core/events.py`):** pub/sub en proceso, síncrono. Permite que la

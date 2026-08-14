@@ -177,10 +177,22 @@ siguen separados en `openbuds fix` desde la CLI.
 - [x] Widgets → ViewModels → casos de uso; sin D-Bus/subprocess en la UI
   (composición solo en `build_default_view_model`; formatter compartido
   CLI/GUI con redacción).
-- [ ] Bandeja GNOME y notificaciones después del MVP (post-MVP).
+- [x] Bandeja opcional Qt (`QSystemTrayIcon`) con menú Abrir ventana,
+  Actualizar, Diagnóstico y Salir; sin bandeja disponible, el arranque continúa
+  con la ventana.
+- [x] Adaptador de notificaciones freedesktop best-effort mediante Gio/GDBus
+  en el bus de sesión, con sanitización y degradación segura si el servicio no
+  está disponible.
+- [ ] Notificaciones automáticas de `DeviceChangeEvent`: diferidas hasta
+  aprobar y validar un puente explícito de lifecycle Qt/GLib.
+
+La bandeja y el adaptador de notificaciones son slices post-MVP completados;
+la funcionalidad de notificación automática por eventos no forma parte de este
+cierre.
 
 **Salida:** funciona con estados reales y sin audífonos; ausencias no rompen el
-layout; operaciones en curso deshabilitan controles; errores sin datos sensibles.
+layout; operaciones en curso deshabilitan controles; errores sin datos
+sensibles; la bandeja es opcional y las notificaciones directas son best-effort.
 
 ## Etapa 4 — Health Check y diagnóstico (completada)
 
