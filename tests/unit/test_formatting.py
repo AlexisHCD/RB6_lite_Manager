@@ -27,6 +27,7 @@ from openbuds.presentation.formatting import (
     connection_label,
     device_display_name,
     format_aggregate,
+    sanitize_display_field,
 )
 
 
@@ -116,6 +117,19 @@ def test_aggregate_format_never_displays_mac_or_object_path() -> None:
 
     assert "00:11:22:33:44:55" not in output
     assert "/org/bluez/" not in output
+
+
+def test_sanitize_display_field_redacts_hyphenated_mac_and_generic_object_paths() -> None:
+    mac = "AA-BB-CC-DD-EE-FF"
+    io_path = "/io/example/object"
+    xyz_path = "/xyz/example/object"
+
+    sanitized = sanitize_display_field(f"Device {mac} {io_path} {xyz_path}")
+
+    assert sanitized == "Device <redacted> <redacted> <redacted>"
+    assert mac not in sanitized
+    assert io_path not in sanitized
+    assert xyz_path not in sanitized
 
 
 @pytest.mark.parametrize(

@@ -8,9 +8,11 @@ from openbuds.application.get_device_info import DeviceAggregate
 from openbuds.domain.models import DeviceInfo
 
 NO_DATA = "No disponible"
-_REDACT_OBJECT_PATH = re.compile(r"/org/bluez/[^\s]+")
+_REDACT_OBJECT_PATH = re.compile(
+    r"(?<![A-Za-z0-9_])/(?:[A-Za-z0-9_]+/)*[A-Za-z0-9_]+(?![A-Za-z0-9_])"
+)
 REDACT_ADDRESS = re.compile(
-    r"(?<![A-Za-z0-9])[0-9A-Fa-f]{2}(?:[:_. ]?[0-9A-Fa-f]{2}){5}(?![A-Za-z0-9])"
+    r"(?<![A-Za-z0-9])[0-9A-Fa-f]{2}(?:[:_. \-]?[0-9A-Fa-f]{2}){5}(?![A-Za-z0-9])"
 )
 
 

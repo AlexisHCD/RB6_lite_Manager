@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Callable
 from typing import Any, Protocol, cast
 
@@ -17,9 +16,6 @@ _APP_NAME = "OpenBuds Manager"
 _NOTIFY_SIGNATURE = "(susssasa{sv}i)"
 _EXPIRE_TIMEOUT = -1  # Let the notification server choose its normal lifetime.
 _NOTIFICATION_WARNING = "No se pudo mostrar la notificación de escritorio."
-_REDACT_NOTIFICATION_OBJECT_PATH = re.compile(
-    r"(?<![A-Za-z0-9_])/(?:org|com|net)/(?:[A-Za-z0-9_]+/)*[A-Za-z0-9_]+"
-)
 
 
 class _NotificationProxy(Protocol):
@@ -72,9 +68,8 @@ def _make_variant(signature: str, value: object) -> Any:
 
 
 def _sanitize_notification_field(value: str) -> str:
-    """Apply shared display protections and redact all user-visible D-Bus paths."""
-    redacted = _REDACT_NOTIFICATION_OBJECT_PATH.sub("<redacted>", value)
-    return sanitize_display_field(redacted)
+    """Apply the shared privacy protections to a notification field."""
+    return sanitize_display_field(value)
 
 
 class DesktopNotifier:

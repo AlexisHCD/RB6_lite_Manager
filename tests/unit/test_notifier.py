@@ -98,6 +98,24 @@ def test_notify_redacts_non_bluez_object_path_from_variant_payload() -> None:
     assert raw_path not in parameters.value[4]
 
 
+def test_notify_redacts_hyphenated_mac_and_generic_object_paths_from_payload() -> None:
+    proxy = FakeProxy()
+    notifier = DesktopNotifier(proxy_loader=lambda: proxy, variant_factory=FakeVariant)
+    mac = "AA-BB-CC-DD-EE-FF"
+    io_path = "/io/example/object"
+    xyz_path = "/xyz/example/object"
+
+    notifier.notify("Conectado", f"Device {mac} {io_path} {xyz_path}")
+
+    parameters = proxy.calls[0][1]
+    assert isinstance(parameters, FakeVariant)
+    assert isinstance(parameters.value, tuple)
+    assert parameters.value[4] == "Device <redacted> <redacted> <redacted>"
+    assert mac not in parameters.value[4]
+    assert io_path not in parameters.value[4]
+    assert xyz_path not in parameters.value[4]
+
+
 def test_notify_redacts_long_object_path_before_truncating_field() -> None:
     proxy = FakeProxy()
     notifier = DesktopNotifier(proxy_loader=lambda: proxy, variant_factory=FakeVariant)
