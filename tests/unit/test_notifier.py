@@ -53,7 +53,7 @@ def test_notify_lazily_creates_proxy_and_uses_standard_notify_shape() -> None:
     method, parameters, flags, timeout, cancellable = proxy.calls[0]
     assert method == "Notify"
     assert flags == 0
-    assert timeout == -1
+    assert timeout == 1000
     assert cancellable is None
     assert isinstance(parameters, FakeVariant)
     assert variants[0] is parameters

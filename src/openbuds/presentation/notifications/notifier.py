@@ -15,6 +15,7 @@ _INTERFACE = "org.freedesktop.Notifications"
 _APP_NAME = "OpenBuds Manager"
 _NOTIFY_SIGNATURE = "(susssasa{sv}i)"
 _EXPIRE_TIMEOUT = -1  # Let the notification server choose its normal lifetime.
+_NOTIFY_TIMEOUT_MSEC = 1000  # Bound the synchronous notification wait.
 _NOTIFICATION_WARNING = "No se pudo mostrar la notificación de escritorio."
 
 
@@ -89,8 +90,9 @@ class DesktopNotifier:
     def notify(self, summary: str, body: str = "") -> None:
         """Send one notification, ignoring unavailable desktop services.
 
-        The ``-1`` expiration asks the notification server to use its normal
-        lifetime rather than imposing an application-specific timeout.
+        The expiration value is independent from the finite D-Bus call
+        timeout. The call is bounded to one second; proxy creation remains
+        lazy and synchronous because this adapter is best-effort.
         """
         safe_summary = _sanitize_notification_field(summary)
         safe_body = _sanitize_notification_field(body)
@@ -101,7 +103,7 @@ class DesktopNotifier:
             )
             if self._proxy is None:
                 self._proxy = self._proxy_loader()
-            self._proxy.call_sync("Notify", parameters, 0, -1, None)
+            self._proxy.call_sync("Notify", parameters, 0, _NOTIFY_TIMEOUT_MSEC, None)
         except Exception:
             self._proxy = None
             _LOGGER.warning(_NOTIFICATION_WARNING)
