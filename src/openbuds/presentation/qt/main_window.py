@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes.util
+import logging
 import os
 import sys
 from collections.abc import Callable
@@ -14,6 +15,11 @@ if TYPE_CHECKING:
     from PySide6.QtGui import QCloseEvent
     from PySide6.QtWidgets import QMainWindow
 
+    from openbuds.presentation.qt.device_change_bridge import (
+        DesktopNotifierLike,
+        DeviceChangeBridge,
+        DeviceChangeSource,
+    )
     from openbuds.presentation.qt.tray_controller import TrayController
     from openbuds.presentation.qt.view_models.device_view_model import DeviceViewModel
 
@@ -36,6 +42,11 @@ try:
 except ImportError as exc:  # pragma: no cover - exercised only without the optional GUI runtime
     _QT_IMPORT_ERROR = exc
 else:
+    from openbuds.presentation.qt.device_change_bridge import (
+        DesktopNotifierLike,
+        DeviceChangeBridge,
+        DeviceChangeSource,
+    )
     from openbuds.presentation.qt.health_dialog import HealthDialog
     from openbuds.presentation.qt.tray_controller import TrayController
     from openbuds.presentation.qt.view_models.device_view_model import DeviceViewModel
@@ -51,6 +62,8 @@ _FIELD_NAMES = (
     "Source",
 )
 _MIC_WARNING = "Activar el micrófono Bluetooth (HFP) puede reducir la calidad de reproducción."
+_BRIDGE_WARNING = "Las notificaciones automáticas de cambios no están disponibles."
+_LOGGER = logging.getLogger(__name__)
 
 
 def _require_qt() -> None:
@@ -86,8 +99,8 @@ def _display_is_available() -> bool:
     return False
 
 
-def build_default_view_model() -> DeviceViewModel:
-    """Compose the real read-only and approved session use cases for the GUI."""
+def _build_default_components() -> tuple[DeviceViewModel, DeviceChangeSource]:
+    """Compose GUI use cases around one shared read-only BlueZ repository."""
     _require_qt()
     from openbuds.application.get_device_info import GetDeviceInfoUseCase
     from openbuds.application.run_health_check import RunHealthCheckUseCase
@@ -97,6 +110,7 @@ def build_default_view_model() -> DeviceViewModel:
         DisconnectDeviceUseCase,
         SetAudioProfileUseCase,
     )
+    from openbuds.application.watch_devices import WatchDevicesUseCase
     from openbuds.infrastructure.bluez.bluez_repository import BlueZRepository
     from openbuds.infrastructure.diagnostics.health_check_repository import HealthCheckRepository
     from openbuds.infrastructure.pipewire.pipewire_control_repository import (
@@ -106,7 +120,7 @@ def build_default_view_model() -> DeviceViewModel:
 
     bluetooth = BlueZRepository()
     pipewire_repository = PipeWireRepository()
-    return DeviceViewModel(
+    view_model = DeviceViewModel(
         scan=ScanDevicesUseCase(bluetooth),
         info=GetDeviceInfoUseCase(bluetooth, pipewire_repository),
         connect_uc=ConnectDeviceUseCase(bluetooth),
@@ -114,6 +128,12 @@ def build_default_view_model() -> DeviceViewModel:
         profile_uc=SetAudioProfileUseCase(PipeWireControlRepository()),
         health_uc=RunHealthCheckUseCase(HealthCheckRepository(bluetooth, pipewire_repository)),
     )
+    return view_model, WatchDevicesUseCase(bluetooth)
+
+
+def build_default_view_model() -> DeviceViewModel:
+    """Compose the real read-only and approved session use cases for the GUI."""
+    return _build_default_components()[0]
 
 
 if _QT_IMPORT_ERROR is None:
@@ -125,11 +145,34 @@ if _QT_IMPORT_ERROR is None:
             self,
             view_model: DeviceViewModel | None = None,
             tray_controller: TrayController | None = None,
+            device_change_bridge: DeviceChangeBridge | None = None,
+            watch_devices: DeviceChangeSource | None = None,
+            notifier: DesktopNotifierLike | None = None,
         ) -> None:
             super().__init__()
             self.setWindowTitle("OpenBuds Manager")
             self.setMinimumSize(480, 360)
-            self.view_model = view_model if view_model is not None else build_default_view_model()
+            default_watch: DeviceChangeSource | None = None
+            if view_model is None:
+                self.view_model, default_watch = _build_default_components()
+            else:
+                self.view_model = view_model
+            self.device_change_bridge: DeviceChangeBridge | None
+            if device_change_bridge is not None:
+                self.device_change_bridge = device_change_bridge
+            elif (
+                watch_source := watch_devices if watch_devices is not None else default_watch
+            ) is not None:
+                from openbuds.presentation.notifications.notifier import DesktopNotifier
+
+                self.device_change_bridge = DeviceChangeBridge(
+                    watch_source,
+                    notifier if notifier is not None else DesktopNotifier(),
+                    self,
+                )
+            else:
+                self.device_change_bridge = None
+            self._lifecycle_closed = False
             self._value_labels: dict[str, QLabel] = {}
             self._build_ui()
 
@@ -155,6 +198,16 @@ if _QT_IMPORT_ERROR is None:
             self._render_state()
             self._refresh_timer.start()
             self.view_model.refresh()
+            self._start_device_change_bridge()
+
+        def _start_device_change_bridge(self) -> None:
+            """Start optional event notifications without making the GUI fail."""
+            if self.device_change_bridge is None:
+                return
+            try:
+                self.device_change_bridge.start()
+            except Exception:
+                _LOGGER.warning(_BRIDGE_WARNING)
 
         def _build_ui(self) -> None:
             central = QWidget(self)
@@ -316,9 +369,15 @@ if _QT_IMPORT_ERROR is None:
 
         def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
             """Stop the refresh loop and background worker before closing."""
+            if self._lifecycle_closed:
+                super().closeEvent(event)
+                return
+            self._lifecycle_closed = True
             self._refresh_timer.stop()
             if self._health_dialog is not None:
                 self._health_dialog.close()
+            if self.device_change_bridge is not None:
+                self.device_change_bridge.close()
             self.tray_controller.close()
             self.view_model.close()
             super().closeEvent(event)
@@ -332,21 +391,40 @@ else:
             self,
             view_model: DeviceViewModel | None = None,
             tray_controller: TrayController | None = None,
+            device_change_bridge: DeviceChangeBridge | None = None,
+            watch_devices: DeviceChangeSource | None = None,
+            notifier: DesktopNotifierLike | None = None,
         ) -> None:
             del view_model
             del tray_controller
+            del device_change_bridge
+            del watch_devices
+            del notifier
             _require_qt()
 
 
 def build_main_window(
     view_model: DeviceViewModel | None = None,
     tray_controller: TrayController | None = None,
+    device_change_bridge: DeviceChangeBridge | None = None,
+    watch_devices: DeviceChangeSource | None = None,
+    notifier: DesktopNotifierLike | None = None,
 ) -> QMainWindow:
     """Build the single main window with an injected or real ViewModel."""
     _require_qt()
+    if view_model is None:
+        return MainWindow(
+            tray_controller=tray_controller,
+            device_change_bridge=device_change_bridge,
+            watch_devices=watch_devices,
+            notifier=notifier,
+        )
     return MainWindow(
-        view_model if view_model is not None else build_default_view_model(),
+        view_model,
         tray_controller,
+        device_change_bridge,
+        watch_devices,
+        notifier,
     )
 
 

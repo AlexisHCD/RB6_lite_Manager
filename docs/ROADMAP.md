@@ -183,16 +183,22 @@ siguen separados en `openbuds fix` desde la CLI.
 - [x] Adaptador de notificaciones freedesktop best-effort mediante Gio/GDBus
   en el bus de sesión, con sanitización y degradación segura si el servicio no
   está disponible.
-- [ ] Notificaciones automáticas de `DeviceChangeEvent`: diferidas hasta
-  aprobar y validar un puente explícito de lifecycle Qt/GLib.
+- [x] Notificaciones automáticas de `DeviceChangeEvent`: `DeviceChangeBridge`
+  con marshalling explícito mediante `Qt.QueuedConnection`, supresión segura
+  de la tanda inicial, política ADDED/REMOVED y transición de conexión, textos
+  sanitizados y degradación best-effort.
 
-La bandeja y el adaptador de notificaciones son slices post-MVP completados;
-la funcionalidad de notificación automática por eventos no forma parte de este
-cierre.
+La bandeja, el adaptador de notificaciones y el puente automático son slices
+post-MVP de la Etapa 3 completados. El puente es read-only y session-only: no
+modifica Bluetooth, audio, perfiles, servicios ni configuración. Los fallos de
+suscripción o notificación se absorben; `Notify` tiene timeout de 1 s y puede
+retrasar brevemente Qt, pero no indefinidamente.
 
 **Salida:** funciona con estados reales y sin audífonos; ausencias no rompen el
 layout; operaciones en curso deshabilitan controles; errores sin datos
-sensibles; la bandeja es opcional y las notificaciones directas son best-effort.
+sensibles; la bandeja es opcional y las notificaciones directas y automáticas
+son best-effort. El gate físico de la Etapa 1, incluida suspensión y
+reanudación, no cambia.
 
 ## Etapa 4 — Health Check y diagnóstico (completada)
 

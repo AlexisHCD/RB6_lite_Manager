@@ -41,9 +41,11 @@ Check de forma honesta. Ver [`docs/cli/fix-command.md`](docs/cli/fix-command.md)
 
 La **GUI MVP de la Etapa 3** sigue operativa: `openbuds gui` lanza la ventana
 única PySide6 (estado, controles de sesión y Health Check real de solo lectura);
-funciona con estados reales y sin audífonos. Incluye una bandeja opcional y un
-adaptador de notificaciones freedesktop best-effort; las notificaciones
-automáticas por cambios BlueZ siguen diferidas. Ver
+funciona con estados reales y sin audífonos. Incluye una bandeja opcional, un
+adaptador de notificaciones freedesktop best-effort y notificaciones
+automáticas por cambios BlueZ mediante un puente Qt con marshalling explícito.
+Son de solo lectura y session-only; si la suscripción o el servicio falla, la
+GUI continúa. Ver
 [`docs/gui/main-window.md`](docs/gui/main-window.md).
 
 El **backend base de BlueZ**, la base de **inspección PipeWire de solo lectura**,
@@ -333,7 +335,13 @@ read-only mediante el Health Check real. Requiere PySide6 y un display; sin
 ellos el error es claro. Si el entorno ofrece una bandeja compatible, incluye
 un menú opcional para abrir, actualizar, diagnosticar y salir; el adaptador de
 notificaciones freedesktop es best-effort. Las notificaciones automáticas por
-cambios BlueZ y las vistas avanzadas siguen diferidas.
+cambios BlueZ están disponibles mediante `DeviceChangeBridge`: solo avisan de
+dispositivos detectados/desaparecidos y transiciones de conexión, con textos
+sanitizados; cambios aislados de RSSI o batería no avisan. El callback se
+encola explícitamente en Qt; `Notify` tiene un timeout de 1 s y puede introducir
+una demora breve en el hilo Qt, pero no indefinida. Los fallos se absorben y la
+GUI sigue disponible. Las vistas
+avanzadas siguen diferidas.
 
 ## Desarrollo
 
@@ -386,6 +394,7 @@ Ver [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) para el detalle y el diagrama
 | [0007](docs/ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo |
 | [0008](docs/ADR/0008-safe-persistence.md) | Persistencia segura: backups, verificación y rollback (Etapa 5) |
 | [0009](docs/ADR/0009-optional-qt-tray-and-gio-notifications.md) | Bandeja Qt opcional y notificaciones Gio |
+| [0010](docs/ADR/0010-qt-device-change-notifications.md) | Notificaciones Qt automáticas de cambios de dispositivos |
 
 ## Seguridad
 

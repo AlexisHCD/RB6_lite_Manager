@@ -17,11 +17,12 @@ Record) en [`ADR/`](ADR/).
 | [0007](ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo (`DeviceChangeEvent`) | Aceptada | 2026-08-09 |
 | [0008](ADR/0008-safe-persistence.md) | Persistencia segura: backups, verificación y rollback | Aceptada | 2026-08-12 |
 | [0009](ADR/0009-optional-qt-tray-and-gio-notifications.md) | Bandeja Qt opcional y notificaciones Gio | Aceptada | 2026-08-13 |
+| [0010](ADR/0010-qt-device-change-notifications.md) | Notificaciones Qt automáticas de cambios de dispositivos | Aceptada | 2026-08-13 |
 
 ## Cómo añadir un nuevo ADR
 
 1. Copia la plantilla inferior.
-2. Numera secuencialmente (`0010-...`).
+2. Numera secuencialmente (`0011-...`).
 3. Indica contexto, decisión, justificación y consecuencias.
 4. Actualiza esta tabla.
 

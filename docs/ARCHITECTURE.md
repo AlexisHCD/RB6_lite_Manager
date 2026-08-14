@@ -79,7 +79,7 @@ Cada caso de uso modela **una intención del usuario** y orquesta repositorios:
 
 | Subpaquete | Contenido |
 |------------|-----------|
-| `qt/` | GUI MVP, ViewModels y adaptador opcional `QSystemTrayIcon` (Etapa 3) |
+| `qt/` | GUI MVP, ViewModels, `DeviceChangeBridge` y adaptador opcional `QSystemTrayIcon` (Etapa 3) |
 | `notifications/` | Adaptador best-effort freedesktop mediante Gio/GDBus en el bus de sesión |
 
 La UI **nunca** contiene lógica de negocio: delega en casos de uso.
@@ -117,14 +117,25 @@ excepción del dominio. Nunca queda en estado intermedio.
 
 ## Coordinación de asincronía
 
-- **D-Bus (BlueZ):** Gio/GDBus usa el `GMainLoop` de GLib. La GUI actual no
-  suscribe `MainWindow` a eventos BlueZ; el puente de lifecycle Qt/GLib para
-  notificaciones automáticas queda pendiente de una decisión posterior.
+- **D-Bus (BlueZ):** Gio/GDBus usa el `GMainLoop` de GLib. La composición de la
+  GUI comparte un único `BlueZRepository` entre el ViewModel y
+  `WatchDevicesUseCase`. `DeviceChangeBridge` recibe callbacks fuera del hilo
+  de Qt, emite un sobre mínimo y usa `Qt.QueuedConnection` para ejecutar el
+  filtrado y `DesktopNotifier` en el hilo Qt.
 - **subprocess (PipeWire/WirePlumber):** llamadas síncronas y cortas; suficiente
   para inspección. No requiere event loop propio.
 - **EventBus (`core/events.py`):** pub/sub en proceso, síncrono. Permite que la
   infraestructura publique eventos (dispositivo conectado, códec cambiado) sin
   acoplarse a la UI.
+
+El lifecycle de la ventana cierra el puente de cambios de dispositivos antes
+de limpiar el ViewModel. La suscripción, la desuscripción y la notificación son
+best-effort: errores genéricos se absorben y la GUI continúa disponible. `Notify`
+se llama síncronamente en Qt con timeout de 1 s; la creación perezosa del proxy
+también es síncrona, por lo que puede existir una demora breve. Las
+notificaciones solo representan ADDED, REMOVED y transiciones de conexión;
+cambios aislados de RSSI o batería no generan avisos. El mecanismo es
+read-only y session-only.
 
 ## Estado por etapas
 

@@ -1,7 +1,8 @@
-# Diseño técnico — Ventana principal PySide6 (GUI MVP, slice post-MVP de Etapa 3)
+# Diseño técnico — Ventana principal PySide6 (GUI MVP, Etapa 3)
 
-- **Estado:** implementado en la **Etapa 3, Incremento 2**, con bandeja opcional
-  y adaptador de notificaciones best-effort como slice post-MVP. Conserva la
+- **Estado:** implementado en la **Etapa 3, Incrementos 2 y 3**, con bandeja
+  opcional, notificaciones freedesktop y notificaciones automáticas de cambios
+  como slices best-effort. Conserva la
   ventana única y los 8 campos de estado del Incremento 1, y añade Health
   Check real de solo lectura dentro de la GUI. Funciona con estados reales y
   **sin audífonos** (smoke verificado con `QT_QPA_PLATFORM=offscreen` y
@@ -56,6 +57,22 @@ Gio/GDBus perezoso en el bus de sesión. Sanitiza los campos visibles y no falla
 la aplicación si el servicio no está disponible. No hay dependencia directa de
 Ayatana/AppIndicator.
 
+Las notificaciones automáticas se conectan mediante `DeviceChangeBridge` al
+`WatchDevicesUseCase` de la misma composición que usa el ViewModel. El callback
+del origen solo emite un sobre; `Qt.QueuedConnection` con marshalling explícito
+lleva el evento al hilo Qt antes de aplicar la política ADDED/REMOVED y de
+notificar transiciones de conexión. La tanda inicial queda suprimida bajo lock,
+la limpieza es idempotente y ocurre antes del cierre del ViewModel.
+
+Solo se notifican dispositivos detectados, desaparecidos y transiciones de
+conexión. Cambios de RSSI o batería por sí solos no generan avisos. Los textos
+se sanitizan y no contienen MAC, rutas de objeto ni identificadores dinámicos.
+La suscripción y el servicio de notificaciones son best-effort: si fallan, la
+GUI sigue disponible. `Notify` tiene timeout de 1 s y la creación perezosa del
+proxy es síncrona; un servicio lento puede retrasar brevemente el hilo Qt,
+aunque no indefinidamente. El mecanismo es de solo
+lectura y dura únicamente durante la sesión de la ventana.
+
 Sin hardware: Conectar habilitado (emparejado y no conectado), los demás
 controles deshabilitados; con audífonos conectados se habilitan
 Desconectar/Música/Micrófono.
@@ -108,6 +125,10 @@ separada en `openbuds fix` mediante la CLI y sus propias confirmaciones.
    `RunHealthCheckUseCase` mediante `DeviceWorker`/`QThread`, sin bloquear la
    interfaz ni ejecutar auto-fixes. El contrato visual conserva el orden y la
    evidencia del `HealthReport`, con redacción compartida y errores sanitizados.
+8. **Notificaciones automáticas con puente explícito:** `DeviceChangeBridge`
+   comparte el repositorio de BlueZ ya compuesto, mantiene el callback mínimo,
+   marshalling explícito a Qt y cierre antes del ViewModel; los errores no
+   afectan al ciclo de vida de la ventana.
 
 ## 4. Límites
 
@@ -118,8 +139,8 @@ separada en `openbuds fix` mediante la CLI y sus propias confirmaciones.
   depende de la evidencia que entreguen los repositorios y el `HealthReport`.
 - La bandeja es opcional y no cambia por sí misma Bluetooth, audio, perfiles,
   servicios ni configuración.
-- Las notificaciones automáticas desde `DeviceChangeEvent` están diferidas:
-  `MainWindow` no se suscribe a eventos BlueZ y el refresco de 2 s no notifica.
-  Queda pendiente un puente explícito y validado del lifecycle Qt/GLib.
+- Las notificaciones automáticas desde `DeviceChangeEvent` son read-only y
+  session-only. No validan hardware ni sustituyen la caracterización física;
+  el gate de suspensión/reanudación permanece en la Etapa 1.
 - Una sola ventana; sin vistas secundarias ni componentes L/R/estuche (no hay
   fuente identificable).

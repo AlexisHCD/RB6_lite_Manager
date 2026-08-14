@@ -38,11 +38,11 @@ Se acepta una implementación opcional y best-effort en `presentation`:
   llamada con una advertencia genérica.
 - No se añade una dependencia directa de Ayatana/AppIndicator ni se implementa
   manualmente `StatusNotifierItem`.
-- Las notificaciones automáticas derivadas de `DeviceChangeEvent` quedan
-  explícitamente diferidas. En este slice `MainWindow` no se suscribe a eventos
-  de BlueZ y el refresco de 2 segundos no emite notificaciones. Requieren una
-  decisión e incremento posterior para un puente explícito del ciclo de vida
-  Qt/GLib y el *marshalling* seguro hacia el hilo de Qt.
+- ADR-0009 difirió intencionadamente las notificaciones automáticas derivadas
+  de `DeviceChangeEvent`; esa decisión y ese incremento fueron aceptados e
+  implementados posteriormente en [ADR-0010](0010-qt-device-change-notifications.md),
+  mediante un puente explícito del ciclo de vida Qt/GLib y *marshalling* seguro
+  hacia el hilo de Qt.
 
 La API `QSystemTrayIcon` documenta la disponibilidad del sistema y el ciclo de
 vida del icono ([Qt for Python — QSystemTrayIcon](https://doc.qt.io/qtforpython-6/PySide6/QtWidgets/QSystemTrayIcon.html)). El adaptador sigue la interfaz de sesión y la llamada `Notify` descritas por la [Desktop Notifications Specification 1.3](https://specifications.freedesktop.org/notification/1.3/), sin asumir que exista un servidor disponible.
@@ -83,9 +83,9 @@ limitaciones de integración se aceptan porque la bandeja es opcional.
 - `QSystemTrayIcon` depende de lo que soporte el entorno de escritorio.
 - El servidor de notificaciones es opcional y puede rechazar o no mostrar una
   notificación.
-- Todavía no existe una ruta segura para convertir `DeviceChangeEvent` en una
-  llamada Qt. Esa automatización queda fuera de este incremento y requiere
-  diseño, validación de hilos y decisión explícita.
+- La automatización de notificaciones desde `DeviceChangeEvent` fue
+  intencionadamente diferida en ADR-0009 y queda cubierta por la decisión y la
+  implementación aceptadas en [ADR-0010](0010-qt-device-change-notifications.md).
 
 ## Seguridad y lifecycle
 
@@ -111,6 +111,8 @@ requieren hardware Bluetooth ni D-Bus en vivo.
 
 ## Estado futuro
 
-La emisión automática de notificaciones desde `DeviceChangeEvent` permanece
-como una decisión e incremento posterior, pendiente de un puente explícito de
-ciclo de vida Qt/GLib y de su verificación aislada.
+La emisión automática de notificaciones desde `DeviceChangeEvent` fue
+intencionadamente diferida en ADR-0009 y ahora está implementada y aceptada
+en [ADR-0010](0010-qt-device-change-notifications.md). Las limitaciones de
+esta decisión siguen siendo read-only y session-only, best-effort, sin
+validación de hardware ni afirmación de suspensión/reanudación.

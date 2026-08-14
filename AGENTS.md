@@ -204,7 +204,8 @@ Ver `docs/ARCHITECTURE.md` para el detalle y el diagrama.
 | [0006](docs/ADR/0006-app-config-toml-xdg-atomic-write.md) | Configuración TOML con rutas XDG y escritura atómica | Configuración propia separada, rutas XDG válidas y guardado sin truncado. |
 | [0007](docs/ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo (`DeviceChangeEvent`) | `DeviceChangeKind`/`DeviceChangeEvent`/`Unsubscribe`; contrato del dominio probado; **Incremento 2 completo**: nivel bajo de señales/lifecycle y dispatch del repositorio (`subscribe_device_changes`) implementados y verificados (fakes + integración real de lifecycle A/B). |
 | [0008](docs/ADR/0008-safe-persistence.md) | Persistencia segura — backups, verificación y rollback | Configuración XDG, escritura atómica y restauración reversible; sin root. |
-| [0009](docs/ADR/0009-optional-qt-tray-and-gio-notifications.md) | Bandeja Qt opcional y notificaciones Gio | `QSystemTrayIcon` opcional y `org.freedesktop.Notifications` best-effort; eventos BlueZ automáticos diferidos. |
+| [0009](docs/ADR/0009-optional-qt-tray-and-gio-notifications.md) | Bandeja Qt opcional y notificaciones Gio | `QSystemTrayIcon` opcional y `org.freedesktop.Notifications` best-effort; base previa para el puente de eventos de ADR-0010. |
+| [0010](docs/ADR/0010-qt-device-change-notifications.md) | Notificaciones Qt automáticas de cambios de dispositivos | `DeviceChangeBridge` con `Qt.QueuedConnection`, política significativa, sanitización, degradación segura y lifecycle idempotente. |
 
 ### Hallazgos críticos que condicionan el código
 

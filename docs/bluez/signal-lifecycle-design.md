@@ -641,13 +641,15 @@ Llamador (cualquier hilo)         Worker (Gio)
 
 ## 10. Riesgos de la integración Qt (Etapa 3)
 
-- **No existe puente automático GLib/Qt:** el worker itera su propio
-  `GMainContext`; los callbacks no tocan Qt. Toda actualización de UI se
-  marshalear a través de señal/slot o cola del hilo principal; el worker no
+- **Puente GLib/Qt implementado:**
+  `src/openbuds/presentation/qt/device_change_bridge.py` recibe los eventos;
+  los callbacks del repositorio no tocan Qt y `Qt.QueuedConnection` realiza el
+  *marshal* hacia el hilo de Qt. El worker itera su propio `GMainContext` y no
   debe bloquearse por trabajo de usuario (el mapeo/diff es ligero y ocurre en
   el worker).
-- La estrategia concreta de integración GLib/Qt queda **pendiente de investigar
-  y validar en la Etapa 3** ([gio-dbus-client-design §6](gio-dbus-client-design.md#6-requisitos-de-entorno)).
+- El lifecycle del puente está validado por tests, incluidos el cierre
+  idempotente, la desuscripción y las carreras relevantes; la cobertura no
+  afirma transiciones reales del dispositivo, suspensión o reanudación.
 - Concurrencia: el objeto del repositorio usado desde Qt debe ser seguro (los
   métodos de snapshot son independientes; el dispatch ocurre en el worker).
 

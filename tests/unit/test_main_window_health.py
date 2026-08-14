@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -69,6 +70,27 @@ class FakeTray:
 
     def close(self) -> None:
         self.close_calls += 1
+
+
+class FakeDeviceChangeBridge:
+    """Injected bridge fake for MainWindow lifecycle coverage."""
+
+    def __init__(self) -> None:
+        self.start_calls = 0
+        self.close_calls = 0
+
+    def start(self) -> None:
+        self.start_calls += 1
+
+    def close(self) -> None:
+        self.close_calls += 1
+
+
+class FailingWatch:
+    """Subscription source that simulates unavailable BlueZ observation."""
+
+    def subscribe(self, _callback: object) -> object:
+        raise RuntimeError("private subscription detail")
 
 
 def _report() -> HealthReport:
@@ -140,3 +162,59 @@ def test_main_window_closes_injected_tray_before_view_model_cleanup(
             window.close()
 
     assert tray.close_calls == 1
+
+
+def test_main_window_starts_and_closes_injected_device_change_bridge(
+    qt_app: QApplication,
+) -> None:
+    view_model = DeviceViewModel(
+        EmptyScan(),  # type: ignore[arg-type]
+        EmptyInfo(),  # type: ignore[arg-type]
+        NoopAction(),  # type: ignore[arg-type]
+        NoopAction(),  # type: ignore[arg-type]
+        NoopAction(),  # type: ignore[arg-type]
+        FakeHealth(_report()),  # type: ignore[arg-type]
+    )
+    bridge = FakeDeviceChangeBridge()
+    window = MainWindow(view_model, device_change_bridge=bridge)  # type: ignore[arg-type]
+    try:
+        assert bridge.start_calls == 1
+        window.close()
+        window.close()
+    finally:
+        if not window.isHidden():
+            window.close()
+
+    assert bridge.close_calls == 1
+
+
+def test_main_window_survives_device_change_subscription_failure(
+    qt_app: QApplication,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    view_model = DeviceViewModel(
+        EmptyScan(),  # type: ignore[arg-type]
+        EmptyInfo(),  # type: ignore[arg-type]
+        NoopAction(),  # type: ignore[arg-type]
+        NoopAction(),  # type: ignore[arg-type]
+        NoopAction(),  # type: ignore[arg-type]
+        FakeHealth(_report()),  # type: ignore[arg-type]
+    )
+    with caplog.at_level(logging.WARNING):
+        window = MainWindow(
+            view_model,
+            watch_devices=FailingWatch(),  # type: ignore[arg-type]
+            notifier=object(),  # type: ignore[arg-type]
+        )
+    try:
+        bridge = window.device_change_bridge
+        assert bridge is not None
+        bootstrap_thread = bridge._bootstrap_thread
+        assert bootstrap_thread is not None
+        bootstrap_thread.join(timeout=1.0)
+        assert bootstrap_thread.is_alive() is False
+        assert window.isEnabled() is True
+        assert "Las notificaciones automáticas de cambios no están disponibles." in caplog.text
+        assert "private subscription detail" not in caplog.text
+    finally:
+        window.close()
