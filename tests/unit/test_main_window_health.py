@@ -61,6 +61,16 @@ class FakeHealth:
         return self.report
 
 
+class FakeTray:
+    """Injected tray lifecycle fake for the MainWindow composition test."""
+
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
+
+
 def _report() -> HealthReport:
     return HealthReport(
         overall_status=HealthStatus.OK,
@@ -107,3 +117,26 @@ def test_diagnostic_handler_opens_dialog_and_renders_injected_report(
         assert "runtime.read_only" in window._health_dialog.report_text.toPlainText()
     finally:
         window.close()
+
+
+def test_main_window_closes_injected_tray_before_view_model_cleanup(
+    qt_app: QApplication,
+) -> None:
+    view_model = DeviceViewModel(
+        EmptyScan(),  # type: ignore[arg-type]
+        EmptyInfo(),  # type: ignore[arg-type]
+        NoopAction(),  # type: ignore[arg-type]
+        NoopAction(),  # type: ignore[arg-type]
+        NoopAction(),  # type: ignore[arg-type]
+        FakeHealth(_report()),  # type: ignore[arg-type]
+    )
+    tray = FakeTray()
+    window = MainWindow(view_model, tray_controller=tray)  # type: ignore[arg-type]
+    try:
+        _wait_until_idle(view_model, qt_app)
+        window.close()
+    finally:
+        if not window.isHidden():
+            window.close()
+
+    assert tray.close_calls == 1

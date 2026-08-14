@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from PySide6.QtGui import QCloseEvent
     from PySide6.QtWidgets import QMainWindow
 
+    from openbuds.presentation.qt.tray_controller import TrayController
     from openbuds.presentation.qt.view_models.device_view_model import DeviceViewModel
 
 _QT_IMPORT_ERROR: ImportError | None = None
@@ -36,6 +37,7 @@ except ImportError as exc:  # pragma: no cover - exercised only without the opti
     _QT_IMPORT_ERROR = exc
 else:
     from openbuds.presentation.qt.health_dialog import HealthDialog
+    from openbuds.presentation.qt.tray_controller import TrayController
     from openbuds.presentation.qt.view_models.device_view_model import DeviceViewModel
 
 _FIELD_NAMES = (
@@ -119,7 +121,11 @@ if _QT_IMPORT_ERROR is None:
     class MainWindow(QMainWindow):
         """Display one selected Bluetooth device and its available controls."""
 
-        def __init__(self, view_model: DeviceViewModel | None = None) -> None:
+        def __init__(
+            self,
+            view_model: DeviceViewModel | None = None,
+            tray_controller: TrayController | None = None,
+        ) -> None:
             super().__init__()
             self.setWindowTitle("OpenBuds Manager")
             self.setMinimumSize(480, 360)
@@ -132,6 +138,17 @@ if _QT_IMPORT_ERROR is None:
             self.view_model.health_report.connect(self._on_health_report)
             self.view_model.health_error.connect(self._on_health_error)
             self._health_dialog: HealthDialog | None = None
+            self.tray_controller = (
+                tray_controller
+                if tray_controller is not None
+                else TrayController(
+                    self,
+                    on_open=self._show_window,
+                    on_refresh=self.view_model.refresh,
+                    on_diagnostic=self._on_diagnostic,
+                    on_quit=self._quit_application,
+                )
+            )
             self._refresh_timer = QTimer(self)
             self._refresh_timer.setInterval(2000)
             self._refresh_timer.timeout.connect(self.view_model.refresh)
@@ -273,6 +290,19 @@ if _QT_IMPORT_ERROR is None:
             self._health_dialog.show()
             self.view_model.run_health_check()
 
+        def _show_window(self) -> None:
+            """Show and focus the window after an explicit tray action."""
+            self.show()
+            self.raise_()
+            self.activateWindow()
+
+        def _quit_application(self) -> None:
+            """Close through the normal lifecycle, then request application exit."""
+            self.close()
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
+
         def _on_health_report(self, report: object) -> None:
             if self._health_dialog is not None:
                 self._health_dialog.show_report(report)  # type: ignore[arg-type]
@@ -289,6 +319,7 @@ if _QT_IMPORT_ERROR is None:
             self._refresh_timer.stop()
             if self._health_dialog is not None:
                 self._health_dialog.close()
+            self.tray_controller.close()
             self.view_model.close()
             super().closeEvent(event)
 
@@ -297,15 +328,26 @@ else:
     class MainWindow:  # type: ignore[no-redef]
         """Fallback that reports the missing optional Qt runtime clearly."""
 
-        def __init__(self, view_model: DeviceViewModel | None = None) -> None:
+        def __init__(
+            self,
+            view_model: DeviceViewModel | None = None,
+            tray_controller: TrayController | None = None,
+        ) -> None:
             del view_model
+            del tray_controller
             _require_qt()
 
 
-def build_main_window(view_model: DeviceViewModel | None = None) -> QMainWindow:
+def build_main_window(
+    view_model: DeviceViewModel | None = None,
+    tray_controller: TrayController | None = None,
+) -> QMainWindow:
     """Build the single main window with an injected or real ViewModel."""
     _require_qt()
-    return MainWindow(view_model if view_model is not None else build_default_view_model())
+    return MainWindow(
+        view_model if view_model is not None else build_default_view_model(),
+        tray_controller,
+    )
 
 
 def run_app() -> int:
