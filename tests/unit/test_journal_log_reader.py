@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from openbuds.infrastructure.logs.journal_log_reader import JournalLogReader
+from openbuds.infrastructure.logs.journal_log_reader import JournalLogReader, sanitize_journal_line
 
 
 @dataclass(frozen=True)
@@ -106,6 +106,34 @@ def test_nonzero_bluez_attempt_is_not_retried_as_user() -> None:
     assert len(executor.calls) == 1
 
 
+def test_sanitize_journal_line_redacts_short_metadata_and_dynamic_ids() -> None:
+    line = (
+        "ago 11 10:00:00 workstation wireplumber[1234]: "
+        "sender=:1.42 ptr=0x7ff0abc12345 boot=0123456789abcdef0123456789abcdef"
+    )
+
+    sanitized = sanitize_journal_line(line)
+
+    assert sanitized.startswith("ago 11 10:00:00 <host> wireplumber[PID]:")
+    assert ":1.42" not in sanitized
+    assert "[1234]" not in sanitized
+    assert "0x7ff0abc12345" not in sanitized
+    assert "0123456789abcdef0123456789abcdef" not in sanitized
+
+
+def test_sanitize_journal_line_keeps_short_hex_values() -> None:
+    sanitized = sanitize_journal_line("ago 11 10:00:00 host pipewire[7]: value=0x00")
+
+    assert "value=0x00" in sanitized
+    assert "<host> pipewire[PID]" in sanitized
+
+
+def test_sanitize_journal_line_redacts_boot_id() -> None:
+    sanitized = sanitize_journal_line("-- Boot 0123456789abcdef0123456789abcdef --")
+
+    assert sanitized == "-- Boot <redacted> --"
+
+
 def test_empty_system_unit_falls_back_to_user_journal_for_user_service() -> None:
     executor = RecordingExecutor(
         [
@@ -116,7 +144,7 @@ def test_empty_system_unit_falls_back_to_user_journal_for_user_service() -> None
 
     result = JournalLogReader(executor=executor).read("wireplumber", 20)
 
-    assert result == (True, "ago 11 10:00:00 host wireplumber[123]: line", "")
+    assert result == (True, "ago 11 10:00:00 <host> wireplumber[PID]: line", "")
     assert len(executor.calls) == 2
     assert executor.calls[1][0][1] == "--user"
 

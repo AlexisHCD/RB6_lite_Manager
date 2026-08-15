@@ -290,24 +290,29 @@ def test_handler_openbuds_error_is_reported(
     monkeypatch.setattr(
         cli,
         "_cmd_config",
-        lambda _context: (_ for _ in ()).throw(OpenBudsError("fallo")),
+        lambda _context: (_ for _ in ()).throw(OpenBudsError("fallo en bluez_output.42.1")),
     )
 
     assert cli.main(["config"]) == 1
-    assert "Error: fallo\n" in capsys.readouterr().err
+    assert "Error: fallo en <bluetooth-sink>\n" in capsys.readouterr().err
 
 
-def test_unexpected_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unexpected_error_is_reported_without_raw_traceback(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(cli, "load_config", lambda: default_config())
     monkeypatch.setattr(cli, "setup_logging_from_config", lambda _config: None)
+    exception_logger = Mock()
+    monkeypatch.setattr(cli._LOGGER, "exception", exception_logger)
     monkeypatch.setattr(
         cli,
         "_cmd_config",
-        lambda _context: (_ for _ in ()).throw(RuntimeError("bug")),
+        lambda _context: (_ for _ in ()).throw(RuntimeError("internal failure")),
     )
 
-    with pytest.raises(RuntimeError, match="bug"):
-        cli.main(["config"])
+    assert cli.main(["config"]) == 1
+    assert capsys.readouterr().err == "Error: No se pudo completar la operación.\n"
+    exception_logger.assert_called_once_with("CLI execution failed")
 
 
 @pytest.mark.parametrize(
@@ -746,7 +751,8 @@ def test_status_prints_aggregate_without_identifiers(
     assert "Estado: conectado" in output
     assert "Perfil: a2dp" in output
     assert "Códec: sbc (a2dp)" in output
-    assert "Sink: bluez_output.<redacted>.1" in output
+    assert "Sink: Disponible" in output
+    assert "bluez_output." not in output
     assert "00:11:22:33:44:55" not in output
     assert "/org/bluez/" not in output
 

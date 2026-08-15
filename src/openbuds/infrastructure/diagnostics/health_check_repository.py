@@ -30,7 +30,6 @@ from openbuds.domain.models import (
     SystemInfo,
 )
 from openbuds.infrastructure.logs.journal_log_reader import JournalLogReader
-from openbuds.infrastructure.redaction import sanitize_display
 from openbuds.infrastructure.system import environment_detector
 
 _CHECK_ORDER = (
@@ -466,7 +465,6 @@ class HealthCheckRepository(IDiagnosticsRepository):
                 "Sink por defecto del sistema",
                 CheckSeverity.OK,
                 "sink por defecto disponible",
-                detail=sanitize_display(sink),
             )
 
         add("audio.sink_default", "Sink por defecto del sistema", check_sink)

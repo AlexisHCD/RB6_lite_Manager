@@ -38,6 +38,7 @@ from openbuds.core.config import (
 )
 from openbuds.core.errors import ConfigError, OpenBudsError
 from openbuds.core.logging_setup import get_logger, setup_logging_from_config
+from openbuds.core.privacy import sanitize_text
 from openbuds.domain.enums import (
     AutoFixId,
     BluetoothProfile,
@@ -48,7 +49,6 @@ from openbuds.domain.enums import (
 from openbuds.domain.models import CheckResult, DeviceChangeEvent, DeviceInfo
 from openbuds.infrastructure.system import environment_detector
 from openbuds.presentation.formatting import (
-    REDACT_ADDRESS,
     connection_label,
     device_display_name,
     format_aggregate,
@@ -85,7 +85,6 @@ _CONFIG_BOOL_VALUES: Final = {
     "0": False,
 }
 _ADAPTER_NAME = re.compile(r"hci[0-9]+")
-_ADDRESS = REDACT_ADDRESS
 _AUTO_FIX_DESCRIPTIONS: Final = {
     AutoFixId.START_AUDIO.value: "Inicia las unidades de audio de usuario (pipewire, wireplumber)",
     AutoFixId.PROFILE_A2DP.value: "Cambia al perfil A2DP (mejor calidad de reproducción)",
@@ -933,7 +932,13 @@ def main(argv: list[str] | None = None) -> int:
     except OpenBudsError as exc:
         if logging_configured:
             _LOGGER.error("CLI error: %s", exc)
-        print(f"Error: {exc}", file=sys.stderr)
+        print(f"Error: {sanitize_text(str(exc), limit=300)}", file=sys.stderr)
+        return 1
+
+    except Exception:
+        if logging_configured:
+            _LOGGER.exception("CLI execution failed")
+        print("Error: No se pudo completar la operación.", file=sys.stderr)
         return 1
 
 

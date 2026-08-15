@@ -1,6 +1,6 @@
 """Notificaciones de escritorio.
 
-Estado: Etapa 0 — esqueleto; notificaciones previstas después del MVP de la Etapa 3.
+Estado: implementación opcional del MVP; errores y disponibilidad se degradan de forma segura.
 """
 
 from __future__ import annotations

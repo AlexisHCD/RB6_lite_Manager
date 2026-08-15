@@ -162,9 +162,13 @@ def test_bluetooth_error_is_reported(
     assert capsys.readouterr().err == "Error: bus unavailable\n"
 
 
-def test_unexpected_error_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
-    with pytest.raises(RuntimeError, match="bug"):
-        _run(monkeypatch, FakeUseCase(RuntimeError("bug")), ["devices"])
+def test_unexpected_error_is_reported_without_traceback(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli._LOGGER, "exception", lambda *_args, **_kwargs: None)
+
+    assert _run(monkeypatch, FakeUseCase(RuntimeError("bug")), ["devices"]) == 1
+    assert capsys.readouterr().err == "Error: No se pudo completar la operación.\n"
 
 
 def test_output_contains_no_mac_or_object_path(

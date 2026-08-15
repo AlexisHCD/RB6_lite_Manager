@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -39,6 +40,11 @@ def test_logs_smoke_is_private_and_returns_a_coherent_exit_code() -> None:
     assert forbidden_address not in combined
     assert re.search(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}", combined) is None
     assert "/org/bluez/" not in combined
+    assert socket.gethostname() not in combined
+    assert re.search(r"(?<![A-Za-z0-9]):[0-9]+(?:\.[0-9]+)*\b", combined) is None
+    assert re.search(r"\[[0-9]+\]", combined) is None
+    assert re.search(r"0x[0-9A-Fa-f]{4,}\b", combined) is None
+    assert re.search(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{16,}(?![0-9A-Fa-f])", combined) is None
     assert (
         any(f"=== {service} ===" in output for service in ("bluez", "wireplumber", "pipewire"))
         or "(no disponible:" in output

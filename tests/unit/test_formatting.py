@@ -86,8 +86,8 @@ def test_aggregate_fields_and_text_match_the_cli_contract() -> None:
         "RSSI": "-45 dBm",
         "Perfil": "a2dp",
         "Códec": "sbc (a2dp)",
-        "Sink": "bluez_output.<redacted>.1",
-        "Source": "bluez_input.<redacted>.1",
+        "Sink": "Disponible",
+        "Source": "Disponible",
     }
     assert format_aggregate(aggregate) == "\n".join(
         f"{key}: {value}" for key, value in fields.items()

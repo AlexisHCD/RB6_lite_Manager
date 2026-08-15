@@ -218,8 +218,8 @@ def test_refresh_populates_aggregate_fields(qt_app: QApplication) -> None:
         assert view_model.rssi == "-42 dBm"
         assert view_model.profile == "a2dp"
         assert view_model.codec == "sbc (a2dp)"
-        assert view_model.sink == "bluez_output.<redacted>.1"
-        assert view_model.source == "bluez_input.<redacted>.1"
+        assert view_model.sink == "Disponible"
+        assert view_model.source == "Disponible"
         assert info.paths == [device.object_path]
     finally:
         view_model.close()

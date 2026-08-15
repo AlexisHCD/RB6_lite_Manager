@@ -185,3 +185,43 @@ class TestFormatConstants:
         # porque afecta a la vista de Logs y a los parsers de la GUI.
         assert FMT == "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
         assert DATEFMT == "%Y-%m-%d %H:%M:%S"
+
+    def test_exception_log_entry_is_sanitized_but_diagnostic(self) -> None:
+        bus = EventBus()
+        received: list[Event] = []
+        bus.subscribe(LOG_EVENT_NAME, received.append)
+        setup_logging(event_bus=bus)
+
+        try:
+            raise RuntimeError("fallo en bluez_output.42.1 /org/bluez/hci0")
+        except RuntimeError:
+            get_logger("openbuds.test.events").exception("operación fallida")
+
+        entry = received[0].payload
+        assert entry.exception_text is not None
+        assert "RuntimeError: fallo en" in entry.exception_text
+        assert "bluez_output.42.1" not in entry.exception_text
+        assert "/org/bluez/hci0" not in entry.exception_text
+        assert "Traceback" not in entry.exception_text
+        assert "test_logging_setup.py" not in entry.exception_text
+
+    def test_exception_stream_and_file_are_sanitized(self, capsys, tmp_path: Path) -> None:
+        log_file = tmp_path / "openbuds.log"
+        setup_logging(log_file=str(log_file))
+
+        try:
+            raise RuntimeError("fallo en bluez_output.42.1 /org/bluez/hci0")
+        except RuntimeError:
+            get_logger("openbuds.test.file").exception("operación fallida")
+
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+        stream = capsys.readouterr().err
+        file_output = log_file.read_text(encoding="utf-8")
+
+        for output in (stream, file_output):
+            assert "RuntimeError: fallo en" in output
+            assert "bluez_output.42.1" not in output
+            assert "/org/bluez/hci0" not in output
+            assert "Traceback" not in output
+            assert "test_logging_setup.py" not in output

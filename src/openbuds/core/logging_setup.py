@@ -16,6 +16,7 @@ La función ``setup_logging_from_config`` actúa de puente entre ``AppConfig`` y
 
 from __future__ import annotations
 
+import copy
 import logging
 from contextlib import suppress
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ from logging.handlers import RotatingFileHandler
 from openbuds.core.config import AppConfig
 from openbuds.core.errors import ConfigError
 from openbuds.core.events import Event, EventBus, default_bus
+from openbuds.core.privacy import sanitize_exception, sanitize_text
 
 FMT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 DATEFMT = "%Y-%m-%d %H:%M:%S"
@@ -50,6 +52,21 @@ class LogEntry:
     exception_text: str | None = None
 
 
+class PrivacyFormatter(logging.Formatter):
+    """Format records without exposing dynamic identifiers or raw tracebacks."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Render one record with a bounded, privacy-safe exception message."""
+        safe_record = copy.copy(record)
+        safe_record.msg = sanitize_text(record.getMessage(), limit=300)
+        safe_record.args = ()
+        exception_text = sanitize_exception(record.exc_info) if record.exc_info else ""
+        safe_record.exc_info = None
+        safe_record.exc_text = None
+        formatted = super().format(safe_record)
+        return f"{formatted}\n{exception_text}" if exception_text else formatted
+
+
 class EventBusLogHandler(logging.Handler):
     """Publica registros de logging como eventos tipados en un ``EventBus``."""
 
@@ -61,13 +78,13 @@ class EventBusLogHandler(logging.Handler):
         """Convierte y publica un registro sin propagar fallos de suscriptores."""
         exception_text = None
         if record.exc_info:
-            exception_text = logging.Formatter().formatException(record.exc_info)
+            exception_text = sanitize_exception(record.exc_info)
 
         entry = LogEntry(
             timestamp=datetime.fromtimestamp(record.created, tz=UTC),
             level_name=record.levelname,
             logger_name=record.name,
-            message=record.getMessage(),
+            message=sanitize_text(record.getMessage(), limit=300),
             exception_text=exception_text,
         )
         try:
@@ -119,6 +136,11 @@ def setup_logging(
             raise ConfigError(
                 f"No se pudo configurar el archivo de log en {log_file}: {exc}"
             ) from exc
+
+    formatter = PrivacyFormatter(FMT, datefmt=DATEFMT)
+    for handler in handlers:
+        if not isinstance(handler, EventBusLogHandler):
+            handler.setFormatter(formatter)
 
     logging.basicConfig(
         level=_normalize_level(level),

@@ -2,27 +2,27 @@
 
 from __future__ import annotations
 
-import re
-
-_REDACT_OBJECT_PATH = re.compile(r"/org/bluez/[^\s]+")
-_REDACT_ADDRESS = re.compile(
-    r"(?<![A-Za-z0-9])[0-9A-Fa-f]{2}(?:[:_. ]?[0-9A-Fa-f]{2}){5}(?![A-Za-z0-9])"
+from openbuds.core.privacy import (
+    redact_addresses as _redact_addresses,
+)
+from openbuds.core.privacy import (
+    redact_object_paths as _redact_object_paths,
+)
+from openbuds.core.privacy import (
+    sanitize_text,
 )
 
 
 def redact_object_paths(text: str) -> str:
-    """Redact BlueZ object paths from text."""
-    return _REDACT_OBJECT_PATH.sub("<redacted>", text)
+    """Redact D-Bus object paths from text."""
+    return _redact_object_paths(text)
 
 
 def redact_addresses(text: str) -> str:
     """Redact Bluetooth addresses from text."""
-    return _REDACT_ADDRESS.sub("<redacted>", text)
+    return _redact_addresses(text)
 
 
 def sanitize_display(text: str, limit: int = 80) -> str:
     """Redact identifiers, replace non-printable characters, and limit text."""
-    sanitized = redact_object_paths(text)
-    sanitized = redact_addresses(sanitized)
-    sanitized = "".join(character if character.isprintable() else "?" for character in sanitized)
-    return sanitized[:limit]
+    return sanitize_text(text, limit=limit)

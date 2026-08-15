@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import subprocess
 from typing import Any, Final, Protocol, cast
 
@@ -26,6 +27,25 @@ class Executor(Protocol):
 
 
 _SUPPORTED_SERVICES: Final = frozenset({"bluez", "wireplumber", "pipewire"})
+_SHORT_PREFIX = re.compile(r"^(\S+\s+\S+\s+\S+)\s+\S+\s+(.*)$")
+_SHORT_PID = re.compile(r"\[\d+\]")
+_BOOT_LINE = re.compile(r"^-- Boot [0-9A-Fa-f]{16,} --$")
+
+
+def sanitize_journal_line(line: str, limit: int = 300) -> str:
+    """Sanitize journal metadata while preserving its timestamp and message."""
+    if _BOOT_LINE.fullmatch(line):
+        normalized = "-- Boot <redacted> --"
+    else:
+        match = _SHORT_PREFIX.match(line)
+        if match:
+            timestamp, message = match.groups()
+            normalized = f"{timestamp} <host> {_SHORT_PID.sub('[PID]', message)}"
+        else:
+            normalized = _SHORT_PID.sub("[PID]", line)
+    return sanitize_display(normalized, limit=limit)
+
+
 # Logical service name -> systemd unit (the BlueZ daemon unit is
 # `bluetooth.service`, not `bluez.service`).
 _UNIT_BY_SERVICE: Final = {
@@ -109,7 +129,5 @@ class JournalLogReader:
         if not isinstance(result.stdout, str):
             return False, "", _NONZERO_ERROR, False
 
-        sanitized = "\n".join(
-            sanitize_display(line, limit=300) for line in result.stdout.splitlines()
-        )
+        sanitized = "\n".join(sanitize_journal_line(line) for line in result.stdout.splitlines())
         return True, sanitized, "", False
