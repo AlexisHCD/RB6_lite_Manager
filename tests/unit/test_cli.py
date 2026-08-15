@@ -315,20 +315,17 @@ def test_unexpected_error_is_reported_without_raw_traceback(
     exception_logger.assert_called_once_with("CLI execution failed")
 
 
-@pytest.mark.parametrize(
-    ("command", "milestone"),
-    [
-        ("codec", "Etapa 2 (sujeto a evidencia de la Etapa 1)"),
-        ("bench", "una etapa posterior"),
-    ],
-)
-def test_future_command_returns_two_with_real_milestone(
-    capsys: pytest.CaptureFixture[str], command: str, milestone: str
-) -> None:
-    assert cli.main([command]) == 2
-    error = capsys.readouterr().err
-    assert milestone in error
-    assert "no está implementado" in error
+@pytest.mark.parametrize("command", ["codec", "bench"])
+def test_post_mvp_commands_are_not_public(command: str) -> None:
+    with pytest.raises(SystemExit, match="2"):
+        cli.build_parser().parse_args([command])
+
+
+def test_public_help_hides_post_mvp_commands() -> None:
+    help_text = cli.build_parser().format_help()
+
+    assert "codec" not in help_text
+    assert "bench" not in help_text
 
 
 class _HealthUseCase:

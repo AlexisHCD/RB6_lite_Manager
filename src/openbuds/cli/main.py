@@ -721,20 +721,6 @@ def _cmd_version(_context: CliContext) -> int:
     return 0
 
 
-def _cmd_future(command: str) -> int:
-    """Informa del hito responsable de un comando aún no implementado."""
-    milestones = {
-        "codec": "Etapa 2 (sujeto a evidencia de la Etapa 1)",
-        "bench": "una etapa posterior",
-    }
-    print(
-        f"El subcomando '{command}' aún no está implementado; "
-        f"se implementará en {milestones[command]}.",
-        file=sys.stderr,
-    )
-    return 2
-
-
 def _parse_log_lines(value: str) -> int:
     """Parse the bounded line count accepted by ``openbuds logs``."""
     try:
@@ -814,7 +800,6 @@ def build_parser() -> argparse.ArgumentParser:
     mic = sub.add_parser("mic", help="Activa el perfil HFP runtime.")
     mic.add_argument("dispositivo", nargs="?", help="Alias o nombre exacto del dispositivo.")
     mic.add_argument("-y", "--yes", action="store_true", help="Omite la confirmación.")
-    sub.add_parser("codec", help="Muestra el códec activo.")
     sub.add_parser("health", help="Ejecuta un Health Check.")
     fix = sub.add_parser("fix", help="Aplica un auto-fix seguro disponible.")
     fix.add_argument("fix_id", help="Identificador del auto-fix a aplicar.")
@@ -833,7 +818,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=20,
         help="Número de líneas por servicio (1-200).",
     )
-    sub.add_parser("bench", help="Ejecuta un benchmark de enlace.")
     return parser
 
 
@@ -844,8 +828,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if command == "version":
         return _cmd_version(CliContext())
-    if command not in _BOOTSTRAP_COMMANDS:
-        return _cmd_future(command)
 
     logging_configured = False
     try:
