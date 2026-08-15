@@ -6,5 +6,5 @@ Estado: Etapa 0 — backend base de solo lectura publicado. El paquete expone la
 proyecto y sirve de raíz para la CLI, el core y las capas de la aplicación.
 """
 
-__version__ = "0.1.0.dev0"
+__version__ = "0.1.0"
 __all__ = ["__version__"]

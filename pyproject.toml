@@ -7,25 +7,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openbuds-manager"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Administrador profesional de auriculares Bluetooth para Linux (Ubuntu 24.04)."
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 license = { text = "GPL-3.0-or-later" }
 authors = [
     { name = "Alexis Hernandez", email = "adhcamus@gmail.com" },
 ]
 keywords = ["bluetooth", "bluez", "pipewire", "wireplumber", "redmi-buds", "linux", "audio"]
 classifiers = [
-    "Development Status :: 1 - Planning",
+    "Development Status :: 4 - Beta",
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
     "Topic :: Multimedia :: Sound/Audio",
     "Topic :: System :: Hardware",
 ]
@@ -36,8 +34,6 @@ dependencies = [
     # de sistema: ver README -> "Instalación". Si la instalación por pip falla,
     # usar el paquete de la distribución (python3-gi).
     "PyGObject>=3.46",
-    # Manipulación de archivos YAML para device profiles.
-    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -57,11 +53,12 @@ Homepage = "https://github.com/AlexisHCD/RB6_lite_Manager"
 Repository = "https://github.com/AlexisHCD/RB6_lite_Manager"
 
 # --- setuptools: layout src/ ---
+[tool.setuptools]
+include-package-data = false
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.setuptools.package-data]
-"openbuds.device_profiles" = ["*.yaml", "*.yml"]
 
 # ============================================================================
 # Ruff — linter y formateador (PEP 8, import sorting)
@@ -121,7 +118,6 @@ ignore_missing_imports = true  # PySide6/PyGObject no siempre tienen stubs
 module = [
     "gi.*",
     "PySide6.*",
-    "yaml",
 ]
 ignore_missing_imports = true
 

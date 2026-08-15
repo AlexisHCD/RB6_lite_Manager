@@ -10,7 +10,7 @@ from pathlib import Path
 
 from openbuds.domain.interfaces.profile_repo import DeviceProfile
 
-# Directorio donde residen los perfiles YAML empaquetados con la app.
+# Directorio de perfiles YAML fuente; los perfiles están fuera del paquete MVP.
 PROFILES_DIR = Path(__file__).resolve().parent
 
 

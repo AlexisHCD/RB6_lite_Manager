@@ -7,6 +7,8 @@ contratos del dominio están accesibles desde los puntos de entrada esperados.
 from __future__ import annotations
 
 import importlib
+import tomllib
+from pathlib import Path
 
 import openbuds
 from openbuds.domain import enums, models
@@ -15,6 +17,31 @@ from openbuds.domain import enums, models
 def test_version_is_string() -> None:
     assert isinstance(openbuds.__version__, str)
     assert openbuds.__version__
+
+
+def test_release_metadata_matches_mvp_version_and_status() -> None:
+    pyproject = Path(__file__).parents[2] / "pyproject.toml"
+    with pyproject.open("rb") as stream:
+        project = tomllib.load(stream)["project"]
+
+    assert project["version"] == "0.1.0"
+    assert project["version"] == openbuds.__version__
+    assert "Development Status :: 4 - Beta" in project["classifiers"]
+    assert project["requires-python"] == ">=3.12,<3.13"
+    assert "Programming Language :: Python :: 3.12" in project["classifiers"]
+    assert "Programming Language :: Python :: 3.13" not in project["classifiers"]
+    assert "Programming Language :: Python :: 3.14" not in project["classifiers"]
+
+
+def test_profiles_are_not_runtime_packaging_dependencies() -> None:
+    pyproject = Path(__file__).parents[2] / "pyproject.toml"
+    with pyproject.open("rb") as stream:
+        data = tomllib.load(stream)
+
+    assert not any(str(dep).startswith("PyYAML") for dep in data["project"]["dependencies"])
+    assert "package-data" not in data["tool"]["setuptools"]
+    assert data["tool"]["setuptools"]["include-package-data"] is False
+    assert data["tool"]["setuptools"]["packages"]["find"]["where"] == ["src"]
 
 
 def test_domain_models_importable_from_package() -> None:
