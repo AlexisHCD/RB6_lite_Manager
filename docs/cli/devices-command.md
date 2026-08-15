@@ -187,11 +187,6 @@ de `main` ya cubre el caso sin cambios adicionales
 - El comando **no** se suscribe a `subscribe_device_changes`, **no** arranca un
   main loop de GLib y **no** depende del Incremento 2 de señales: usa solo la
   consulta snapshot `list_devices`.
-- Al implementar, `_cmd_future` deja de listar `devices` y el test
-  parametrizado `test_future_command_returns_two_with_real_phase`
-  (`tests/unit/test_cli.py`) se actualiza (se elimina `devices` del caso). **Ya
-  hecho:** `devices` no aparece en `_cmd_future` y el test parametrizado quedó
-  reducido a `codec`/`health`/`bench`.
 
 ---
 
@@ -234,12 +229,6 @@ que convierte el caso 14 en una garantía estructural. Los tests que ejercitan
 `main` (no solo el handler) inyectan o monkeypatchean la factory de
 construcción del repositorio (p. ej. `main._build_scan_devices_use_case`) y
 nunca llegan a importar `gi`.
-
-### 7.3 Implementación de `main` (ajuste a `tests/unit/test_cli.py`)
-
-- `test_future_command_returns_two_with_real_phase`: quitar `devices` de la
-  parametrización (deja de ser un comando futuro). **Ya hecho** (solo
-  `codec`/`health`/`bench`).
 
 ---
 

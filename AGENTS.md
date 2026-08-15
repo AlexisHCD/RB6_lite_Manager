@@ -200,7 +200,7 @@ Ver `docs/ARCHITECTURE.md` para el detalle y el diagrama.
 | [0002](docs/ADR/0002-wireplumber-0.4-lua-config-scope.md) | WirePlumber **0.4 Lua**, scope **`~/.config/wireplumber/`** | Ubuntu 24.04 = 0.4.17 (NO 0.5). Nunca `/usr/share/`, nunca root. |
 | [0003](docs/ADR/0003-no-pipewire-python-binding.md) | Sin binding Python de PipeWire → `pw-dump`/`wpctl` vía subprocess | No existe binding oficial. |
 | [0004](docs/ADR/0004-clean-architecture-dependency-rule.md) | Clean Architecture, regla de dependencias | `presentation → application → domain ← infrastructure`. |
-| [0005](docs/ADR/0005-device-profile-contract.md) | Perfiles de dispositivo en YAML | Objetivo declarativo; contrato y YAML actuales incompatibles, rediseño tipado pendiente de aprobación. |
+| [0005](docs/ADR/0005-device-profile-contract.md) | Perfiles de dispositivo en YAML | Fuera del MVP; contrato y YAML actuales incompatibles, rediseño tipado pendiente de aprobación. |
 | [0006](docs/ADR/0006-app-config-toml-xdg-atomic-write.md) | Configuración TOML con rutas XDG y escritura atómica | Configuración propia separada, rutas XDG válidas y guardado sin truncado. |
 | [0007](docs/ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo (`DeviceChangeEvent`) | `DeviceChangeKind`/`DeviceChangeEvent`/`Unsubscribe`; contrato del dominio probado; **Incremento 2 completo**: nivel bajo de señales/lifecycle y dispatch del repositorio (`subscribe_device_changes`) implementados y verificados (fakes + integración real de lifecycle A/B). |
 | [0008](docs/ADR/0008-safe-persistence.md) | Persistencia segura — backups, verificación y rollback | Configuración XDG, escritura atómica y restauración reversible; sin root. |
@@ -283,12 +283,12 @@ Ver [ADR-0005](docs/ADR/0005-device-profile-contract.md).
 
 | Etapa | Estado | Resultado |
 |------|--------|-----------|
-| 0 — Estabilización | 🔜 En curso | Runtime reproducible, doctor fiable, WpctlAdapter cerrado, CI y licencia |
-| 1 — Caracterización física pasiva | ⏳ | Evidencia real de BlueZ/PipeWire/WirePlumber sin controlar hardware |
-| 2 — Backend de sesión | ⏳ | Estado agregado, CLI y controles estándar aprobados |
-| 3 — GUI MVP | ⏳ | Una ventana útil PySide6; bandeja después del MVP |
-| 4 — Health Check | ⏳ | Diagnóstico con observado/inferido/no disponible |
-| 5 — Persistencia segura | ⏳ | Dry-run, backup, escritura atómica, verificación y rollback |
+| 0 — Estabilización | ✅ Completada | Runtime reproducible, doctor fiable, WpctlAdapter cerrado, CI y licencia |
+| 1 — Caracterización física pasiva | ⏳ Parcial | Estados físicos 1–5 validados; suspensión/reanudación (estado 6) pendiente |
+| 2 — Backend de sesión | ✅ Completada | Estado agregado, CLI y controles estándar aprobados |
+| 3 — GUI MVP | ✅ Completada | Ventana PySide6 útil, Health, bandeja y notificaciones opcionales |
+| 4 — Health Check | ✅ Completada | Diagnóstico etiquetado, logs redactados y auto-fix seguro |
+| 5 — Persistencia segura | ✅ Implementación completada | Dry-run, backup, escritura atómica, verificación y rollback; overrides reales diferidos |
 
 Detalle en `docs/ROADMAP.md`.
 

@@ -56,8 +56,8 @@ El repositorio contiene la arquitectura por capas, los cimientos del dominio,
 la configuración TOML, logging, detección del entorno y una CLI base funcional.
 
 El **backend base de BlueZ** (acceso a BlueZ vía D-Bus, PyGObject/Gio) está
-publicado por incrementos; se consumirá en el backend de sesión (Etapa 2), y la
-validación física del dispositivo es de la Etapa 1. El **Incremento 1 — snapshot
+publicado por incrementos y forma parte del backend de sesión MVP. La
+validación física del dispositivo se documenta en la Etapa 1. El **Incremento 1 — snapshot
 `GetManagedObjects`** ya está implementado y verificado (`bluez/dbus_protocol.py` → `GioDBusProtocol` +
 `BlueZDBusClient.snapshot`), y también el **mapeo de objetos D-Bus → modelos**
 (`bluez/object_mapper.py`, puro y sin GI), las **consultas snapshot del
@@ -108,10 +108,9 @@ auriculares conectados): `doctor` exit 0 (Ubuntu 24.04, BlueZ 5.72, PipeWire
 (`hci0`, `Powered=True`, `Discovering=False`, `Discoverable=False`); **caso
 cero dispositivos**: `openbuds devices` exit 0 con `No se encontraron
 dispositivos Bluetooth.` y `pw-dump` con **0 nodos Bluetooth** (sin property
-keys). **No** se afirma detección del Redmi Buds 6 Lite (no había hardware
-conectado). **Pendientes del backend base BlueZ:** la **validación empírica de
-propiedades runtime inciertas** (bloqueada: sin auriculares conectados ni nodos
-Bluetooth); el **polling periódico de respaldo** para
+keys). **No** se afirma detección del Redmi Buds 6 Lite en esa captura. Los
+límites restantes son las **propiedades runtime inciertas** que el sistema no
+exponga de forma observable; el **polling periódico de respaldo** para
 `Connected`/`Paired`/`Trusted`
 ([RESEARCH_LIMITS §4](docs/RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus))
 está **implementado y verificado (2026-08-10)** como extensión interna
@@ -122,11 +121,10 @@ señal/poll** (`_refresh_and_dispatch`). El diseño y el código real están en
 [`docs/bluez/signal-lifecycle-design.md`](docs/bluez/signal-lifecycle-design.md)
 (§12) y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md)
 (§12). La base Bluetooth de solo lectura está implementada; la validación
-empírica del Redmi Buds 6 Lite se realizará en la Etapa 1, después de estabilizar
-el runtime y presentar el protocolo pasivo para aprobación. Ver
+empírica documentada del Redmi Buds 6 Lite cubre los estados físicos 1–5 de la
+Etapa 1; solo suspensión y reanudación (estado 6) permanece pendiente. Este
+README no afirma una reparación concreta del sistema. Ver
 [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/cli/devices-command.md`](docs/cli/devices-command.md).
-La aplicación completa aún no está terminada: controles de sesión, diagnóstico
-y GUI se implementan en las etapas siguientes.
 
 La base de inspección de audio incluye el **parser de
 `pw-dump`** (`infrastructure/pipewire/pw_dump_parser.py`, ADR-0003) — está
@@ -178,9 +176,9 @@ str`) inyectable por constructor con condición **`is None`** (`None` →
 `PwDumpRunner()`; un runner **falsy** inyectado se preserva). Los errores se
 **propagan sin re-envolver** (`PipeWireUnavailableError` del runner,
 `PipeWireParseError` del parser; misma instancia). El contrato global
-`IAudioRepository` sigue **parcialmente implementado**:
-`get_active_codec`/`get_default_audio_sink` **permanecen `NotImplementedError`**
-— **no** se infiere ni afirma códec
+`IAudioRepository` se consume en modo **solo lectura**:
+`get_active_codec` y `get_default_audio_sink` están implementados; el codec solo
+se presenta cuando está verificado y no se infiere desde propiedades ambiguas
 ([RESEARCH_LIMITS §2](docs/RESEARCH_LIMITS.md#2-propiedades-runtime-de-pipewire)).
 Cubierto por **8 unit tests** con fakes (sin `pw-dump`/PipeWire/GI) y una
 **integración real opt-in** (`tests/integration/test_pipewire_repository.py`,
@@ -293,20 +291,24 @@ con 1 si el sistema o el runtime son inválidos.
 ```bash
 .venv/bin/openbuds doctor        # diagnostica sistema, runtime y hardware
 .venv/bin/openbuds config        # muestra la configuración efectiva
-.venv/bin/openbuds config get|set|backup|backups|restore  # persistencia segura: backup, verificación y rollback (dry-run con --dry-run)
+.venv/bin/openbuds config get       # muestra la configuración efectiva
+.venv/bin/openbuds config backup    # crea un backup
+.venv/bin/openbuds config backups   # lista backups
+.venv/bin/openbuds config restore <archivo.bak>  # restaura un backup
 .venv/bin/openbuds version       # muestra la versión sin cargar config
 .venv/bin/openbuds devices       # lista dispositivos Bluetooth (backend base publicado): snapshot TSV
 .venv/bin/openbuds devices --paired-only            # solo emparejados
 .venv/bin/openbuds devices --adapter hci0           # solo el adaptador hci0 (o /org/bluez/hci0)
 .venv/bin/openbuds status         # estado agregado de dispositivos emparejados (batería/RSSI/perfil/códec/sink/source observados; sin identificadores)
 .venv/bin/openbuds watch          # observa en vivo cambios de estado de dispositivos emparejados (solo lectura; Ctrl+C para salir)
-.venv/bin/openbuds connect|disconnect|music|mic [dispositivo]  # sesión: confirmación previa; mic advierte de degradación; perfil runtime no persistente
+.venv/bin/openbuds connect <dispositivo>  # sesión: confirmación previa
+.venv/bin/openbuds disconnect <dispositivo>
+.venv/bin/openbuds music [dispositivo]
+.venv/bin/openbuds mic [dispositivo]     # advierte de degradación; perfil runtime no persistente
 .venv/bin/openbuds gui          # lanza la ventana única PySide6 (MVP); requiere display
 .venv/bin/openbuds health        # Health Check etiquetado por evidencia; solo lectura
 .venv/bin/openbuds logs          # logs de bluez/wireplumber/pipewire con identificadores redactados; solo lectura
 .venv/bin/openbuds fix <id>      # auto-fix seguro del Health Check: confirmación previa; start.audio y profile.a2dp; sin sudo
-.venv/bin/openbuds codec         # futuro: muestra el códec activo (Etapa 2, sujeto a evidencia de Etapa 1)
-.venv/bin/openbuds bench         # futuro: benchmark de enlace (posterior)
 ```
 
 `openbuds devices` lista el snapshot de los dispositivos **conocidos** por

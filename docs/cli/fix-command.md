@@ -69,4 +69,4 @@ mutar).
 
 - Sin auto-fix para `runtime.gio` (requiere recrear el venv manualmente),
   `hardware.adapter` (rfkill requiere sudo) ni reinicio de BlueZ (sudo).
-- Benchmark (`openbuds bench`) sigue diferido.
+- El benchmark permanece post-MVP y no tiene subcomando público.

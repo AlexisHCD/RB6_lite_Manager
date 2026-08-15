@@ -35,7 +35,7 @@ Estado global: OK
 [INFO]     device.connected — Dispositivo conectado: ninguno conectado (no disponible)
 [INFO]     audio.profile — Perfil de audio activo: perfil no disponible (no disponible)
 [INFO]     audio.codec — Códec activo: códec no disponible (no disponible)
-[OK]       audio.sink_default — Sink por defecto del sistema: sink por defecto disponible [alsa_output.pci-0000_00_1f.3.analog-stereo] (observado)
+[OK]       audio.sink_default — Sink por defecto del sistema: sink por defecto disponible (observado)
 [INFO]     audio.mic — Micrófono Bluetooth: micrófono no disponible (no disponible)
 [INFO]     battery.aggregate — Batería (agregada): batería no disponible (no disponible)
 ```
@@ -90,11 +90,8 @@ ausencias y fallos sin evaluar `no disponible`):
 - `openbuds health` no aplica auto-fixes; `openbuds fix` permanece separado y
   requiere confirmación explícita. Sin benchmark; sin jitter, latencia ni
   packet loss (no se prometen ni se estiman).
-- `openbuds codec` sigue pendiente (milestone Etapa 2); `openbuds bench`
-  pendiente (milestone posterior).
 - La GUI ejecuta un Health Check real de solo lectura mediante
   `RunHealthCheckUseCase` en segundo plano y muestra el informe en un diálogo;
   `openbuds health` sigue siendo la interfaz CLI equivalente. La GUI no ejecuta
   auto-fixes.
-- El volcado de logs/journal con redacción se difiere (pendiente parcial de
-  Etapa 4); este incremento ya redacta identificadores en todos los mensajes.
+- El volcado de logs/journal con redacción está disponible mediante `openbuds logs`.

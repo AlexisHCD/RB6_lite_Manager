@@ -59,10 +59,10 @@ Cada caso de uso modela **una intención del usuario** y orquesta repositorios:
 
 | Caso de uso | Descripción | Estado |
 |-------------|-------------|--------|
-| `ScanDevicesUseCase` | Listar dispositivos Bluetooth | Implementado (backend base publicado); se consumirá en la Etapa 2 |
-| `GetDeviceInfoUseCase` | Información agregada (dispositivo + batería + RSSI + códec) | Pendiente, Etapa 2 |
-| `ApplyOptimizationUseCase` | Aplicar optimización con flujo seguro (backup → validate → apply → verify → rollback) | Pendiente, Etapa 5 |
-| `RunHealthCheckUseCase` | Health Check completo del stack | Pendiente, Etapa 4 |
+| `ScanDevicesUseCase` | Listar dispositivos Bluetooth | Implementado y consumido por CLI/GUI |
+| `GetDeviceInfoUseCase` | Información agregada (dispositivo + batería + RSSI + códec) | Implementado |
+| `ApplyOptimizationUseCase` | Aplicar optimización con flujo seguro (backup → validate → apply → verify → rollback) | Primitivas seguras implementadas; generación de overrides diferida |
+| `RunHealthCheckUseCase` | Health Check completo del stack | Implementado |
 | `RunBenchmarkUseCase` | Benchmark de calidad de enlace | Posteriores |
 
 ### `infrastructure/` — Adaptadores externos

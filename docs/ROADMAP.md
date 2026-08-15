@@ -113,7 +113,7 @@ observado → casos de uso → CLI, sin configuración persistente.
   [`docs/cli/watch-command.md`](cli/watch-command.md)).
 - [x] `PipeWireRepository.get_default_audio_sink` implementado (solo lectura,
   vía `wpctl inspect @DEFAULT_AUDIO_SINK@` con `WpctlInspector` inyectable;
-  verificado real: `alsa_output.pci-0000_00_1f.3.analog-stereo`); consumo en
+  verificado real; el nombre dinámico no se expone en UI/CLI); consumo en
   `status`/Health posterior.
 - [x] Batería agregada estándar (`Battery1`) en status; L/R/estuche solo si
   existe una fuente identificable (ya documentado en Etapa 1).
@@ -245,7 +245,7 @@ el incremento 1: el Health Check no promete ni estima esas métricas).
 evidencia etiquetada y logs redactados, ambos verificados reales sin hardware.
 
 **Diferido/post-MVP (no forma parte del cierre de Etapa 4):** **benchmark de
-enlace** (`openbuds bench`). No se marca como completado. El **auto-fix
+enlace**. No tiene subcomando público y no se marca como completado. El **auto-fix
 seguro** dejó de estar diferido: quedó **implementado** en el incremento
 posterior a la Etapa 4 (`openbuds fix` con `start.audio` y `profile.a2dp`;
 confirmación explícita y verificación, sin sudo ni unidades de sistema).

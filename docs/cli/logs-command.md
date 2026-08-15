@@ -27,16 +27,16 @@ si al menos un servicio está disponible; **1** si todos fallan.
 
 ```text
 === bluez ===
-ago 11 10:00:01 host bluetoothd[PID]: <redacted> fd(41) ready
+ago 11 10:00:01 <host> bluetoothd[PID]: <redacted> fd(41) ready
 === wireplumber ===
-ago 11 10:00:02 host wireplumber[PID]: bluez_output.<redacted>.1
+ago 11 10:00:02 <host> wireplumber[PID]: <bluetooth-sink>
 === pipewire ===
-ago 11 10:00:03 host pipewire[PID]: <línea del journal sanitizada>
+ago 11 10:00:03 <host> pipewire[PID]: <línea del journal sanitizada>
 ```
 
 Las líneas reales se muestran con el mismo formato `-o short` de journalctl;
 los identificadores se sustituyen por `<redacted>` (por ejemplo, en la
-verificación real: `bluez_output.<redacted>.1` en wireplumber y
+verificación real: `<bluetooth-sink>` en wireplumber y
 `<redacted> fd(41) ready` en bluez).
 
 ## 2. Decisiones (registro del arquitecto)

@@ -28,13 +28,13 @@ Batería: 100%
 RSSI: -45 dBm
 Perfil: a2dp
 Códec: sbc (a2dp)
-Sink: bluez_output.<redacted>.1
+Sink: Disponible
 Source: No disponible
 ```
 
 Campos opcionales: `Batería` y `RSSI` solo si hay valor; `Perfil`/`Códec` solo
-si el códec está **verificado**; `Sink`/`Source` con el **primer nodo por
-`media.class`**; cualquier ausencia se muestra como **«No disponible»**. Sin
+si el códec está **verificado**; `Sink`/`Source` con disponibilidad estable por
+`media.class`, sin exponer `node.name`; cualquier ausencia se muestra como **«No disponible»**. Sin
 dispositivos emparejados imprime solo `No se encontraron dispositivos
 emparejados.` y sale con **exit 0**.
 
@@ -55,10 +55,7 @@ emparejados.` y sale con **exit 0**.
 
 ## 3. Límites
 
-- `IAudioRepository.get_default_audio_sink` **pendiente** (incremento posterior
-  de Etapa 2); el CLI usa el primer nodo por `media.class`.
-- `openbuds watch` **pendiente** (incremento posterior); `status` es snapshot.
-- HFP/micrófono y los casos de uso Connect/Disconnect/Música/Micrófono **no**
-  están implementados.
+- HFP/micrófono y los casos de uso Connect/Disconnect/Música/Micrófono están
+  implementados como operaciones runtime controladas y reversibles manualmente.
 - El códec es **solo observado** (runtime); `configuration_hex` vacío y byte
   `None` en este incremento. Sin hardware: «No disponible».

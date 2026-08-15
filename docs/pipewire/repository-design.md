@@ -3,10 +3,7 @@
 > Documentation First (diseño antes de escribir código) y ahora refleja la
 > **implementación verificada** del **Incremento 1** del repositorio PipeWire:
 > `list_bluetooth_audio_nodes` compone `runner.dump()` (payload fresco) + parser
-> puro en `pipewire_repository.py`. El contrato global `IAudioRepository` sigue
-> **parcialmente implementado** — este incremento cubre solo el listado;
-> `get_active_codec`/`get_default_audio_sink` **permanecen `NotImplementedError`**
-> (§10). Gates reales en §8.3.
+> puro en `pipewire_repository.py`. Este documento conserva el alcance histórico de ese incremento; `get_active_codec` y `get_default_audio_sink` se implementan actualmente en modo solo lectura en el MVP.
 - **Etapa:** 2 (backend PipeWire de solo lectura) — repositorio base de
   inspección de audio PipeWire
 - **Tipo:** diseño de implementación (no es un ADR)
@@ -26,8 +23,8 @@ Orquestar la cadena **runner → parser** sin lógica propia: `list_bluetooth_au
 class PipeWireRepository(IAudioRepository):
     def __init__(self, runner: DumpRunner | None = None) -> None: ...
     def list_bluetooth_audio_nodes(self) -> list[dict[str, str]]: ...
-    def get_active_codec(self, device_address: str) -> CodecInfo | None: ...  # NotImplemented
-    def get_default_audio_sink(self) -> str | None: ...                        # NotImplemented
+    def get_active_codec(self, device_address: str) -> CodecInfo | None: ...
+    def get_default_audio_sink(self) -> str | None: ...
 ```
 ## 3. Protocolo `DumpRunner` (structural typing)
 ```python
@@ -65,7 +62,9 @@ Invariantes:
 - **No** hay `try/except` amplio, **no** re-traducción ni causas nuevas: JSON inválido / root no-lista → `PipeWireParseError` (idéntico); `pw-dump` no disponible, timeout, returncode ≠ 0, stdout no-`str` → `PipeWireUnavailableError` (idéntico).
 - Excepciones de programación del runner/parser inyectados se propagan sin enmascarar (contrato del runner §7).
 ## 7. Privacidad
-El repositorio **no** loguea, imprime ni expone la **MAC** ni el `node.name` (los dicts de salida pueden contenerlas, pero su emisión es responsabilidad de la **presentación**, que tratará la MAC como dato sensible). La privacidad de presentación se aborda en un incremento posterior.
+El repositorio **no** loguea ni imprime la **MAC** ni el `node.name`. Los dicts
+de salida pueden contener esos valores para el consumo interno; la presentación
+MVP los redacta y no expone nombres dinámicos de PipeWire.
 ## 8. Criterios de aceptación (TDD)
 ### 8.1 Unit — `tests/unit/test_pipewire_repository.py`
 Fakes del runner (objetos ligeros con `dump()`); **sin** `pw-dump`, PipeWire ni GI.
@@ -93,21 +92,23 @@ Gated por `OPENBUDS_RUN_INTEGRATION=1` (`@pytest.mark.integration`).
 - **Unit tests** (`tests/unit/test_pipewire_repository.py`: fakes deterministas, sin `pw-dump`/PipeWire/GI) + **integración real opt-in** (`tests/integration/test_pipewire_repository.py`).
 - Commit atómico único: `feat(pipewire): implement PipeWireRepository.list_bluetooth_audio_nodes`.
 ## 9. Fuera de alcance (Incremento 1)
-- `get_active_codec` / `get_default_audio_sink` (**NotImplementedError**; §10).
+- `get_active_codec` / `get_default_audio_sink` (fuera del incremento histórico; hoy implementados).
 - Inferencia/validación de códecs o transportes (verbatim del parser).
 - Logging, caching, reintentos o política de retry del repositorio.
 - Privacidad de presentación (MAC visible al usuario).
-- Cualquier escritura sobre PipeWire/WirePlumber/dispositivo.
-## 10. Métodos diferidos — documentación honesta
-`get_active_codec(device_address) -> CodecInfo | None` y `get_default_audio_sink() -> str | None` **permanecen** con `NotImplementedError` en este incremento. No se implementan de forma parcial, **no se infiere códec** a partir de `bluez5.codec` (verbatim; semántica runtime no documentada formalmente) y no se afirma ningún códec. Se diseñarán en la Etapa 2 (backend de sesión); el caso positivo se validará empíricamente en la Etapa 1 (ADRs 0002/0003, RESEARCH_LIMITS §2).
+## 10. Implementación posterior del contrato global
+Aunque el incremento histórico cubría únicamente el listado de nodos, el MVP
+implementa `get_active_codec` y `get_default_audio_sink` en modo solo lectura.
+El códec continúa siendo observado y solo se muestra cuando está verificado: no
+se infiere a partir de propiedades ambiguas ni se afirma una capacidad no validada.
 ## 11. Resumen de decisiones (registro del arquitecto)
-1. Incremento 1 cubre **solo** `list_bluetooth_audio_nodes`; el contrato global `IAudioRepository` y los demás métodos quedan **pendientes**.
+1. El incremento histórico cubre **solo** `list_bluetooth_audio_nodes`; los métodos restantes del contrato global se implementaron posteriormente en el MVP.
 2. `DumpRunner` = Protocol estructural `dump() -> str`; `PwDumpRunner` ya es compatible (sin modificar runner ni parser).
 3. Inyección por ctor con condición **`is None`**: `None` → `PwDumpRunner()`; un runner **falsy** inyectado se preserva.
 4. Cuerpo mínimo de 2 líneas: `payload = runner.dump()` → `parse_bluetooth_audio_nodes(payload)` → retorno directo del `list[dict[str, str]]` del parser.
 5. **Fresh call** en cada invocación: sin cache, estado, logs, subprocess propio ni mutación.
 6. Errores propagados **sin re-envolver** (identidad): `PipeWireUnavailableError` del runner, `PipeWireParseError` del parser; sin `except` amplio.
-7. Sin MAC en logs/salida del repositorio (privacidad de presentación diferida).
-8. `get_active_codec` / `get_default_audio_sink` **NotImplemented**; sin inferencia de códec.
+7. Sin MAC en logs/salida del repositorio; la presentación MVP redacta los valores sensibles y nombres dinámicos.
+8. El códec no se infiere: solo se muestra cuando está verificado.
 9. Unit tests con fakes (llamadas exactas, forwarding por comportamiento, fresh, `[]`, parse error, identidad de error del runner, runner falsy preservado, default `PwDumpRunner`); integración real opt-in `list`→`list`, **sin assert de nodos ni payload**; resultado local 0 nodos, sin afirmación positiva de hardware.
-10. **Verificado (2026-08-10):** gates `make lint`/`make typecheck` en verde; los gates ordinarios y la integración opt-in pasaron al cierre del incremento. La implementación real es el retorno directo `parse_bluetooth_audio_nodes(self._runner.dump())` (§5) con ctor `runner if runner is not None else PwDumpRunner()` (§4). El contrato global `IAudioRepository` sigue **parcialmente implementado**.
+10. **Verificado (2026-08-10):** gates `make lint`/`make typecheck` en verde; los gates ordinarios y la integración opt-in pasaron al cierre del incremento. La implementación real es el retorno directo `parse_bluetooth_audio_nodes(self._runner.dump())` (§5) con ctor `runner if runner is not None else PwDumpRunner()` (§4).

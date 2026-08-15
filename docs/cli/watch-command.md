@@ -38,8 +38,8 @@ finaliza con `unsubscribe()` idempotente en `finally` y **exit 0**.
    Unsubscribe` delega en `subscribe_device_changes`; use case delgado.
 2. **Filtro por adaptador en presentación:** el callback compara
    `adapter_path`; el caso de uso no filtra.
-3. **Redacción de identificadores:** nunca MAC ni object paths; `_ADDRESS` se
-   sustituye por `<redacted>` y el nombre se sanitiza (igual que `status`).
+3. **Redacción de identificadores:** nunca MAC ni object paths; los nombres se
+   sanitizan y no se exponen IDs dinámicos de PipeWire (igual que `status`).
 4. **Formato de eventos:** ADDED/UPDATED/REMOVED con sufijo de conexión solo si
    cambia `connected`; estados `conectado`/`emparejado`/`desconectado`.
 5. **Ctrl+C seguro:** bucle de espera con `threading.Event`;
@@ -49,9 +49,7 @@ finaliza con `unsubscribe()` idempotente en `finally` y **exit 0**.
 
 - Sin hardware no llegan eventos (válido: la suscripción funciona, nada cambia).
 - Solo eventos; **no** imprime estado agregado (para eso está `status`).
-- `PipeWireRepository.get_default_audio_sink()` está implementado (vía `wpctl
-  inspect @DEFAULT_AUDIO_SINK@`, parseando `node.name`; `None` sin WirePlumber)
-  pero **aún no expuesto** en `status`/Health; se consumirá en incrementos
-  posteriores.
-- HFP/micrófono y los casos de uso Connect/Disconnect/Música/Micrófono **no**
-  están implementados.
+- `status` y Health consumen la inspección de sink por defecto; la salida no
+  expone el nombre dinámico del nodo.
+- HFP/micrófono y los casos de uso Connect/Disconnect/Música/Micrófono están
+  implementados en la CLI como operaciones runtime controladas.
