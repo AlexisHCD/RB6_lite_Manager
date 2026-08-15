@@ -52,10 +52,11 @@ En cada estado se observarán `Device1`, `Battery1` si aparece, RSSI,
 `ServicesResolved`, nodos de `pw-dump`, `wpctl status`, `wpctl inspect`, perfiles
 ofrecidos, propiedades de códec/transporte si existen, señales y polling.
 
-**Estado de caracterización (2026-08-13):** registro **parcial**. Con
+**Estado de caracterización (2026-08-14):** registro **parcial**. Con
 evidencia: estados 1 y 2 (sesión 3, solo lectura), estado 3 (sesión 1,
-pasiva) y estados 4 y 5 (sesión 2, mutaciones controladas aprobadas).
-Pendiente: 6.
+pasiva) y estados 4 y 5 (sesión 2, mutaciones controladas aprobadas). El
+estado 6 se ejecutó en una prueba controlada, pero no superó el criterio de
+reconexión automática tras reanudar.
 
 - [x] Estado 3: **A2DP/SBC reproduciendo** — evidencia pasiva 2026-08-11
   (sesión 1): perfil `a2dp-sink`, códec runtime `sbc`, un único `Audio/Sink`,
@@ -76,14 +77,20 @@ Pendiente: 6.
 - [x] Estado 5: **desconexión/reconexión manuales**, validado 2026-08-11
   (sesión 2): `openbuds disconnect`/`connect` (org.bluez.Device1) con
   emparejamiento intacto; sin conexión no se inventan datos («No disponible»).
-- [ ] Estado 6: suspensión y reanudación de Ubuntu.
+- [ ] Estado 6: suspensión y reanudación de Ubuntu — prueba 2026-08-14:
+  sesión y GUI recuperadas, pero los auriculares no se reconectaron
+  automáticamente; `openbuds devices --paired-only` terminó con exit 0 y mostró
+  el dispositivo presente, confirmando que seguía emparejado en BlueZ pero
+  desconectado.
 
-**La Etapa 1 no está completa:** queda el estado 6 (suspensión/reanudación).
+**La Etapa 1 no está completa:** el estado 6 fue observado, pero requiere
+resolver o caracterizar la falta de reconexión automática para superar el
+gate.
 El estado 2 queda validado con la limitación indicada: se observó conexión
 estable sin reproducción dirigida al sink Bluetooth, pero no se promete
-silencio absoluto de todos los streams de PipeWire. El gate físico se mantiene
-para la sesión restante (protocolo y política de redacción aprobados antes de
-ella); se validará cuando su funcionalidad consumidora lo requiera, con gate.
+silencio absoluto de todos los streams de PipeWire. El gate físico permanece
+abierto: la prueba del estado 6 no cumplió la reconexión automática tras
+reanudar y requiere diagnóstico o caracterización adicional, con gate.
 
 **Gate físico:** antes de comenzar se presentará el protocolo exacto, comandos de
 solo lectura y política de redacción; se esperará confirmación de que el usuario

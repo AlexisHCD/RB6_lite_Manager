@@ -140,7 +140,9 @@ en §6 y §9).
 - [sesión 3] **Desconectado estable** bajo el protocolo (Etapa 1, estado 1).
 - [sesión 3] **Conectado sin reproducción dirigida al sink Bluetooth** (Etapa 1,
   estado 2); no equivale a silencio absoluto de todos los streams.
-- **Suspensión/reanudación** de Ubuntu (estado 6).
+- **Suspensión/reanudación** de Ubuntu (estado 6): prueba ejecutada el
+  2026-08-14; la sesión se recuperó, pero no hubo reconexión automática de los
+  auriculares (ver §10).
 - **Señales por cambio físico real**: la validación de señales/polling fue de
   **lifecycle** (sesión 1) y de suscripción correcta con hardware conectado
   (sesión 2); en esta sesión no se indujeron cambios durante `watch`.
@@ -150,7 +152,8 @@ en §6 y §9).
 - **Asociación robusta genérica** `Device1` ↔ nodos PipeWire: sin validar.
 
 La Etapa 1 **no está completa**: los estados 1 y 2 (sesión 3), 3 (sesión 1),
-4 y 5 (sesión 2) cuentan con evidencia; el estado 6 sigue pendiente.
+4 y 5 (sesión 2) cuentan con evidencia; el estado 6 fue observado, pero no
+superó el criterio de reconexión automática tras reanudar.
 
 ## 6. Sesión 3 (2026-08-13) — estados desconectado e idle
 
@@ -188,19 +191,21 @@ La Etapa 1 **no está completa**: los estados 1 y 2 (sesión 3), 3 (sesión 1),
 - Suite de integraciones opt-in, sin mutaciones: pasada completa.
 - No se guardaron MAC, object paths, IDs runtime ni payloads crudos.
 
-## 7. Sesiones adicionales (diferidas)
+## 7. Sesiones adicionales y pendientes
 
 La evidencia de los estados 1 y 2 (sesión 3), junto con el estado 3 (A2DP/SBC
 reproduciendo), fue **suficiente** para
 continuar el desarrollo de Etapa 2 — detección, estado agregado, asociación
 sink y reporte de A2DP/SBC. La **sesión 2** validó además los estados 4 y 5 y
 la Etapa 2 completa contra hardware real. La Etapa 1 **no está completa**:
-solo queda pendiente el estado 6.
+el estado 6 fue observado, pero no superó el criterio de reconexión automática
+tras reanudar.
 
-Estas sesiones se difieren y solo se harán cuando una capacidad avanzada las
-requiera (con aprobación):
+Estas sesiones solo se harán cuando una capacidad avanzada las requiera (con
+aprobación):
 
-1. Suspensión y reanudación de Ubuntu.
+1. Repetición o diagnóstico de suspensión y reanudación de Ubuntu, después de
+   revisar la falta de reconexión automática observada en §10.
 2. Observación de señales ante cambios físicos reales.
 3. RSSI positivo, si el sistema lo expone.
 4. `api.bluez5.transport` con valor no vacío, si el sistema lo expone.
@@ -285,3 +290,32 @@ físico observado en vivo.
   sesión 1.
 - Emparejamiento intacto durante toda la sesión: solo se mutó estado de
   conexión y perfil runtime, ambos reversibles.
+
+## 10. Sesión 4 (2026-08-14) — suspensión y reanudación
+
+> **Método:** prueba controlada con captura de solo lectura antes y después. No
+> se cambiaron perfiles, volumen, emparejamiento ni configuración, y el usuario
+> no intervino durante la espera. No se repitió el ciclo por protocolo.
+
+- **Antes** (`2026-08-14T20:08:08-04:00`): Redmi Buds 6 Lite conectado,
+  batería 100 %, RSSI no disponible, perfil `a2dp`, códec observado `sbc
+  (a2dp)`, sink disponible y source no disponible; la GUI estaba activa y la
+  gráfica actualizándose.
+- La entrada de suspensión quedó registrada a las 20:10:00 y el retorno a las
+  20:10:19 (aproximadamente 19 s).
+- **Después:** la sesión se recuperó sin pantalla negra ni hard reset; la
+  ventana siguió activa y respondía, la gráfica volvió y continuó actualizando,
+  y el estado alternaba `Listo`/`Actualizando...`.
+- Los auriculares se desconectaron al suspender (comportamiento esperado), pero
+  **no se reconectaron automáticamente** al reanudar. La consulta
+  `openbuds devices --paired-only` terminó con exit 0 y mostró el dispositivo
+  presente, confirmando que seguía emparejado en BlueZ pero desconectado. La lectura posterior de CLI también terminó con exit 0; batería, RSSI,
+  perfil, códec, sink y source quedaron no disponibles.
+- La consulta acotada de journal (system/user/kernel) terminó con exit 0 y mostró
+  entrada/salida de suspensión y un error de E/S de BlueZ al retorno. También se
+  observaron endpoints re-registrados; esto no se interpreta como capacidad de
+  audio ni como reconexión exitosa.
+
+**Resultado:** suspensión/reanudación de la sesión y la GUI recuperadas, pero el
+criterio de reconexión automática no se cumplió. El estado 6 queda observado, no
+aprobado como completo.
