@@ -1,417 +1,259 @@
 # OpenBuds Manager
 
-Administrador profesional de **auriculares Bluetooth** para **Linux** (Ubuntu 24.04 LTS).
+Administrador de escritorio y CLI para auriculares Bluetooth en Linux. La
+versión actual es **0.1.0 Beta** y está enfocada en **Redmi Buds 6 Lite**.
 
-El objetivo es crear el equivalente en Linux a aplicaciones como *Xiaomi Earbuds*,
-*Sony Headphones Connect*, *Galaxy Wearable* o *Nothing X*, comenzando por los
-**Redmi Buds 6 Lite**.
+> Esta beta fue probada en un único entorno: Ubuntu 24.04 LTS, Python 3.12,
+> BlueZ/PipeWire/WirePlumber de la distribución y Redmi Buds 6 Lite. El
+> funcionamiento en otras distribuciones, versiones del stack o modelos no
+> está garantizado.
 
-> **Filosofía:** este proyecto **no** desarrolla drivers, **no** modifica firmware,
-> **no** escribe en el hardware ni envía comandos propietarios al dispositivo.
-> Únicamente **administra y optimiza el stack Bluetooth del sistema Linux**
-> (BlueZ, PipeWire, WirePlumber) de forma segura y reversible.
+## Alcance de la beta
 
-## Estado del proyecto
+OpenBuds Manager observa y administra el stack Bluetooth y de audio del
+sistema mediante las APIs estándar de Linux. No es un driver ni una aplicación
+oficial de Xiaomi.
 
-✅ **Etapa 5 — Persistencia segura completada (Incremento 1).** La
-configuración de la app (TOML en `~/.config/openbuds/`) y los overrides de
-WirePlumber 0.4 (solo `~/.config/wireplumber/`) se guardan con **backup
-timestamped previo, escritura atómica, verificación post-escritura y rollback
-automático**; `config set --dry-run` no escribe nada; `config
-backup|backups|restore` gestionan copias manuales. La validación física de
-overrides WirePlumber reales queda diferida (aún no existe configuración
-WirePlumber modificable). Ver [`docs/ADR/0008-safe-persistence.md`](docs/ADR/0008-safe-persistence.md).
+Incluye:
 
-✅ **Etapa 4 — Health Check completada (Incrementos 1 y 2).** `openbuds
-health` ejecuta el Health Check de **solo lectura**: 14 checks estables del
-stack completo (sistema, runtime, adaptador, dispositivo, audio y batería),
-cada dato etiquetado por evidencia (observado / inferido / no disponible /
-recomendación / acción segura disponible) y sin MAC ni object paths en la
-salida; `openbuds logs` muestra los logs de bluez/wireplumber/pipewire con
-identificadores redactados (MAC y object paths → `<redacted>`), solo lectura.
-Ver [`docs/cli/health-command.md`](docs/cli/health-command.md) y
-[`docs/cli/logs-command.md`](docs/cli/logs-command.md).
+- GUI PySide6 de una sola ventana con estado del dispositivo, batería/RSSI
+  cuando el sistema los expone, perfil/códec solo cuando están verificados,
+  estado de audio y diagnóstico.
+- Conectar y desconectar dispositivos emparejados con confirmación explícita.
+- Cambio runtime entre música (A2DP) y micrófono (HFP), si el perfil es
+  ofrecido por el sistema. El cambio no se persiste en el dispositivo.
+- CLI para listar dispositivos conocidos por BlueZ, consultar estado,
+  observar cambios, ejecutar Health Check y leer logs sanitizados.
+- Configuración propia TOML en las rutas XDG, backups y escritura atómica.
+- Auto-fixes limitados y reversibles para problemas que el Health Check marque
+  como disponibles.
 
-✅ **Auto-fix de Health disponible (post-Etapa 4).** `openbuds fix <id>`
-repara problemas detectados por el Health Check con **confirmación explícita**
-(`[s/N]`, o `-y` para scripting) y **sin sudo**: `start.audio` inicia las
-unidades de usuario pipewire+wireplumber (reversible) y `profile.a2dp`
-restaura el perfil A2DP runtime; la verificación post-fix re-ejecuta el Health
-Check de forma honesta. Ver [`docs/cli/fix-command.md`](docs/cli/fix-command.md).
+No incluye firmware, OTA, comandos Bluetooth propietarios, escritura GATT,
+modificación del hardware ni soporte genérico garantizado para otros modelos.
+No modifica emparejamientos, `Trusted`, `Blocked` ni `Pairable`
+automáticamente.
 
-La **GUI MVP de la Etapa 3** sigue operativa: `openbuds gui` lanza la ventana
-única PySide6 (estado, controles de sesión y Health Check real de solo lectura);
-funciona con estados reales y sin audífonos. Incluye una bandeja opcional, un
-adaptador de notificaciones freedesktop best-effort y notificaciones
-automáticas por cambios BlueZ mediante un puente Qt con marshalling explícito.
-Son de solo lectura y session-only; si la suscripción o el servicio falla, la
-GUI continúa. Ver
-[`docs/gui/main-window.md`](docs/gui/main-window.md).
+## Estado conocido y límites
 
-El **backend base de BlueZ**, la base de **inspección PipeWire de solo lectura**,
-la **CI** y la **licencia GPL-3.0-or-later** de la Etapa 0 están **completados** según el
-roadmap ([`docs/ROADMAP.md`](docs/ROADMAP.md)).
+La GUI continúa respondiendo mientras actualiza los datos en segundo plano. El
+estado mostrado como «Listo» indica que no hay una acción explícita ni un
+error que requiera feedback del usuario; el refresco periódico puede seguir
+ejecutándose en segundo plano sin convertir cada ciclo en un mensaje visible.
 
-El repositorio contiene la arquitectura por capas, los cimientos del dominio,
-la configuración TOML, logging, detección del entorno y una CLI base funcional.
+La suspensión y reanudación se probaron con este resultado: la sesión de la
+aplicación y la gráfica se recuperaron, pero los auriculares quedaron
+emparejados y desconectados; **no hubo reconexión automática**. La conexión se
+puede restablecer desde la GUI o con `openbuds connect`.
 
-El **backend base de BlueZ** (acceso a BlueZ vía D-Bus, PyGObject/Gio) está
-publicado por incrementos y forma parte del backend de sesión MVP. La
-validación física del dispositivo se documenta en la Etapa 1. El **Incremento 1 — snapshot
-`GetManagedObjects`** ya está implementado y verificado (`bluez/dbus_protocol.py` → `GioDBusProtocol` +
-`BlueZDBusClient.snapshot`), y también el **mapeo de objetos D-Bus → modelos**
-(`bluez/object_mapper.py`, puro y sin GI), las **consultas snapshot del
-repositorio** (`bluez/bluez_repository.py`:
-`list_adapters`/`list_devices`/`get_device`/`get_battery`/`get_rssi`, con
-cliente D-Bus inyectable y snapshot fresco por llamada) y la **CLI `devices`**
-(ver abajo); la integración real solo lectura se verificó en **Python 3.12 /
-Gio**. El **Incremento 2 — señales y lifecycle** está **completo**:
-- El **nivel bajo** (`GioDBusProtocol` + `_SignalWorker`: worker dedicado GLib
-  `MainContext`/`MainLoop` daemon, tres filtros exactos
-  `InterfacesAdded`/`InterfacesRemoved`/`PropertiesChanged`, `SignalEvent` sin
-  payload, suscripción/unsubscribe/close idempotentes, arranque perezoso, hook
-  **`on_ready`** opcional que corre en el hilo del worker antes de que
-  `subscribe` retorne, timeout y rollback atómico, sin cerrar la conexión
-  compartida) y
-- el **dispatch del repositorio** (`BlueZRepository.subscribe_device_changes`:
-  init A→B con snapshot B en el worker vía `on_ready`, cache de diff,
-  refresh completo por señal, orden determinista `REMOVED→ADDED→UPDATED`,
-  igualdad mapeada de `DeviceInfo` sin eventos Battery/RSSI-only, aislamiento
-  de callbacks, suscriptores múltiples/tardíos/reentrantes, `Unsubscribe`
-  idempotente con espera de in-flight, concurrencia de init y rollback de
-  errores), sobre el **diff puro de snapshots**
-  (`bluez/device_change_diff.py`), y
-- el **polling de respaldo** (extensión interna compatible
-  `on_poll`/`poll_interval_ms`: validación pura `type int > 0` antes del
-  worker/GIO, `GSource` de timeout monotónico en el worker tras `on_ready`,
-  `SOURCE_CONTINUE`, un solo timer por repositorio con intervalo inyectable
-  default 5000 ms, y `_handle_poll` compartiendo el **mismo pipeline
-  `_refresh_and_dispatch`** que `_handle_signal` para capturar
-  `Connected`/`Paired`/`Trusted` si `PropertiesChanged` no llega).
+Otros límites importantes:
 
-La validez proviene de fakes deterministas (sin GI), del spike genérico de
-D-Bus y de la **integración real** en Python 3.12 / Gio: **lifecycle
-A/B** (subscribe/unsubscribe/close + snapshot A/B + bus usable) y el
-**polling de respaldo** (creación/destrucción inmediata del `GSource` con
-`poll_interval_ms=60_000`, sin tick real); **no** se inducen señales, **no**
-se afirma recepción real de eventos y **no** hay escrituras de hardware. Ver
-[`docs/bluez/signal-lifecycle-design.md`](docs/bluez/signal-lifecycle-design.md)
-y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md). El
-**contrato completo de `IBluetoothRepository`** queda así **cerrado** (checkbox
-del roadmap marcado), incluido el contrato de eventos
-([ADR-0007](docs/ADR/0007-device-change-event-contract.md):
-`DeviceChangeKind`, `DeviceChangeEvent` y `Unsubscribe`), probado con fakes y
-integración. La **detección de adaptadores y dispositivos** está **completa**
-(implementación + verificación real). **Verificación real 2026-08-10** (sin
-auriculares conectados): `doctor` exit 0 (Ubuntu 24.04, BlueZ 5.72, PipeWire
-1.0.5, WirePlumber 0.4.17 Lua, bus/adaptador/config sí); adaptador detectado
-(`hci0`, `Powered=True`, `Discovering=False`, `Discoverable=False`); **caso
-cero dispositivos**: `openbuds devices` exit 0 con `No se encontraron
-dispositivos Bluetooth.` y `pw-dump` con **0 nodos Bluetooth** (sin property
-keys). **No** se afirma detección del Redmi Buds 6 Lite en esa captura. Los
-límites restantes son las **propiedades runtime inciertas** que el sistema no
-exponga de forma observable; el **polling periódico de respaldo** para
-`Connected`/`Paired`/`Trusted`
-([RESEARCH_LIMITS §4](docs/RESEARCH_LIMITS.md#4-fiabilidad-de-señales-d-bus))
-está **implementado y verificado (2026-08-10)** como extensión interna
-compatible `on_poll`/`poll_interval_ms` (default 5000 ms inyectable y validado),
-con `GSource` de timeout monotónico en el worker y **un solo timer por
-repositorio**; la señal primaria y el poll comparten el **pipeline común
-señal/poll** (`_refresh_and_dispatch`). El diseño y el código real están en
-[`docs/bluez/signal-lifecycle-design.md`](docs/bluez/signal-lifecycle-design.md)
-(§12) y [`docs/bluez/repository-design.md`](docs/bluez/repository-design.md)
-(§12). La base Bluetooth de solo lectura está implementada; la validación
-empírica documentada del Redmi Buds 6 Lite cubre los estados físicos 1–5 de la
-Etapa 1; solo suspensión y reanudación (estado 6) permanece pendiente. Este
-README no afirma una reparación concreta del sistema. Ver
-[`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/cli/devices-command.md`](docs/cli/devices-command.md).
+- Los campos ausentes del sistema aparecen como «No disponible»; no se
+  inventan batería, códec, RSSI ni capacidades.
+- El códec solo se muestra si fue observado de forma verificable. No se
+  asume aptX, LDAC ni ninguna capacidad no expuesta por PipeWire.
+- El cambio de perfil es runtime y se revierte manualmente con `music` o
+  `mic`; no hay persistencia de perfiles ni benchmark de latencia/calidad.
+- La bandeja y las notificaciones son opcionales y best-effort.
+- Los auto-fixes no reinician BlueZ ni requieren `sudo`; solo se ofrecen cuando
+  el diagnóstico los marca como disponibles.
 
-La base de inspección de audio incluye el **parser de
-`pw-dump`** (`infrastructure/pipewire/pw_dump_parser.py`, ADR-0003) — está
-**implementada y verificada (2026-08-10)**: función **pura**
-(`payload: str` de `pw-dump` → `list[dict[str, str]]`, sin subprocess, sin
-I/O), extrae nodos Bluetooth (`media.class` `Audio/Sink`/`Audio/Source`) por
-prefijo `bluez_output.`/`bluez_input.` o `device.api=bluez5`, normaliza valores
-escalares (`str` verbatim, `bool` lowercase, `int`/`float` `str`,
-`null`/`list`/`dict` ignorados), añade `object.id` canónico, ordena por `id`
-numérico y **preserva `bluez5.codec` / `api.bluez5.transport` verbatim sin
-validar ni inferir**
-([RESEARCH_LIMITS §2](docs/RESEARCH_LIMITS.md#2-propiedades-runtime-de-pipewire)).
-Los errores estructurales (`JSONDecodeError` o root no-lista) se envuelven en
-`PipeWireParseError(AudioSubsystemError)`. Está cubierto por **20 unit tests** y
-una **integración real opt-in** (`OPENBUDS_RUN_INTEGRATION=1`, `pw-dump
---no-colors` que **no exige nodos conectados**; resultado local **0 nodos**; sin
-MAC ni payload en logs). **Límites:** sin auriculares conectados no se valida el
-caso positivo (códec/transporte reales); **no** se afirma el Redmi Buds 6 Lite
-detectado ni códec verificado. Ver
-[`docs/pipewire/pw-dump-parser-contract.md`](docs/pipewire/pw-dump-parser-contract.md).
+La evidencia y las decisiones técnicas están resumidas en
+[`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/RESEARCH_LIMITS.md`](docs/RESEARCH_LIMITS.md)
+y la [caracterización pasiva](docs/research/redmi-buds-6-lite-passive-characterization.md).
 
-El runner seguro `PwDumpRunner`
-(`infrastructure/pipewire/pw_dump_runner.py`, ADR-0003) — está **implementada
-y verificada (2026-08-10)**: ejecuta `pw-dump --no-colors` de forma aislada y
-privada (`subprocess.run` con `capture_output`/`text`/`check=False`, `timeout`
-default 5 s, **nunca `shell=True`**, sin argumentos de usuario), traduce
-cualquier fallo (`OSError`/`TimeoutExpired`, `returncode != 0`, stdout no-`str`)
-a `PipeWireUnavailableError(AudioSubsystemError)` con mensajes genéricos sin
-paths, stdout/stderr ni MAC, y devuelve el payload JSON exacto como `str`
-(incluido `""`) para el parser puro. `binary` y `timeout_seconds` se validan en
-el constructor antes de ejecutar nada (`str` no vacío sin NUL; tipo exacto
-`int`/`float` no-`bool`, `> 0` y **finito** — NaN/±inf rechazados, divergencia
-aprobada); el `executor` es inyectable por Protocol (fakes en tests, default
-real `subprocess.run`). Sin `shutil.which` (TOCTOU) y sin logging de
-payload/stderr (privacidad). Cubierto por **29 unit tests** y una **integración
-real opt-in** (`OPENBUDS_RUN_INTEGRATION=1`) que encadena `runner.dump()` →
-`parse_bluetooth_audio_nodes` sin exigir nodos Bluetooth (resultado local **0
-nodos**). Ver
-[`docs/pipewire/pw-dump-runner-contract.md`](docs/pipewire/pw-dump-runner-contract.md).
+## Requisitos
 
-El repositorio `PipeWireRepository`
-(`infrastructure/pipewire/pipewire_repository.py`, ADR-0003) — está
-**implementada y verificada (2026-08-10)** en su **Incremento 1**
-(`list_bluetooth_audio_nodes`): es una **capa de composición** que ejecuta
-`runner.dump()` **fresco en cada llamada** (sin cache, logs, subprocess propio
-ni mutación) y entrega el payload al parser puro, devolviendo directamente su
-`list[dict[str, str]]`. Usa el Protocol estructural `DumpRunner` (`dump() ->
-str`) inyectable por constructor con condición **`is None`** (`None` →
-`PwDumpRunner()`; un runner **falsy** inyectado se preserva). Los errores se
-**propagan sin re-envolver** (`PipeWireUnavailableError` del runner,
-`PipeWireParseError` del parser; misma instancia). El contrato global
-`IAudioRepository` se consume en modo **solo lectura**:
-`get_active_codec` y `get_default_audio_sink` están implementados; el codec solo
-se presenta cuando está verificado y no se infiere desde propiedades ambiguas
-([RESEARCH_LIMITS §2](docs/RESEARCH_LIMITS.md#2-propiedades-runtime-de-pipewire)).
-Cubierto por **8 unit tests** con fakes (sin `pw-dump`/PipeWire/GI) y una
-**integración real opt-in** (`tests/integration/test_pipewire_repository.py`,
-`OPENBUDS_RUN_INTEGRATION=1`: solo `isinstance(result, list)` y elementos
-`dict` con valores `str`, **sin assert de nodos ni payload/MAC**; resultado
-local **0 nodos**, sin afirmación positiva de hardware). Ver
-[`docs/pipewire/repository-design.md`](docs/pipewire/repository-design.md).
+Entorno objetivo:
 
-El incremento de solo lectura de `WpctlAdapter` (`status` e `inspect`, con
-`set_profile`/`restart_service` en `NotImplementedError`) fue **validado,
-aprobado y publicado**. Solo lectura: las mutaciones permanecen
-deshabilitadas.
+- Ubuntu 24.04 LTS (Noble Numbat).
+- `/usr/bin/python3` de Ubuntu 24.04 (Python 3.12).
+- BlueZ, PipeWire y WirePlumber disponibles y en ejecución según corresponda.
+  Ubuntu 24.04 usa WirePlumber 0.4.x con configuración Lua.
+- Adaptador Bluetooth integrado o USB.
+- Un display para la GUI.
 
-Ver el roadmap completo en [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Las dependencias Python declaradas son PySide6 y PyGObject; las versiones de
+desarrollo están en [`requirements-dev.txt`](requirements-dev.txt) y
+[`pyproject.toml`](pyproject.toml). PyGObject puede reutilizar el paquete
+`python3-gi` de Ubuntu mediante un entorno virtual con paquetes del sistema.
 
-## Requisitos del sistema
+## Instalación reproducible en Ubuntu 24.04
 
-- **Ubuntu 24.04 LTS** (Noble Numbat)
-- **BlueZ** ≥ 5.72
-- **PipeWire** ≥ 1.0
-- **WirePlumber** 0.4.x (Ubuntu 24.04 trae 0.4.17 — sintaxis de configuración Lua)
-- **Python del sistema de Ubuntu 24.04:** `/usr/bin/python3` (3.12), necesario
-  para reutilizar PyGObject/Gio de la distribución en las integraciones BlueZ.
-- Adaptador USB Bluetooth (o integrado)
-
-> ⚠️ **Importante sobre WirePlumber:** Ubuntu 24.04 usa WirePlumber **0.4.x**
-> (configuración Lua `.lua.d/`), **no** la versión 0.5 (`.conf.d/`). Este proyecto
-> está diseñado para la 0.4.x. Ver [ADR-0002](docs/ADR/0002-wireplumber-0.4-lua-config-scope.md).
-
-## Instalación (entorno de desarrollo)
-
-### 1. Paquetes de sistema
-
-PyGObject (D-Bus vía GLib) se usa a través del paquete de la distribución en
-Ubuntu; no necesita compilarse si el venv reutiliza los paquetes de sistema:
+Instala primero el stack y PyGObject de la distribución:
 
 ```bash
 sudo apt update
 sudo apt install -y \
-    python3-gi python3-gi-cairo gir1.2-glib-2.0 gobject-introspection \
-    bluez pipewire wireplumber
+  python3-gi python3-gi-cairo gir1.2-glib-2.0 gobject-introspection \
+  bluez pipewire wireplumber
 ```
 
-> ⚠️ **Usa el Python del sistema, no el de Homebrew/Linuxbrew.** Si tu `python3`
-> proviene de Homebrew/Linuxbrew, su `sys.path` **no incluye** los paquetes de
-> `apt` (`/usr/lib/python3/dist-packages`) y, por tanto, **no verá**
-> `python3-gi` ni el resto de paquetes del sistema. Por eso los comandos de
-> abajo usan explícitamente `/usr/bin/python3`.
-
-### 2. Entorno Python y dependencias
-
-**Camino recomendado:** ejecutar `make install-dev`. El Makefile crea `.venv`
-con `--system-site-packages` solo si no existe, reutilizando `python3-gi` ya
-instalado; después instala las dependencias y el paquete en modo editable.
+Clona el repositorio y prepara el entorno de desarrollo usando explícitamente
+el Python de Ubuntu:
 
 ```bash
-# Crea .venv correctamente si no existe e instala runtime + desarrollo
-make install-dev
-```
-
-Si `.venv` fue creado previamente con el `python3` de Linuxbrew/Homebrew,
-elimínalo manualmente antes de recrearlo; no se borra automáticamente:
-
-```bash
-rm -rf .venv
-make install-dev
-```
-
-**Alternativa PyPI (opcional):** si prefieres que `pip` compile PyGObject
-desde PyPI, instala primero sus dependencias oficiales de compilación:
-
-```bash
-sudo apt install -y \
-    libgirepository-2.0-dev gcc libcairo2-dev pkg-config python3-dev
-```
-
-Después crea el venv sin paquetes de sistema e instala con:
-
-```bash
-make USE_SYSTEM_PYGOBJECT=0 install-dev
-```
-
-Así `pip` compilará `PyGObject` en lugar de usar `python3-gi`. Esta alternativa
-requiere que `.venv` todavía no exista, o que haya sido creado previamente con
-`USE_SYSTEM_PYGOBJECT=0`; el Makefile nunca borra ni recrea un venv existente.
-
-### 3. Verificar el entorno
-
-```bash
+git clone https://github.com/AlexisHCD/RB6_lite_Manager.git
+cd RB6_lite_Manager
+make PYTHON=/usr/bin/python3 install-dev
 make check-runtime
+```
+
+`make install-dev` crea `.venv` con `--system-site-packages`, instala las
+dependencias declaradas y el paquete en modo editable. Para una instalación
+sin herramientas de desarrollo usa `make PYTHON=/usr/bin/python3 install`.
+El programa no necesita `sudo` para ejecutarse.
+
+Si ya existe un `.venv`, el Makefile no lo recrea ni lo elimina. Comprueba que
+pertenece a `/usr/bin/python3`; si no, crea un entorno nuevo siguiendo el
+procedimiento anterior en una copia limpia del repositorio.
+
+## Primeros pasos
+
+Comprueba el sistema, el runtime y el adaptador:
+
+```bash
+.venv/bin/openbuds version
 .venv/bin/openbuds doctor
+.venv/bin/openbuds health
 ```
 
-Muestra las versiones detectadas del stack y tres categorías de diagnóstico:
-
-- **Sistema soportado** — SO y stack (Ubuntu 24.04, BlueZ, PipeWire, WirePlumber
-  Lua 0.4 y bus D-Bus del sistema).
-- **Runtime aplicación** — el intérprete es `/usr/bin/python3` y puede importar
-  PyGObject/Gio/GLib (un venv creado desde Linuxbrew/Homebrew no lo cumple).
-- **Hardware Bluetooth** — adaptador disponible; es informativo.
-
-La ausencia de adaptador **no** implica un sistema no soportado: `doctor` sale
-con 0 cuando sistema y runtime están listos aunque no haya hardware; solo sale
-con 1 si el sistema o el runtime son inválidos.
-
-## Uso
-
-### CLI
+Lista los dispositivos conocidos por BlueZ y abre la GUI:
 
 ```bash
-.venv/bin/openbuds doctor        # diagnostica sistema, runtime y hardware
-.venv/bin/openbuds config        # muestra la configuración efectiva
-.venv/bin/openbuds config get       # muestra la configuración efectiva
-.venv/bin/openbuds config backup    # crea un backup
-.venv/bin/openbuds config backups   # lista backups
-.venv/bin/openbuds config restore <archivo.bak>  # restaura un backup
-.venv/bin/openbuds version       # muestra la versión sin cargar config
-.venv/bin/openbuds devices       # lista dispositivos Bluetooth (backend base publicado): snapshot TSV
-.venv/bin/openbuds devices --paired-only            # solo emparejados
-.venv/bin/openbuds devices --adapter hci0           # solo el adaptador hci0 (o /org/bluez/hci0)
-.venv/bin/openbuds status         # estado agregado de dispositivos emparejados (batería/RSSI/perfil/códec/sink/source observados; sin identificadores)
-.venv/bin/openbuds watch          # observa en vivo cambios de estado de dispositivos emparejados (solo lectura; Ctrl+C para salir)
-.venv/bin/openbuds connect <dispositivo>  # sesión: confirmación previa
-.venv/bin/openbuds disconnect <dispositivo>
-.venv/bin/openbuds music [dispositivo]
-.venv/bin/openbuds mic [dispositivo]     # advierte de degradación; perfil runtime no persistente
-.venv/bin/openbuds gui          # lanza la ventana única PySide6 (MVP); requiere display
-.venv/bin/openbuds health        # Health Check etiquetado por evidencia; solo lectura
-.venv/bin/openbuds logs          # logs de bluez/wireplumber/pipewire con identificadores redactados; solo lectura
-.venv/bin/openbuds fix <id>      # auto-fix seguro del Health Check: confirmación previa; start.audio y profile.a2dp; sin sudo
+.venv/bin/openbuds devices --paired-only
+.venv/bin/openbuds gui
 ```
 
-`openbuds devices` lista el snapshot de los dispositivos **conocidos** por
-BlueZ (solo lectura: sin discovery, sin conexión y sin señales) en TSV en
-español:
+La aplicación trabaja con dispositivos ya emparejados por el sistema. El
+primer emparejamiento debe hacerse con las herramientas normales de Ubuntu.
+OpenBuds no inicia discovery ni borra emparejamientos.
 
-```text
-NOMBRE	CONEXIÓN	EMPAREJAMIENTO	ADAPTADOR
-Redmi Buds 6 Lite	conectado	emparejado	hci0
-```
+## CLI
 
-La salida es **privada por diseño**: nunca incluye MAC ni rutas de objeto D-Bus
-(`/org/bluez/.../dev_`), los nombres sin `alias`/`name` se muestran como
-`Dispositivo sin nombre`, y los campos de texto se sanitizan (caracteres de
-control → `?`, máx. 80 caracteres). Un valor de adaptador inválido sale con
-código 2 antes de tocar el bus; un error de lectura de BlueZ sale con 1 y el
-mensaje en stderr. Detalles en
-[`docs/cli/devices-command.md`](docs/cli/devices-command.md).
-
-### GUI (PySide6)
-
-`openbuds gui` abre el MVP: una sola ventana con estado (batería/RSSI/perfil/
-códec/sink/source o «No disponible»), botones Conectar/Desconectar y modos
-Música/Micrófono con aviso, actualización automática cada 2 s y Diagnóstico
-read-only mediante el Health Check real. Requiere PySide6 y un display; sin
-ellos el error es claro. Si el entorno ofrece una bandeja compatible, incluye
-un menú opcional para abrir, actualizar, diagnosticar y salir; el adaptador de
-notificaciones freedesktop es best-effort. Las notificaciones automáticas por
-cambios BlueZ están disponibles mediante `DeviceChangeBridge`: solo avisan de
-dispositivos detectados/desaparecidos y transiciones de conexión, con textos
-sanitizados; cambios aislados de RSSI o batería no avisan. El callback se
-encola explícitamente en Qt; `Notify` tiene un timeout de 1 s y puede introducir
-una demora breve en el hilo Qt, pero no indefinida. Los fallos se absorben y la
-GUI sigue disponible. Las vistas
-avanzadas siguen diferidas.
-
-## Desarrollo
+Todos los comandos se pueden consultar con `--help`. Los nombres de
+dispositivo se resuelven por alias/nombre; la salida no muestra MAC ni rutas
+de objeto D-Bus.
 
 ```bash
-make lint       # ruff check + format check
-make typecheck  # mypy
-make test       # pytest (suite completa)
-make test-quick # pytest solo tests unitarios
+# Entorno y configuración
+.venv/bin/openbuds doctor
+.venv/bin/openbuds config get
+.venv/bin/openbuds config set <clave> <valor> --dry-run
+.venv/bin/openbuds config backup
+.venv/bin/openbuds config backups
+.venv/bin/openbuds config restore <archivo.bak>
+
+# Estado y observación (solo lectura)
+.venv/bin/openbuds devices --paired-only
+.venv/bin/openbuds devices --adapter hci0
+.venv/bin/openbuds status
+.venv/bin/openbuds watch                 # Ctrl+C para salir
+.venv/bin/openbuds health
+.venv/bin/openbuds logs --lines 20
+.venv/bin/openbuds logs --service bluez --service pipewire --lines 50
+
+# Sesión y perfiles runtime; siempre piden confirmación
+.venv/bin/openbuds connect "Redmi Buds 6 Lite"
+.venv/bin/openbuds disconnect "Redmi Buds 6 Lite"
+.venv/bin/openbuds music "Redmi Buds 6 Lite"
+.venv/bin/openbuds mic "Redmi Buds 6 Lite"
+
+# Reparaciones disponibles solo cuando `health` las indica
+.venv/bin/openbuds fix start.audio
+.venv/bin/openbuds fix profile.a2dp
 ```
 
-**CI:** el workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) ejecuta
-la suite de calidad en **Python 3.12** en push/PR a `main` y por invocación
-manual (`workflow_dispatch`): Ruff check y format, mypy y unit tests
-(`pytest tests/unit -m "not slow"`). No ejecuta integraciones reales ni toca
-hardware o PyGObject/Gio: es una validación unitaria de los gates, no un
-sustituto de la integración local con `/usr/bin/python3`.
+`connect`, `disconnect`, `music`, `mic` y `fix` modifican únicamente el estado
+runtime permitido por las APIs del sistema y solicitan confirmación `[s/N]`.
+`--yes` está disponible para automatización consciente. `mic` avisa que HFP
+puede reducir la calidad de reproducción. Consulta los detalles en
+[`docs/cli/session-commands.md`](docs/cli/session-commands.md) y
+[`docs/cli/fix-command.md`](docs/cli/fix-command.md).
 
-Las pruebas unitarias se ejecutan en el venv de desarrollo. Las integraciones
-BlueZ deben ejecutarse con un venv creado desde `/usr/bin/python3`, con acceso a
-PyGObject/Gio, y requieren `OPENBUDS_RUN_INTEGRATION=1`. No se mantienen conteos
-exactos en esta documentación: la salida de pytest es la fuente de verdad.
+`health` es diagnóstico de solo lectura. `logs` lee el journal y redacta MAC,
+rutas D-Bus y otros identificadores antes de imprimirlos. `devices`, `status`
+y `watch` aplican la misma política de privacidad. Más información:
+[`docs/cli/health-command.md`](docs/cli/health-command.md),
+[`docs/cli/logs-command.md`](docs/cli/logs-command.md) y
+[`docs/cli/status-command.md`](docs/cli/status-command.md).
 
-## Arquitectura
+## GUI
 
-El proyecto sigue **Clean Architecture** con dependencias unidireccionales:
+Ejecuta:
 
+```bash
+.venv/bin/openbuds gui
 ```
-presentation → application → domain ← infrastructure
+
+La ventana muestra el dispositivo y los datos que realmente puede observar el
+stack. Incluye conectar, desconectar, música, micrófono y un botón de
+diagnóstico. La captura y el Health Check se ejecutan sin bloquear la ventana;
+los fallos parciales se presentan como datos no disponibles y la GUI intenta
+seguir operativa. Consulta [`docs/gui/main-window.md`](docs/gui/main-window.md).
+
+## Privacidad y seguridad
+
+OpenBuds no envía comandos propietarios, no toca firmware y no escribe en el
+hardware. Las lecturas de BlueZ/PipeWire son solo de observación, salvo las
+acciones runtime confirmadas por el usuario.
+
+La configuración de la aplicación se guarda bajo `~/.config/openbuds/`. Las
+operaciones persistentes crean backup timestamped, escriben atómicamente,
+verifican el resultado y hacen rollback si fallan. Los overrides de
+WirePlumber, si se habilitan en el futuro, están limitados a
+`~/.config/wireplumber/`; nunca se escribe en `/etc` o `/usr/share` y la app no
+usa `sudo`. Consulta [`docs/ADR/0008-safe-persistence.md`](docs/ADR/0008-safe-persistence.md)
+y [`docs/ADR/0002-wireplumber-0.4-lua-config-scope.md`](docs/ADR/0002-wireplumber-0.4-lua-config-scope.md).
+
+## Troubleshooting seguro
+
+Empieza siempre con comandos de lectura:
+
+```bash
+.venv/bin/openbuds doctor
+.venv/bin/openbuds health
+.venv/bin/openbuds logs --lines 50
+.venv/bin/openbuds devices --paired-only
 ```
 
-- **`domain`** — núcleo puro: modelos, enumeraciones y contratos (interfaces).
-  Sin dependencias externas. Es lo primero que se completa y lo más estable.
-- **`application`** — casos de uso que orquestan repositorios.
-- **`infrastructure`** — implementaciones concretas (BlueZ/D-Bus, PipeWire,
-  WirePlumber, detección del sistema).
-- **`presentation`** — interfaz gráfica (PySide6) y notificaciones.
+- Si falla `runtime.gio`, verifica `make check-runtime` y que el venv use
+  `/usr/bin/python3` con `python3-gi` instalado.
+- Si no aparece el auricular, comprueba primero el emparejamiento y el
+  adaptador con las herramientas de Ubuntu; OpenBuds no hace discovery.
+- Si falta el audio, revisa `health` y ejecuta un `fix` solo cuando el reporte
+  muestre el ID como disponible.
+- Si tras suspensión queda desconectado, usa `connect` o el botón Conectar;
+  la beta no fuerza ni garantiza la reconexión automática; puedes usar el botón
+  Conectar o `openbuds connect`, siempre con confirmación.
+- Si un campo dice «No disponible», significa que no fue observable; no indica
+  necesariamente un fallo del dispositivo.
 
-Ver [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) para el detalle y el diagrama.
+No reinicies servicios ni cambies perfiles a ciegas. Las acciones de sesión y
+los auto-fixes requieren confirmación y están documentados en
+[`docs/cli/session-commands.md`](docs/cli/session-commands.md).
 
-### Decisiones técnicas documentadas (ADRs)
+## Desarrollo y validación
 
-| ADR | Decisión |
-|-----|----------|
-| [0001](docs/ADR/0001-decision-dbus-pygobject-gio.md) | Biblioteca D-Bus: PyGObject/Gio (GDBus) |
-| [0002](docs/ADR/0002-wireplumber-0.4-lua-config-scope.md) | WirePlumber 0.4 Lua, scope `~/.config/wireplumber/` |
-| [0003](docs/ADR/0003-no-pipewire-python-binding.md) | Sin binding Python de PipeWire; usar `pw-dump`/`wpctl` |
-| [0004](docs/ADR/0004-clean-architecture-dependency-rule.md) | Regla de dependencias de Clean Architecture |
-| [0005](docs/ADR/0005-device-profile-contract.md) | Contrato de perfiles de dispositivo |
-| [0006](docs/ADR/0006-app-config-toml-xdg-atomic-write.md) | Configuración TOML con rutas XDG y escritura atómica |
-| [0007](docs/ADR/0007-device-change-event-contract.md) | Contrato de eventos de cambio de dispositivo |
-| [0008](docs/ADR/0008-safe-persistence.md) | Persistencia segura: backups, verificación y rollback (Etapa 5) |
-| [0009](docs/ADR/0009-optional-qt-tray-and-gio-notifications.md) | Bandeja Qt opcional y notificaciones Gio |
-| [0010](docs/ADR/0010-qt-device-change-notifications.md) | Notificaciones Qt automáticas de cambios de dispositivos |
+Desde un entorno instalado con `install-dev`:
 
-## Seguridad
+```bash
+make lint
+make typecheck
+make test
+make test-quick
+```
 
-Toda modificación de configuración sigue un flujo **obligatorio** y reversible:
+Las integraciones reales están marcadas y pueden requerir el stack local:
 
-1. **Detectar** entorno (¿es seguro operar?)
-2. **Backup** con timestamp (antes de tocar nada)
-3. **Validar** el cambio
-4. **Aplicar** (solo en `~/.config/wireplumber/`, nunca con root)
-5. **Verificar** el resultado
-6. **Revertir** automáticamente si cualquier paso falla
+```bash
+OPENBUDS_RUN_INTEGRATION=1 .venv/bin/pytest tests/integration
+```
 
-Si el backup falla, **no se aplica el cambio**. Ver
-[`docs/ADR/0002`](docs/ADR/0002-wireplumber-0.4-lua-config-scope.md).
+La integración es de solo lectura salvo que una prueba indique explícitamente
+lo contrario; no se debe ejecutar contra hardware sin revisar su alcance.
+La arquitectura y las decisiones duraderas están en
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) y [`docs/ADR/`](docs/ADR/).
 
 ## Licencia
 
-Licenciado bajo [GPL-3.0-or-later](LICENSE).
+OpenBuds Manager se distribuye bajo [GPL-3.0-or-later](LICENSE).
