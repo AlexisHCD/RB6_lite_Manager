@@ -13,7 +13,7 @@
 - **Documentos relacionados:** [Diseño del comando `status`](../cli/status-command.md),
   [diseño de comandos de sesión](../cli/session-commands.md),
   [ADR-0004](../ADR/0004-clean-architecture-dependency-rule.md) y
-  [AGENTS.md](../../AGENTS.md) §3/§10.
+  [privacidad y seguridad](../../README.md#privacidad-y-seguridad) y [arquitectura](../ARCHITECTURE.md).
 
 > **Alcance:** una sola ventana PySide6 útil, sin vistas secundarias. Incluye
 > una bandeja opcional cuando el entorno la ofrece. `openbuds gui` la lanza con import lazy: error claro si falta
@@ -38,7 +38,10 @@
   `DeviceWorker` en `QThread`; `closeEvent` detiene el timer y cierra el
   worker.
 - **Estado del sistema:** barra de estado con errores **sanitizados** (sin
-  MAC ni paths), «Actualizando...» durante operaciones y «Listo» en reposo.
+  MAC ni paths). Los refresh periódicos se ejecutan en segundo plano y
+  mantienen «Listo» visible; las acciones explícitas muestran «Actualizando...»
+  mientras están en curso.
+  Los controles conservan su estado habilitado durante un refresh periódico.
 
 La bandeja se crea con `QSystemTrayIcon`, `QMenu` y `QAction` solo si
 `QSystemTrayIcon.isSystemTrayAvailable()` indica que está disponible. Su menú

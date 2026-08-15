@@ -173,6 +173,7 @@ if _QT_IMPORT_ERROR is None:
             else:
                 self.device_change_bridge = None
             self._lifecycle_closed = False
+            self._background_refresh_active = False
             self._value_labels: dict[str, QLabel] = {}
             self._build_ui()
 
@@ -194,11 +195,18 @@ if _QT_IMPORT_ERROR is None:
             )
             self._refresh_timer = QTimer(self)
             self._refresh_timer.setInterval(2000)
-            self._refresh_timer.timeout.connect(self.view_model.refresh)
+            self._refresh_timer.timeout.connect(self._refresh_in_background)
             self._render_state()
             self._refresh_timer.start()
-            self.view_model.refresh()
+            self._refresh_in_background()
             self._start_device_change_bridge()
+
+        def _refresh_in_background(self) -> None:
+            """Refresh silently while the periodic worker updates the view."""
+            if self._busy_value():
+                return
+            self._background_refresh_active = True
+            self.view_model.refresh()
 
         def _start_device_change_bridge(self) -> None:
             """Start optional event notifications without making the GUI fail."""
@@ -280,14 +288,16 @@ if _QT_IMPORT_ERROR is None:
             error = self._text_value("error")
             if error:
                 self.status_label.setText(f"Error: {error}")
-            elif self._busy_value():
+            elif self._busy_value() and not self._background_refresh_active:
                 self.status_label.setText("Actualizando...")
             else:
                 self.status_label.setText("Listo")
             self._update_controls()
+            if not self._busy_value():
+                self._background_refresh_active = False
 
         def _update_controls(self) -> None:
-            available = not self._busy_value()
+            available = not self._busy_value() or self._background_refresh_active
             connection = self._text_value("connection")
             self.connect_button.setEnabled(available and connection == "emparejado")
             self.disconnect_button.setEnabled(available and connection == "conectado")

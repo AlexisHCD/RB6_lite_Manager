@@ -305,7 +305,10 @@ físico observado en vivo.
   20:10:19 (aproximadamente 19 s).
 - **Después:** la sesión se recuperó sin pantalla negra ni hard reset; la
   ventana siguió activa y respondía, la gráfica volvió y continuó actualizando,
-  y el estado alternaba `Listo`/`Actualizando...`.
+  y, en esa versión de la GUI, el estado alternaba `Listo`/`Actualizando...`.
+  El refresh periódico ahora se mantiene silencioso en segundo plano y deja
+  `Listo` visible; los errores sanitizados y las acciones explícitas conservan
+  su feedback.
 - Los auriculares se desconectaron al suspender (comportamiento esperado), pero
   **no se reconectaron automáticamente** al reanudar. La consulta
   `openbuds devices --paired-only` terminó con exit 0 y mostró el dispositivo
