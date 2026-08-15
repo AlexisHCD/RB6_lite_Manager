@@ -9,7 +9,7 @@
   [señales y lifecycle BlueZ](../bluez/signal-lifecycle-design.md),
   [repositorio BlueZ](../bluez/repository-design.md),
   [ADR-0007](../ADR/0007-device-change-event-contract.md) y
-  [AGENTS.md](../../AGENTS.md) §3/§5.
+  [alcance de la beta](../../README.md#alcance-de-la-beta) y [límites de investigación](../RESEARCH_LIMITS.md).
 
 > **Alcance:** comando de **solo lectura**: suscribe callbacks (hilo worker,
 > señal primaria + polling de respaldo), sin discovery, connect ni escrituras.

@@ -57,7 +57,7 @@
 > Este documento se redactó con metodología **Documentation First** antes de
 > escribir código y ahora describe el **código real implementado**. Ante
 > cualquier discrepancia con las fuentes oficiales o con el spike se detiene y
-> se documenta (AGENTS.md §5).
+> se documenta y se detiene la implementación si la evidencia es insuficiente (ver [RESEARCH_LIMITS](../RESEARCH_LIMITS.md)).
 
 - **Incremento:** 2 de señales y lifecycle (BlueZ)
 - **Tipo:** contrato de implementación (no es un ADR)
@@ -615,7 +615,7 @@ Llamador (cualquier hilo)         Worker (Gio)
 
 - Los gates ordinarios y la integración opt-in pasaron al cierre del incremento
   (2026-08-10; ruff/mypy en verde). Comando de commit:
-  `make lint && make typecheck && make test` (AGENTS.md §13).
+  `make lint && make typecheck && make test` ([desarrollo y validación](../../README.md#desarrollo-y-validación)).
 
 ---
 
@@ -837,7 +837,7 @@ Consecuencias (**verificadas**):
 | 12 | Cero callbacks tras `unsubscribe` | serialización worker + `active`/in-flight del repositorio; self-unsubscribe reentrante seguro. |
 | 13 | Nunca se cierra el bus | close/rollback destruyen fuentes pero `connection.close()` no se invoca. |
 | 14 | Tests deterministas | fakes con tick manual (sin sleep); integración real solo lifecycle create/destroy con `poll_interval_ms=60_000` (sin tick real). |
-| 15 | Calidad | `make lint && make typecheck && make test` en verde (AGENTS.md §13); los gates ordinarios y la integración opt-in pasaron al cierre del incremento. |
+| 15 | Calidad | `make lint && make typecheck && make test` en verde ([desarrollo y validación](../../README.md#desarrollo-y-validación)); los gates ordinarios y la integración opt-in pasaron al cierre del incremento. |
 
 ### 12.7 Pseudocódigo
 

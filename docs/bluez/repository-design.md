@@ -25,7 +25,7 @@ escritura y sin mutación.
   `DeviceInfo`, `BatteryLevel`, `RSSIReading`, `DeviceChangeEvent`),
   `BluetoothError` (`core/errors.py`).
 
-> ⚠️ **Regla de oro (AGENTS.md §5):** este diseño no asume comportamiento de
+> ⚠️ **Evidencia y no inferencia:** este diseño no asume comportamiento de
 > BlueZ no verificado. El árbol de objetos y las interfaces se toman tal como
 > los entrega `GetManagedObjects`; la disponibilidad de `Battery1` es opcional
 > ([RESEARCH_LIMITS §3](../RESEARCH_LIMITS.md#3-disponibilidad-de-batería)).
@@ -220,7 +220,7 @@ sin envolverlas de nuevo ni tragarlas (§5.2).
   inmutables del dominio. No existe ningún método que invoque un miembro
   mutador de BlueZ (`Adapter1.Powered`, `Device1.Connect`, `Battery1.*`, etc.).
 - Regla de revisión: cualquier llamada mutadora en este incremento es **fuera
-  de alcance** y debe rechazarse ([filosofía AGENTS.md §3]).
+  de alcance** y debe rechazarse ([privacidad y seguridad](../../README.md#privacidad-y-seguridad)).
 
 ### 5.4 No mutación de señales ni escritura
 

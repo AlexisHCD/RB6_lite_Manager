@@ -69,7 +69,7 @@ Properties  byte    Percentage [readonly]   # 0-100
 ```
 
 **Disponibilidad:** solo aparece si el dispositivo expone batería (GATT 0x180F
-o AT commands de HFP/AVRCP). No es universal. Ver [RESEARCH_LIMITS.md](../RESEARCH_LIMITS.md#3).
+o AT commands de HFP/AVRCP). No es universal. Ver [RESEARCH_LIMITS.md](../RESEARCH_LIMITS.md#3-disponibilidad-de-batería).
 
 ## `MediaTransport1`
 
@@ -85,7 +85,7 @@ o AT commands de HFP/AVRCP). No es universal. Ver [RESEARCH_LIMITS.md](../RESEAR
 
 > SBC es obligatorio en A2DP. AAC/aptX/LDAC solo aparecen si PipeWire/WirePlumber
 > registra el endpoint correspondiente. Los bytes vendor (aptX/LDAC) no están
-> canonizados — ver [RESEARCH_LIMITS.md](../RESEARCH_LIMITS.md#1).
+> canonizados — ver [RESEARCH_LIMITS.md](../RESEARCH_LIMITS.md#1-bytes-de-códec-a2dp-vendor-specific).
 
 ## Señales estándar (freedesktop)
 

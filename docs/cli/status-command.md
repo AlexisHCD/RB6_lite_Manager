@@ -9,7 +9,7 @@
   [Diseño del repositorio PipeWire](../pipewire/repository-design.md),
   [Caracterización pasiva](../research/redmi-buds-6-lite-passive-characterization.md),
   [ADR-0004](../ADR/0004-clean-architecture-dependency-rule.md) y
-  [AGENTS.md](../../AGENTS.md) §3/§5.
+  [alcance de la beta](../../README.md#alcance-de-la-beta) y [límites de investigación](../RESEARCH_LIMITS.md).
 
 > **Alcance:** comando de **solo lectura**. No discovery, no connect, no señales
 > ni main loop GLib: usa el snapshot de BlueZ (`list_devices`) y la inspección de

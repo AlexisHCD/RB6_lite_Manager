@@ -65,3 +65,7 @@ local_state.json
 
 # --- Distribución / empaquetado ---
 pip-wheel-metadata/
+
+# --- Instrucciones locales del agente (no publicar) ---
+# Se conserva localmente como guía de trabajo, pero no forma parte del repo publicado.
+/AGENTS.md

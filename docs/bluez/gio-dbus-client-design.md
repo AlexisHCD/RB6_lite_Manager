@@ -10,7 +10,7 @@ cliente de bajo nivel que accede a BlueZ vía D-Bus usando **PyGObject/Gio
   `IBluetoothRepository` (`domain/interfaces/bluetooth_repo.py`), modelos del
   dominio (`DeviceInfo`, `AdapterInfo`, `BatteryLevel`, `RSSIReading`).
 
-> ⚠️ **Regla de oro (AGENTS.md §5):** todo lo descrito aquí proviene de la
+> ⚠️ **Fuentes verificadas:** todo lo descrito aquí proviene de la
 > documentación oficial (GNOME GIO/GLib, freedesktop.org, BlueZ). Los enlaces
 > se listan en [Fuentes](#8-fuentes-oficiales-verificadas) y se verificaron el
 > 2026-08-09. Ante cualquier discrepancia con el comportamiento real, se
@@ -124,7 +124,7 @@ interacciones son:
 - Lectura vía `org.freedesktop.DBus.Properties.GetAll`/`Get` (si el snapshot
   lo requiere en lugar de cache).
 
-La **filosofía del proyecto** (AGENTS.md §3) prohíbe escribir dentro del
+La **política de privacidad y seguridad** ([README](../../README.md#privacidad-y-seguridad)) prohíbe escribir dentro del
 dispositivo Bluetooth. Este diseño la cumple por construcción: no hay ningún
 método mutador en el contrato del cliente.
 
@@ -382,8 +382,8 @@ Detalles técnicos ([signal_unsubscribe](https://docs.gtk.org/gio/method.DBusCon
 Todas las llamadas GIO fallibles (`new_for_bus_sync`, `call_sync`) lanzan
 `GLib.Error` en PyGObject. `signal_subscribe` no se incluye: según su
 documentación no es una llamada fallible (devuelve un ID no cero, ver §2.5).
-Los errores se envuelven de forma centralizada en la jerarquía del dominio
-(AGENTS.md §13:
+Los errores se envuelven de forma centralizada en la jerarquía del dominio;
+las validaciones se cubren con los gates de desarrollo:
 
 ```
 def _to_bluetooth_error(err: GLib.Error, context: str) -> BluetoothError:
@@ -665,7 +665,7 @@ cache de diff sobre el **diff puro de snapshots** y dispatch de
   `busctl tree org.bluez`, `busctl introspect org.bluez /`, `dbus-send
   --system --dest=org.bluez --print-reply / org.freedesktop.DBus.ObjectManager.GetManagedObjects`.
 - Comando del equipo: `make lint && make typecheck && make test` antes de
-  cada commit (AGENTS.md §13).
+  cada commit ([desarrollo y validación](../../README.md#desarrollo-y-validación)).
 
 ---
 

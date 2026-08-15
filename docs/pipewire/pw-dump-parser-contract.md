@@ -21,7 +21,7 @@
   error específico `PipeWireParseError(AudioSubsystemError)` **ya existe** en
   `core/errors.py` y es el que lanza el parser.
 
-> ⚠️ **Regla de oro (AGENTS.md §5):** las claves y tipos descritos aquí se basan
+> ⚠️ **Evidencia y no inferencia:** las claves y tipos descritos aquí se basan
 > en la salida real de `pw-dump` verificada localmente (ver [§10](#10-evidencia-verificada))
 > y en las fuentes oficiales de PipeWire/WirePlumber (ver
 > [§11](#11-fuentes-oficiales)). Ante cualquier discrepancia con el
@@ -421,8 +421,8 @@ nodos Bluetooth (bluez_output/bluez_input o device.api=bluez5) → 0  ✅
   (`api.bluez5.transport`) ni resolución de perfiles Bluetooth.
 - `media.class` distintos de `Audio/Sink`/`Audio/Source` (p. ej.
   `Audio/Duplex`).
-- Cualquier escritura sobre PipeWire/WirePlumber/dispositivo (filosofía
-  AGENTS.md §3; lectura pura).
+- Cualquier escritura sobre PipeWire/WirePlumber/dispositivo está fuera de este
+  contrato; el parser es estrictamente de lectura pura.
 
 ## 15. Resumen de decisiones (registro del arquitecto)
 

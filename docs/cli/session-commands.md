@@ -10,7 +10,7 @@
 - **Documentos relacionados:** [Diseño del comando `status`](status-command.md)
   y [watch](watch-command.md); [diseño de `WpctlAdapter`](../wireplumber/wpctl-adapter-design.md);
   [ADR-0004](../ADR/0004-clean-architecture-dependency-rule.md) y
-  [AGENTS.md](../../AGENTS.md) §3/§6.
+  [privacidad y seguridad](../../README.md#privacidad-y-seguridad) y [alcance de la beta](../../README.md#alcance-de-la-beta).
 
 > **Alcance:** mutaciones de sesión: conectar/desconectar y perfil de audio
 > **runtime** (no persistente). Solo con **confirmación explícita** (o `-y`).

@@ -28,7 +28,7 @@
   (`AdapterInfo`, `DeviceInfo`, `BatteryLevel`, `RSSIReading`) y enums
   (`AddressType`, `DeviceIcon`, `ConnectionState`).
 
-> ⚠️ **Regla de oro (AGENTS.md §5):** toda propiedad y tipo descritos aquí
+> ⚠️ **Evidencia y no inferencia:** toda propiedad y tipo descritos aquí
 > provienen de la documentación oficial de BlueZ, verificada el 2026-08-09
 > (ver [Fuentes](#11-fuentes-oficiales-verificadas)). Ante cualquier
 > discrepancia con el comportamiento real, se detiene la implementación y se
@@ -162,7 +162,7 @@ como opcionales con default `False`. Ese default es el **default conservador de
 OpenBuds ante ausencia**, no necesariamente el default real de BlueZ ni una
 afirmación del estado del dispositivo: una propiedad ausente puede no haber
 llegado o no aplicarse, y el código no asume capacidades ni estados no
-observados (AGENTS.md §7).
+observados; las propiedades ausentes no se infieren.
 
 ### 5.2 `Device1` → `DeviceInfo`
 
@@ -193,7 +193,7 @@ observados (AGENTS.md §7).
 | `Source` | string | `source` | kernel.org (`battery-api.txt`) | opcional | `""` |
 
 `Percentage` es opcional con default `None` porque `Battery1` **no es
-universal** ([RESEARCH_LIMITS §3](../RESEARCH_LIMITS.md#3)): el código debe
+universal** ([RESEARCH_LIMITS §3](../RESEARCH_LIMITS.md#3-disponibilidad-de-batería)): el código debe
 degradar con elegancia. Si está presente debe ser `int` (no `bool`) y estar en
 `[0, 100]`.
 
@@ -247,7 +247,7 @@ iconos nuevos; un icono desconocido no debe romper el mapeo).
 
 Este commit **no añade ningún mapeo de códec** (no existe `map_codec`, no se toca
 `MediaTransport1`). Los bytes vendor (aptX/LDAC) **no están canonizados** y
-nunca se asumen ([RESEARCH_LIMITS §1](../RESEARCH_LIMITS.md#1)); incluso SBC/AAC
+nunca se asumen ([RESEARCH_LIMITS §1](../RESEARCH_LIMITS.md#1-bytes-de-códec-a2dp-vendor-specific)); incluso SBC/AAC
 quedan fuera de este contrato (futuro ítem de la Etapa 1 vía
 `MediaTransport1.Codec` + PipeWire).
 
@@ -278,8 +278,8 @@ quedan fuera de este contrato (futuro ítem de la Etapa 1 vía
   `Modalias`, `ManufacturerData`, `ServiceData`, `LegacyPairing`,
   `WakeAllowed`, `Roles`, `PairableTimeout`, `DiscoverableTimeout`, etc.).
 - Resolución de perfiles de dispositivo, PipeWire/WirePlumber, `btmon`.
-- Cualquier método mutador o escritura a BlueZ/dispositivo (filosofía AGENTS.md
-  §3; el mapper es lectura pura por construcción).
+- Cualquier método mutador o escritura a BlueZ/dispositivo está fuera de alcance;
+  el mapper es lectura pura por construcción (ver [privacidad y seguridad](../../README.md#privacidad-y-seguridad)).
 
 ---
 
@@ -298,7 +298,7 @@ todas las funciones (38/41+) de una vez:
    b. Implementar el código mínimo de **esa** función → **GREEN**.
    c. Refactorizar si hace falta (seguir con la siguiente función).
 2. Al terminar los cuatro ciclos, `make lint && make typecheck && make test`
-   pasan (AGENTS.md §13).
+   pasan ([desarrollo y validación](../../README.md#desarrollo-y-validación)).
 3. Commit atómico `feat(bluetooth): implement pure D-Bus object mapper`.
 
 ### `map_adapter`
@@ -422,7 +422,7 @@ Verificadas (contenido consultado) el 2026-08-09:
 
 Referencias internas: [Interfaces D-Bus de BlueZ](dbus-interfaces.md),
 [Diseño del cliente GDBus](gio-dbus-client-design.md),
-[RESEARCH_LIMITS](../RESEARCH_LIMITS.md#3),
+[RESEARCH_LIMITS](../RESEARCH_LIMITS.md#3-disponibilidad-de-batería),
 [ADR-0001](../ADR/0001-decision-dbus-pygobject-gio.md).
 
 ---

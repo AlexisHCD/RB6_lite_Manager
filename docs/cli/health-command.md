@@ -10,7 +10,7 @@
 - **Documentos relacionados:** [status](status-command.md),
   [watch](watch-command.md), [devices](devices-command.md),
   [ADR-0004](../ADR/0004-clean-architecture-dependency-rule.md) y
-  [AGENTS.md](../../AGENTS.md) §3/§5.
+  [privacidad y seguridad](../../README.md#privacidad-y-seguridad) y [límites de investigación](../RESEARCH_LIMITS.md).
 
 > **Alcance:** comando de **solo lectura**: snapshot de BlueZ (dispositivos y
 > batería), PipeWire (códec activo y sink por defecto) y detección del

@@ -17,8 +17,7 @@ Diseño del comando `openbuds devices`: lista los dispositivos Bluetooth
   (consultas snapshot sobre las que se construye este comando),
   [Contrato del mapper](../bluez/object-mapper-contract.md),
   [Interfaces D-Bus de BlueZ](../bluez/dbus-interfaces.md), [ADR-0004](../ADR/0004-clean-architecture-dependency-rule.md),
-  [AGENTS.md](../../AGENTS.md) §5 (investigación antes de asumir) y §3 (no
-  escritura en el dispositivo).
+  [límites de investigación](../RESEARCH_LIMITS.md) y [privacidad y seguridad](../../README.md#privacidad-y-seguridad).
 - **Dependencias del dominio:** `ScanDevicesRequest` / `ScanDevicesUseCase`
   (`application/scan_devices.py`), `IBluetoothRepository`
   (`domain/interfaces/bluetooth_repo.py`), `DeviceInfo`
@@ -271,7 +270,7 @@ tests/integration/test_cli_devices_smoke.py  # smoke opt-in  [implementado, veri
 ## 10. Resumen de decisiones (registro del arquitecto)
 
 1. **Solo snapshot de objetos conocidos**: no discovery, no connect, no
-   escritura ([AGENTS.md §3](../../AGENTS.md#3-filosofía-no-negociable)).
+   escritura ([privacidad y seguridad](../../README.md#privacidad-y-seguridad)).
 2. **Composición explícita en `main`:** `CliContext` **no** instancia
    `BlueZRepository` como default; solo para `devices`, tras config/logging,
    `main` compone `BlueZRepository` + `ScanDevicesUseCase`. Tests con fake o

@@ -28,7 +28,7 @@
   — **ya existe** en `core/errors.py` (línea 45) y es la única excepción que
   lanza el runner.
 
-> ⚠️ **Regla de oro (AGENTS.md §5):** los flags y el comportamiento de
+> ⚠️ **Evidencia y no inferencia:** los flags y el comportamiento de
 > `pw-dump` descritos aquí están verificados localmente (2026-08-10, PipeWire
 > 1.0.5) y en las fuentes oficiales (ver [§12](#12-fuentes-oficiales)). Ante
 > cualquier discrepancia con el comportamiento real se detiene la
@@ -254,7 +254,7 @@ Reglas transversales:
   `os.environ`.
 - **Sin cambios de hardware/configuración**: ejecución de un dumper de solo
   lectura; no toca WirePlumber, no escribe archivos, no envía comandos al
-  dispositivo (filosofía AGENTS.md §3).
+  dispositivo (lectura pura; no modifica el sistema ni el dispositivo).
 - **Acotado en el tiempo**: `timeout_seconds` (5 s por defecto) garantiza que
   un PipeWire colgado no bloquee al runner.
 - **Sin TOCTOU**: no hay `shutil.which` previo (la existencia se valida por
@@ -447,7 +447,7 @@ Verificación local (2026-08-10): `pw-dump --help` muestra
 - Parseo/interpretación del payload JSON (parser puro, ya implementado).
 - Validación de códecs, transportes o perfiles Bluetooth.
 - Cualquier escritura sobre PipeWire/WirePlumber/dispositivo (lectura pura;
-  filosofía AGENTS.md §3).
+  no modifica el sistema ni el dispositivo).
 - Pre-chequeo de existencia del binario (`shutil.which`) — prohibido por
   TOCTOU (§6).
 - Ejecución de otros binarios (`wpctl`, `pw-cli`, etc.) — cada uno tendrá su

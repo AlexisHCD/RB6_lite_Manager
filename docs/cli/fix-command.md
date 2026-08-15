@@ -10,7 +10,7 @@
 - **Tipo:** diseño de implementación (**Documentation First; implementado y
   verificado** — el código y los tests cumplen lo aquí especificado).
 - **Documentos relacionados:** [health](health-command.md),
-  [session](session-commands.md) y [AGENTS.md](../../AGENTS.md) §3/§6/§12.
+  [session](session-commands.md), [privacidad y seguridad](../../README.md#privacidad-y-seguridad) y [desarrollo y validación](../../README.md#desarrollo-y-validación).
 
 > **Alcance:** mutaciones **seguras y reversibles** sobre Linux, **sin sudo** y
 > solo tras **confirmación explícita** (`[s/N]` o `-y`). Nunca toca firmware,

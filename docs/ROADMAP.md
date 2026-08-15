@@ -19,8 +19,7 @@ ausentes ni se ejecutan acciones de hardware sin aprobación explícita.
   disponible; el runtime exige `base_prefix` `/usr` y PyGObject/Gio importables
   (Linuxbrew devuelve no listo). Verificado en Python 3.12.
 - [x] Corregir rutas y afirmaciones obsoletas restantes: documentación
-  normativa/técnica y metadatos fuente alineados con las etapas; `MASTER_DOC`
-  etiquetado como histórico.
+  normativa/técnica y metadatos fuente alineados con las etapas.
 - [x] Añadir `LICENSE` GPL-3.0-or-later.
 - [x] Diseñar CI básica para unit tests, Ruff y mypy: workflow GitHub Actions
   en push/PR a `main` y manual (`workflow_dispatch`), **Python 3.12**, gates

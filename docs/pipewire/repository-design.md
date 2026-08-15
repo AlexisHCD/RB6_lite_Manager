@@ -11,12 +11,12 @@
 - **Relacionados:** [ADR-0003 (inspección vía subprocess)](../ADR/0003-no-pipewire-python-binding.md), [ADR-0002 (WirePlumber 0.4)](../ADR/0002-wireplumber-0.4-lua-config-scope.md), [contrato del runner](pw-dump-runner-contract.md), [contrato del parser](pw-dump-parser-contract.md), [RESEARCH_LIMITS](../RESEARCH_LIMITS.md)
 - **Dominio:** `AudioSubsystemError` + `PipeWireUnavailableError` / `PipeWireParseError` (`core/errors.py`) — ya existen; el repositorio **no** define excepciones nuevas.
 
-> ⚠️ **Regla de oro (AGENTS.md §5):** no se asume códec, transporte ni capacidad del dispositivo. `bluez5.codec` / `api.bluez5.transport` van verbatim desde el parser ([RESEARCH_LIMITS §2](../RESEARCH_LIMITS.md#2-propiedades-runtime-de-pipewire)) y **no se interpretan** en el repositorio.
+> ⚠️ **Regla de no inferencia:** no se asume códec, transporte ni capacidad del dispositivo. `bluez5.codec` / `api.bluez5.transport` van verbatim desde el parser ([RESEARCH_LIMITS §2](../RESEARCH_LIMITS.md#2-propiedades-runtime-de-pipewire)) y **no se interpretan** en el repositorio.
 ---
 ## 1. Objetivo y delimitación
 Orquestar la cadena **runner → parser** sin lógica propia: `list_bluetooth_audio_nodes()` ejecuta `runner.dump()` (payload fresco), lo entrega a `parse_bluetooth_audio_nodes(payload)` y devuelve directamente el `list[dict[str, str]]` resultante. El repositorio es una **capa de composición** (sin caching, logs, subprocess propio ni inferencia).
 - Ubicación: `src/openbuds/infrastructure/pipewire/pipewire_repository.py` (capa **infrastructure**, junto a runner y parser; implementa `IAudioRepository` de `domain/interfaces/audio_repo.py`).
-- **Subprocess solo en el runner** (ADR-0003); el repositorio nunca ejecuta procesos ni importa `subprocess`. Solo lectura (AGENTS.md §3).
+- **Subprocess solo en el runner** (ADR-0003); el repositorio nunca ejecuta procesos ni importa `subprocess`. Solo lectura; no modifica el sistema ni el dispositivo.
 - **Sin estado entre llamadas** (fresh payload, §4) y **sin mutación** del payload ni de los dicts del parser (no los transforma ni reordena).
 ## 2. Firma pública
 ```python

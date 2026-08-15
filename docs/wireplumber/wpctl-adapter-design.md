@@ -30,7 +30,7 @@ Relacionados: [ADR-0002](../ADR/0002-wireplumber-0.4-lua-config-scope.md) y
 - Ejecución acotada por `timeout`; llamadas frescas sin caché.
 - Sin logging del stdout (puede contener MAC); errores genéricos sin paths,
   binario, stdout ni stderr.
-- Ninguna mutación: lectura pura (AGENTS.md §3).
+- Ninguna mutación: lectura pura; no modifica el sistema ni el dispositivo.
 
 ## Comportamiento de errores (público)
 
